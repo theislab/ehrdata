@@ -1,0 +1,23 @@
+{
+  "template": "https://github.com/scverse/cookiecutter-scverse",
+  "commit": "7dc638923b766ef7f76a3704b602a7623a77cfdc",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "project_name": "ehrdata",
+      "package_name": "ehrdata",
+      "project_description": "A data structure for EHR data.",
+      "author_full_name": "Lukas Heumos",
+      "author_email": "lukas.heumos@posteo.net",
+      "github_user": "theislab",
+      "project_repo": "https://github.com/theislab/ehrdata",
+      "license": "Apache License Version 2.0",
+      "_copy_without_render": [
+        ".github/workflows/**.yaml",
+        "docs/_templates/autosummary/**.rst"
+      ],
+      "_template": "https://github.com/scverse/cookiecutter-scverse"
+    }
+  },
+  "directory": null
+}
