@@ -144,8 +144,6 @@ def check_csv_has_only_header(file_path):
         return False
 
 
-
-
 class OMOP:
     def __init__(self, folder_path, delimiter=None):
         self.base = folder_path
@@ -198,7 +196,9 @@ class OMOP:
         # TODO move to init
         self.tables.append(table_name)
         self.filepath[table_name] = file_path
-            
+    
+    
+    # TODO redo this using omop cdm csv file   
     def _get_column_types(self, path=None, columns=None):
         column_types = {}
         parse_dates = []
@@ -274,15 +274,18 @@ class OMOP:
                 if not os.path.isfile(path):
                     path = f"{path}/*.csv"
                 if usecols:
+                    dtype = {key: dtype[key] for key in usecols if key in dtype}
                     if parse_dates:
                         parse_dates = {key: parse_dates[key] for key in usecols if key in parse_dates}
-                    if usecols:
-                        dtype = {key: dtype[key] for key in usecols if key in dtype}
                 df = dd.read_csv(path, delimiter=self.delimiter, dtype=dtype, parse_dates=parse_dates, usecols=usecols)
             elif filetype == 'parquet':
                 if not os.path.isfile(path):
                     path = f"{path}/*.parquet"
-                df = dd.read_parquet(path, dtype=dtype, parse_dates=parse_dates)
+                if usecols:
+                    dtype = {key: dtype[key] for key in usecols if key in dtype}
+                    if parse_dates:
+                        parse_dates = {key: parse_dates[key] for key in usecols if key in parse_dates}
+                df = dd.read_parquet(path, dtype=dtype, parse_dates=parse_dates, columns=usecols)
             else:
                 raise TypeError("Only support CSV and Parquet file!")
         else:
@@ -291,13 +294,12 @@ class OMOP:
             filetype = path.split(".")[-1]
             if filetype == 'csv':
                 if usecols:
+                    dtype = {key: dtype[key] for key in usecols if key in dtype}
                     if parse_dates:
                         parse_dates = {key: parse_dates[key] for key in usecols if key in parse_dates}
-                    if usecols:
-                        dtype = {key: dtype[key] for key in usecols if key in dtype}
                 df = pd.read_csv(path, delimiter=self.delimiter, dtype=dtype, parse_dates=parse_dates, usecols=usecols)
             elif filetype == 'parquet':
-                df = pd.read_parquet(path)
+                df = pd.read_parquet(path, columns=usecols)
             else:
                 raise TypeError("Only support CSV and Parquet file!")
 
@@ -389,7 +391,7 @@ class OMOP:
             for table in tables:
                 print(f"reading table [{table}]")
                 column_types, parse_dates = self._get_column_types(self.filepath[table])
-                df = self._read_table(self.filepath[table], dtype=column_types, parse_dates = parse_dates, index='person_id')
+                df = self._read_table(self.filepath[table], dtype=column_types, index='person_id') # TODO parse_dates = parse_dates
                 if remove_empty_column:
                     # TODO dask Support
                     #columns = [column for column in df.columns if not df[column].compute().isna().all()]
@@ -402,8 +404,9 @@ class OMOP:
             # concept_domain_id_list = list(set(self.concept.domain_id))
 
             # self.loaded_tabel = ['visit_occurrence', 'person', 'death', 'measurement', 'observation', 'drug_exposure']
-            joined_table = dd.merge(self.visit_occurrence, self.person, left_index=True, right_index=True, how="left")
-            joined_table = dd.merge(joined_table, self.death, left_index=True, right_index=True, how="left")
+            # TODO dask Support
+            joined_table = pd.merge(self.visit_occurrence, self.person, left_index=True, right_index=True, how="left")
+            joined_table = pd.merge(joined_table, self.death, left_index=True, right_index=True, how="left")
             
             # TODO dask Support
             #joined_table = joined_table.compute()
@@ -448,7 +451,7 @@ class OMOP:
         else:
             self.additional_column = {column_name: type}
     
-    def feature_statistics(
+    def feature_counts(
         self,
         source: Literal[
             "observation",
@@ -462,12 +465,22 @@ class OMOP:
         number=20,
         key = None
     ):  
+        
+        if source == 'measurement':
+            columns = ["value_as_number", "time", "visit_occurrence_id", "measurement_concept_id"]
+        elif source == 'observation':
+            columns = ["value_as_number", "value_as_string", "measurement_datetime"]
+        elif source == 'condition_occurrence':
+            columns = None
+        else:
+            raise KeyError(f"Extracting data from {source} is not supported yet")
+        
         column_types, parse_dates = self._get_column_types(self.filepath[source])
-        df_source = self._read_table(self.filepath[source], dtype=column_types, parse_dates = parse_dates, usecols=[f"{source}_concept_id"])
+        df_source = self._read_table(self.filepath[source], dtype=column_types, parse_dates = parse_dates, usecols=[f"{source}_concept_id"], use_dask=True)
         # TODO dask Support
         #feature_counts = df_source[f"{source}_concept_id"].value_counts().compute()[0:number]
-        feature_counts = df_source[f"{source}_concept_id"].value_counts()[0:number]
-        feature_counts = feature_counts.to_frame().reset_index(drop=False)
+        feature_counts = df_source[f"{source}_concept_id"].value_counts().compute()
+        feature_counts = feature_counts.to_frame().reset_index(drop=False)[0:number]
 
         
         feature_counts[f"{source}_concept_id_1"], feature_counts[f"{source}_concept_id_2"] = self.map_concept_id(
@@ -588,7 +601,8 @@ class OMOP:
         # Got some inspirations from: https://github.com/aws-samples/amazon-comprehend-medical-omop-notes-mapping
         pass
 
-    def extract_features(
+
+    def get_feature_info(
         self,
         adata,
         source: Literal[
@@ -602,14 +616,9 @@ class OMOP:
         ],
         features: str or int or List[Union[str, int]] = None,
         key: str = None,
-        columns_in_source_table: str or List[str] = None,
-        map_concept=True,
-        add_aggregation_to_X: bool = True,
-        aggregation_methods=None,
-        add_all_data: bool = True,
-        exact_match: bool = True,
-        remove_empty_column: bool = True,
         ignore_not_shown_in_concept_table: bool = True,
+        exact_match: bool = True,
+
         verbose: bool = False,
     ):
         if key is None:
@@ -619,41 +628,9 @@ class OMOP:
                 key = f"{source.split('_')[0]}_concept_id"
             else:
                 raise KeyError(f"Extracting data from {source} is not supported yet")
-        """
-        if source == 'measurement':
-            columns = ["value_as_number", "measurement_datetime"]
-        elif source == 'observation':
-            columns = ["value_as_number", "value_as_string", "measurement_datetime"]
-        elif source == 'condition_occurrence':
-            columns = None
-        else:
-            raise KeyError(f"Extracting data from {source} is not supported yet")
-        """
 
-        # TODO load using Dask or Dask-Awkward
-        # Load source table using dask
-        source_column_types, parse_dates = self._get_column_types(self.filepath[source])
-        if parse_dates:
-            if len(parse_dates) == 1:
-                columns = list(source_column_types.keys()) + [parse_dates]
-            else:
-                columns = list(source_column_types.keys()) + parse_dates
-        else:
-            columns = list(source_column_types.keys())
-        df_source = self._read_table(
-            self.filepath[source], dtype=source_column_types, #parse_dates=parse_dates
-        )  # , usecols=clinical_tables_columns[source]
-
-        if not features:
-            warnings.warn(
-                "Please specify desired features you want to extract. Otherwise, it will try to extract all the features!"
-            )
-            # TODO dask Support
-            #features = list(df_source[key].compute().unique())
-            features = list(df_source[key].unique())
-        else:
-            if isinstance(features, str):
-                features = [features]
+        if isinstance(features, str):
+            features = [features]
             rprint(f"Trying to extarct the following features: {features}")
 
         # Input could be feature names/feature id (concept id)
@@ -679,6 +656,7 @@ class OMOP:
 
         fetures_not_shown_in_concept_table = []
 
+        info_df = pd.DataFrame([])
         # Get feature id for each input, and check if each feature occurs in the concept table
         for feature in features:
             # if the input is feature ID
@@ -736,7 +714,10 @@ class OMOP:
                     "Please input either [red]feature name (string)[/] or [red]feature id (integer)[/] you want to extarct"
                 )
                 raise TypeError
-
+            
+            info_df = pd.concat([info_df, pd.DataFrame(data=[[feature_name, feature_id_1, feature_id_2]], columns=['feature_name', 'feature_id_1', 'feature_id_2'])])
+            
+        
             # feature_name_list.append(feature_name)
             # domain_id_list.append(df_concept.loc[df_concept["concept_id"] == feature_id, "domain_id"].reset_index(drop=True).compute()[0])
             # concept_class_id_list.append(df_concept.loc[df_concept["concept_id"] == feature_id, "concept_class_id"].reset_index(drop=True).compute()[0])
@@ -753,60 +734,213 @@ class OMOP:
                 rprint(
                     f"Detected: feature [green]{feature_name}[/], feature ID [green]{feature_id}[/] in concept table, match socre = [green]{match_score}."
                 )
+        if info_df[f"feature_id_1"].equals(info_df[f"feature_id_2"]):
+            info_df.drop(f"feature_id_2", axis=1, inplace=True)
+            info_df = info_df.rename(columns={"feature_id_1": "feature_id"})
+            info_df = info_df.reset_index(drop=True)
+        else:
+            info_df = info_df.reset_index(drop=True)
+        return info_df
 
-            # for feature_id, feature_name, domain_id, concept_class_id, concept_code in zip(feature_id_list, feature_name_list, domain_id_list, concept_class_id_list, concept_code_list):
-            try:
-                # TODO dask Support
-                #feature_df = df_source[df_source[key] == feature_id_2].compute()
-                feature_df = df_source[df_source[key] == feature_id_2]
-            except:
-                print(f"Features ID could not be found in {source} table")
-            # TODO add checks if all columns exist in source table
-            if columns_in_source_table:
-                columns = columns_in_source_table
+    def get_feature_statistics(
+        self,
+        adata,
+        source: Literal[
+            "observation",
+            "measurement",
+            "procedure_occurrence",
+            "specimen",
+            "device_exposure",
+            "drug_exposure",
+            "condition_occurrence",
+        ],
+        features: str or int or List[Union[str, int]] = None,
+        key: str = None,
+        level="stay_level",
+        aggregation_methods: Union[Literal["min", "max", "mean", "std", "count"], List[Literal["min", "max", "mean", "std", "count"]]]=None,
+        add_aggregation_to_X: bool = True,
+        verbose: bool = False,
+    ):
+        #TODO query this from OMOP CDM table
+        if key is None:
+            if source in ["measurement", "observation", "specimen"]:
+                key = f"{source}_concept_id"
+            elif source in ["device_exposure", "procedure_occurrence", "drug_exposure", "condition_occurrence"]:
+                key = f"{source.split('_')[0]}_concept_id"
+            else:
+                raise KeyError(f"Extracting data from {source} is not supported yet")
+            
+        #TODO
+        if source == 'measurement':
+            columns = ["value_as_number", "time", "visit_occurrence_id", "measurement_concept_id"]
+        elif source == 'observation':
+            columns = ["value_as_number", "value_as_string", "measurement_datetime"]
+        elif source == 'condition_occurrence':
+            columns = None
+        else:
+            raise KeyError(f"Extracting data from {source} is not supported yet")
+        source_column_types, parse_dates = self._get_column_types(self.filepath[source])
+        df_source = self._read_table(self.filepath[source], dtype=source_column_types, usecols=columns, use_dask=True) 
+        info_df = self.get_feature_info(adata, source=source, features=features, verbose=False)
+        info_dict = info_df[['feature_id', 'feature_name']].set_index('feature_id').to_dict()['feature_name']
+        
+        # Select featrues
+        da_measurement = df_source[df_source.measurement_concept_id.isin(list(info_df.feature_id))]
+        #TODO
+        # Select time
+        da_measurement = da_measurement[(da_measurement.time >= 0) & (da_measurement.time <= 48*60*60)]
+        da_measurement[f'feature_name'] = da_measurement[key].replace(info_dict)
+        if aggregation_methods is None:
+            aggregation_methods = ["min", "max", "mean", "std", "count"]
+        if level == 'stay_level':
+            aggregated = da_measurement.groupby(['visit_occurrence_id', 'measurement_concept_id']).agg({
+                'value_as_number': aggregation_methods
+            })
+            result = aggregated.compute()
+            result = result.reset_index(drop=False)
+            result.columns = ["_".join(a) for a in result.columns.to_flat_index()]
+            result.columns  = result.columns.str.removesuffix('_')
+            result.columns  = result.columns.str.removeprefix('value_as_number_')
+            result['measurement_name'] = result.measurement_concept_id.replace(info_dict)
 
-            if remove_empty_column:
-                columns = [column for column in columns if not feature_df[column].isna().all()]
-                feature_df = feature_df.loc[:, columns]
-                # TODO
-                #print()
+            df_statistics = result.pivot(index='visit_occurrence_id', 
+                                columns='measurement_name', 
+                                values=aggregation_methods)
+            df_statistics.columns = df_statistics.columns.swaplevel()
+            df_statistics.columns = ["_".join(a) for a in df_statistics.columns.to_flat_index()]
 
-            if len(feature_df) > 0:
-                
-                # Group by 'visit_occurrence_id' and aggregate the values
-                grouped = feature_df.groupby("visit_occurrence_id")[columns].agg(list)
+            # TODO
+            sort_columns = True
+            if sort_columns:
+                new_column_order = []
+                for feature in features:
+                    for suffix in (f'_{aggregation_method}' for aggregation_method in aggregation_methods):
+                        col_name = f'{feature}{suffix}'
+                        if col_name in df_statistics.columns:
+                            new_column_order.append(col_name)
 
-                # Convert the grouped data to a dictionary
-                grouped_dict = grouped.to_dict(orient='index')
-
-                # Create the final obs_dict
-                obs_dict = [
-                    grouped_dict.get(visit_occurrence_id, {col: [] for col in columns}) 
-                    for visit_occurrence_id in adata.obs.index.astype(int)
-                ]
-
-                adata.obsm[feature_name] = ak.Array(obs_dict)
-
-                if add_aggregation_to_X:
-                    if aggregation_methods is None:
-                        aggregation_methods = ["min", "max", "mean"]
-                    var_name_list = [
-                        f"{feature_name}_{aggregation_method}" for aggregation_method in aggregation_methods
-                    ]
-                    for aggregation_method in aggregation_methods:
-                        func = getattr(ak, aggregation_method)
-                        adata.obs[f"{feature_name}_{aggregation_method}"] = list(
-                            func(adata.obsm[feature_name][f"{source}_source_value"], axis=1)
-                        )
-                    adata = ep.ad.move_to_x(adata, var_name_list)
-
-
-        if len(fetures_not_shown_in_concept_table) > 0:
-            rprint(f"Couldn't find concept {fetures_not_shown_in_concept_table} in concept table!")
+                df_statistics.columns = new_column_order
+        
+        adata.obs = adata.obs.join(df_statistics, how='left')
+        if add_aggregation_to_X:
+            adata = ep.ad.move_to_x(adata, list(df_statistics.columns))
         return adata
 
-    # TODO add function to check feature and add concept
     
+    def extract_features(
+        self,
+        adata,
+        source: Literal[
+            "observation",
+            "measurement",
+            "procedure_occurrence",
+            "specimen",
+            "device_exposure",
+            "drug_exposure",
+            "condition_occurrence",
+        ],
+        features: str or int or List[Union[str, int]] = None,
+        key: str | None = None,
+        dropna: bool | None = True,
+        columns_in_source_table: str or List[str] = None,
+        map_concept: bool | None = True,
+        add_aggregation_to_X: bool | None = True,
+        aggregation_value_column: str = None,
+        aggregation_methods: Union[Literal["min", "max", "mean", "std", "count"], List[Literal["min", "max", "mean", "std", "count"]]]=None,
+        add_all_data: bool | None = True,
+        exact_match: bool | None = True,
+        remove_empty_column: bool | None = True,
+        ignore_not_shown_in_concept_table: bool | None = True,
+        verbose: bool | None = False,
+    ):
+        if key is None:
+            if source in ["measurement", "observation", "specimen"]:
+                key = f"{source}_concept_id"
+            elif source in ["device_exposure", "procedure_occurrence", "drug_exposure", "condition_occurrence"]:
+                key = f"{source.split('_')[0]}_concept_id"
+            else:
+                raise KeyError(f"Extracting data from {source} is not supported yet")
+        
+        if source == 'measurement':
+            columns = ['visit_occurrence_id', 'time', 'value_as_number', 'measurement_concept_id']
+        elif source == 'observation':
+            columns = ["value_as_number", "value_as_string", "measurement_datetime"]
+        elif source == 'condition_occurrence':
+            columns = None
+        else:
+            raise KeyError(f"Extracting data from {source} is not supported yet")
+        
+
+        # TODO load using Dask or Dask-Awkward
+        # Load source table using dask
+        source_column_types, parse_dates = self._get_column_types(self.filepath[source])
+        df_source = self._read_table(self.filepath[source], dtype=source_column_types, usecols=columns, use_dask=True) 
+        info_df = self.get_feature_info(adata, source=source, features=features, verbose=False)
+        info_dict = info_df[['feature_id', 'feature_name']].set_index('feature_id').to_dict()['feature_name']
+        
+        
+        # Select featrues
+        df_source = df_source[df_source.measurement_concept_id.isin(list(info_df.feature_id))]
+        # TODO
+        # Select time
+        df_source = df_source[(df_source.time >= 0) & (df_source.time <= 48*60*60)]
+        #da_measurement['measurement_name'] = da_measurement.measurement_concept_id.replace(info_dict)
+
+        if dropna == True:
+            da_measurement_in_memory = df_source.compute().dropna()
+        else:
+            da_measurement_in_memory = df_source.compute()
+        # Preprocess steps outside the loop
+        unique_feature_ids = set(info_dict.keys())
+        unique_visit_occurrence_ids = set(adata.obs.index.astype(int))
+        empty_entry = {'value_as_number': [], 'time': []}
+
+        # Filter data once, if possible
+        # Example: Create a dictionary with each feature_id
+        # This assumes da_measurement_in_memory is a DataFrame-like object
+        filtered_data = {
+            feature_id: da_measurement_in_memory[da_measurement_in_memory.measurement_concept_id == feature_id]
+            for feature_id in unique_feature_ids
+        }
+
+        for feature_id in unique_feature_ids:
+            df_feature = filtered_data[feature_id][['visit_occurrence_id', 'time', 'value_as_number']]
+            grouped = df_feature.groupby("visit_occurrence_id")
+            print(f"Adding feature [{info_dict[feature_id]}] into adata")
+            
+            # Use set difference and intersection more efficiently
+            feature_ids = unique_visit_occurrence_ids.intersection(grouped.groups.keys())
+
+            # Creating the array more efficiently
+            adata.obsm[info_dict[feature_id]] = ak.Array([
+                grouped.get_group(visit_occurrence_id)[['value_as_number', 'time']].to_dict(orient='list') if visit_occurrence_id in feature_ids else empty_entry 
+                for visit_occurrence_id in unique_visit_occurrence_ids
+            ])
+
+        return adata
+
+
+    def drop_nan(adata, 
+                 key: str,
+                 slot: str | None = 'obsm', 
+                 ):
+        if slot == 'obsm':
+            ak_array = adata.obsm[key]
+            combined_mask = ak.zeros_like(ak_array[ak_array.fields[0]], dtype=bool)
+
+            # Update the combined mask based on the presence of None in each field
+            for field in ak_array.fields:
+                field_mask = ak.is_none(ak.nan_to_none(ak_array[field]), axis=1)
+                combined_mask = combined_mask | field_mask
+
+            ak_array = ak_array[~combined_mask]
+            adata.obsm[key] = ak_array
+
+        return adata
+
+    
+    
+    # TODO add function to check feature and add concept
     # More IO functions
     def to_dataframe(
         self,
