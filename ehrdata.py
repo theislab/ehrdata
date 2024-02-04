@@ -10,7 +10,7 @@ import scanpy as sc
 from anndata import AnnData
 import mudata as md
 from mudata import MuData
-from typing import List, Union, Literal
+from typing import List, Union, Literal, Optional
 import os
 import glob
 import dask.dataframe as dd
@@ -21,8 +21,44 @@ import missingno as msno
 import warnings
 import numbers
 import os
+from pandas.tseries.offsets import DateOffset as Offset
+
+import anndata as ad
+from collections.abc import Collection, Iterable, Mapping, Sequence
+from enum import Enum
+from functools import partial
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Callable, Literal, Union
+
+import scanpy as sc
+from scanpy.plotting import DotPlot, MatrixPlot, StackedViolin
+from matplotlib.axes import Axes
 
 
+
+pth = 'auxillary_files/OMOP_CDMv5.4_Field_Level.csv'
+field_level = pd.read_csv(pth)
+dtype_mapping = {'integer': "Int64",
+                'Integer': "Int64",
+                'float': float,
+                'bigint': "Int64",
+                'varchar(MAX)': str,
+                'varchar(2000)': str,
+                'varchar(1000)': str,
+                'varchar(255)': str,
+                'varchar(250)': str,
+                'varchar(80)': str,
+                'varchar(60)': str,
+                'varchar(50)': str,
+                'varchar(25)': str,
+                'varchar(20)': str,
+                'varchar(10)': str,
+                'varchar(9)': str,
+                'varchar(3)': str,
+                'varchar(2)': str,
+                'varchar(1)': str,
+                'datetime': object,
+                'date': object}       
 clinical_tables_columns = {
     "person": ["person_id", "year_of_birth", "gender_source_value"],
     "observation_period": [],
@@ -61,7 +97,6 @@ clinical_tables_columns = {
     "fact_relationship": [],
     "procedure_occurrence": [],
 }
-
 health_system_tables_columns = {
     "location": [],
     "care_site": ["care_site_id", "care_site_name"],
@@ -145,27 +180,31 @@ def check_csv_has_only_header(file_path):
 
 
 class OMOP:
-    def __init__(self, folder_path, delimiter=None):
+    def __init__(self, folder_path, delimiter=None, make_filename_lowercase=True, use_dask=False):
         self.base = folder_path
+        self.delimiter = delimiter
+        self.use_dask = use_dask
         # TODO support also parquet and other formats
         file_list = glob.glob(os.path.join(folder_path, "*.csv")) + glob.glob(os.path.join(folder_path, "*.parquet"))
-        
         self.loaded_tabel = None
         self.filepath = {}
         for file_path in file_list:
             file_name = file_path.split("/")[-1].split(".")[0]
-            
-            
-            new_filepath = os.path.join(self.base, file_path.split("/")[-1].lower())
             if check_csv_has_only_header(file_path):
                 pass
             else:
                 # Rename the file
-                os.rename(file_path, new_filepath)
-                self.filepath[file_name] = new_filepath
-
+                if make_filename_lowercase:
+                    new_filepath = os.path.join(self.base, file_path.split("/")[-1].lower())
+                    if file_path != new_filepath:
+                        warnings(f"Rename file [file_path] to [new_filepath]")
+                        os.rename(file_path, new_filepath)
+                    self.filepath[file_name] = new_filepath
+                else:
+                    self.filepath[file_name] = file_path
+        self.check_with_omop_cdm()
         self.tables = list(self.filepath.keys())
-        self.delimiter = delimiter
+        
         """
         if "concept" in self.tables:
             df_concept = dd.read_csv(self.filepath["concept"], usecols=vocabularies_tables_columns["concept"])
@@ -197,12 +236,43 @@ class OMOP:
         self.tables.append(table_name)
         self.filepath[table_name] = file_path
     
-    
+    def check_with_omop_cdm(self):
+        for file_name, path in self.filepath.items():
+            if file_name not in set(field_level.cdmTableName):
+                raise KeyError(f"Table [{file_name}] is not defined in OMOP CDM v5.4! Please change the table name manually!")
+            # If not a single file, read the first one
+            if not os.path.isfile(path):
+                folder_walk = os.walk(path)
+                first_file_in_folder = next(folder_walk)[2][0]
+                path = os.path.join(path, first_file_in_folder)
+                
+            if path.endswith('csv'):
+                with open(path, "r") as f:
+                    dict_reader = csv.DictReader(f, delimiter=self.delimiter)
+                    columns = dict_reader.fieldnames
+                    columns = list(filter(None, columns))         
+            elif path.endswith('parquet'):
+                df = dd.read_parquet(path)
+                columns = list(df.columns)
+            else:
+                raise TypeError("Only support CSV and Parquet file!")
+            columns_lowercase = [column.lower() for column in columns]
+            
+            invalid_column_name = []
+            for _, column in enumerate(columns_lowercase):
+                cdm_columns = set(field_level[field_level.cdmTableName == file_name]['cdmFieldName'])
+                if column not in cdm_columns:
+                    invalid_column_name.append(column)
+            if len(invalid_column_name) > 0:
+                print(f"Column {invalid_column_name} is not defined in Table [{file_name}] in OMOP CDM v5.4! Please change the column name manually!\nFor more information, please refer to: https://ohdsi.github.io/CommonDataModel/cdm54.html#{file_name.upper()}")
+                raise KeyError
+                        
+
     # TODO redo this using omop cdm csv file   
-    def _get_column_types(self, path=None, columns=None):
+    def _get_column_types(self, 
+                          path: str = None, 
+                          filename: str = None):
         column_types = {}
-        parse_dates = []
-        
         # If not a single file, read the first one
         if not os.path.isfile(path):
             folder_walk = os.walk(path)
@@ -220,47 +290,9 @@ class OMOP:
         else:
             raise TypeError("Only support CSV and Parquet file!")
         columns_lowercase = [column.lower() for column in columns]
-        for i, column in enumerate(columns_lowercase):
-            if hasattr(self, "additional_column") and column in self.additional_column.keys():
-                column_types[columns[i]] = self.additional_column[column]
-            elif column.endswith(
-                (
-                    "source_value",
-                    "reason",
-                    "measurement_time",
-                    "as_string",
-                    "title",
-                    "text",
-                    "name",
-                    "concept",
-                    "code",
-                    "domain_id",
-                    "vocabulary_id",
-                    "concept_class_id",
-                    "relationship_id",
-                    "specimen_source_id",
-                    "production_id",
-                    "unique_device_id",
-                    "sig",
-                    "lot_number",
-                )
-            ):
-                column_types[columns[i]] = object
-            # TODO quantity in different tables have different types
-            elif column.endswith(("as_number", "low", "high", "quantity")):
-                column_types[columns[i]] = float
-            elif column.endswith("date"):
-                parse_dates.append(columns[i])
-            elif column.endswith("datetime"):
-                parse_dates.append(columns[i])
-            elif column.endswith(("id", "birth", "id_1", "id_2", "refills", "days_supply")):
-                column_types[columns[i]] = "Int64"
-            
-            else:
-                raise KeyError(f"{columns[i]} is not defined in OMOP CDM")
-        if len(parse_dates) == 0:
-            parse_dates = None
-        return column_types, parse_dates
+        for _, column in enumerate(columns_lowercase):
+            column_types[column] = dtype_mapping[field_level[(field_level.cdmTableName == filename) & (field_level.cdmFieldName == column)]['cdmDatatype'].values[0]]
+        return column_types
     
     def _read_table(self, path, dtype=None, parse_dates=None, index=None, usecols=None, use_dask=False, **kwargs):
         
@@ -390,7 +422,7 @@ class OMOP:
 
             for table in tables:
                 print(f"reading table [{table}]")
-                column_types, parse_dates = self._get_column_types(self.filepath[table])
+                column_types = self._get_column_types(path = self.filepath[table], filename=table)
                 df = self._read_table(self.filepath[table], dtype=column_types, index='person_id') # TODO parse_dates = parse_dates
                 if remove_empty_column:
                     # TODO dask Support
@@ -406,19 +438,23 @@ class OMOP:
             # self.loaded_tabel = ['visit_occurrence', 'person', 'death', 'measurement', 'observation', 'drug_exposure']
             # TODO dask Support
             joined_table = pd.merge(self.visit_occurrence, self.person, left_index=True, right_index=True, how="left")
+            
             joined_table = pd.merge(joined_table, self.death, left_index=True, right_index=True, how="left")
             
             # TODO dask Support
             #joined_table = joined_table.compute()
             
+            # TODO check this earlier 
+            joined_table = joined_table.drop_duplicates(subset='visit_occurrence_id')
             joined_table = joined_table.set_index("visit_occurrence_id")
-
             # obs_only_list = list(self.joined_table.columns)
             # obs_only_list.remove('visit_occurrence_id')
             columns_obs_only = list(set(joined_table.columns) - set(["year_of_birth", "gender_source_value"]))
             adata = ep.ad.df_to_anndata(
                 joined_table, index_column="visit_occurrence_id", columns_obs_only=columns_obs_only
             )
+            # TODO this needs to be fixed because anndata set obs index as string by default
+            #adata.obs.index = adata.obs.index.astype(int)
 
             """
             for column in self.measurement.columns:
@@ -444,12 +480,6 @@ class OMOP:
             """
 
         return adata
-
-    def add_additional_column(self, column_name, type):
-        if hasattr(self, "additional_column"):
-            self.additional_column[column_name] = type
-        else:
-            self.additional_column = {column_name: type}
     
     def feature_counts(
         self,
@@ -475,8 +505,8 @@ class OMOP:
         else:
             raise KeyError(f"Extracting data from {source} is not supported yet")
         
-        column_types, parse_dates = self._get_column_types(self.filepath[source])
-        df_source = self._read_table(self.filepath[source], dtype=column_types, parse_dates = parse_dates, usecols=[f"{source}_concept_id"], use_dask=True)
+        column_types = self._get_column_types(path = self.filepath[source], filename=source)
+        df_source = self._read_table(self.filepath[source], dtype=column_types, usecols=[f"{source}_concept_id"], use_dask=True)
         # TODO dask Support
         #feature_counts = df_source[f"{source}_concept_id"].value_counts().compute()[0:number]
         feature_counts = df_source[f"{source}_concept_id"].value_counts().compute()
@@ -509,9 +539,9 @@ class OMOP:
         concept_id_mapped_not_found = []
         
         if "concept_relationship" in self.tables:
-            column_types, parse_dates = self._get_column_types(self.filepath["concept_relationship"])
+            column_types = self._get_column_types(path = self.filepath["concept_relationship"], filename="concept_relationship")
             df_concept_relationship = self._read_csv(
-                self.filepath["concept_relationship"], dtype=column_types, parse_dates=parse_dates
+                self.filepath["concept_relationship"], dtype=column_types
             )
             # TODO dask Support
             #df_concept_relationship.compute().dropna(subset=["concept_id_1", "concept_id_2", "relationship_id"], inplace=True)  # , usecols=vocabularies_tables_columns["concept_relationship"],
@@ -555,8 +585,8 @@ class OMOP:
         if isinstance(concept_id, numbers.Integral):
             concept_id = [concept_id]
 
-        column_types, parse_dates = self._get_column_types(self.filepath["concept"])
-        df_concept = self._read_table(self.filepath["concept"], dtype=column_types, parse_dates=parse_dates)
+        column_types = self._get_column_types(path = self.filepath["concept"], filename="concept")
+        df_concept = self._read_table(self.filepath["concept"], dtype=column_types)
         # TODO dask Support
         #df_concept.compute().dropna(subset=["concept_id", "concept_name"], inplace=True, ignore_index=True)  # usecols=vocabularies_tables_columns["concept"]
         df_concept.dropna(subset=["concept_id", "concept_name"], inplace=True, ignore_index=True)  # usecols=vocabularies_tables_columns["concept"]
@@ -581,8 +611,8 @@ class OMOP:
             return concept_name
 
     def extract_note(self, adata, source="note"):
-        column_types, parse_dates = self._get_column_types(self.filepath[source])
-        df_source = dd.read_csv(self.filepath[source], dtype=column_types, parse_dates=parse_dates)
+        column_types = self._get_column_types(path = self.filepath[source], filename=source)
+        df_source = dd.read_csv(self.filepath[source], dtype=column_types)
         if columns is None:
             columns = df_source.columns
         obs_dict = [
@@ -640,8 +670,8 @@ class OMOP:
         # TODO support features name
 
         if "concept" in self.tables:
-            column_types, parse_dates = self._get_column_types(self.filepath["concept"])
-            df_concept = self._read_table(self.filepath["concept"], dtype=column_types, parse_dates=parse_dates).dropna(
+            column_types = self._get_column_types(path = self.filepath["concept"], filename="concept")
+            df_concept = self._read_table(self.filepath["concept"], dtype=column_types).dropna(
                 subset=["concept_id", "concept_name"]
             )  # usecols=vocabularies_tables_columns["concept"],
             concept_dict = df_to_dict(df=df_concept, key="concept_id", value="concept_name")
@@ -755,60 +785,62 @@ class OMOP:
             "condition_occurrence",
         ],
         features: str or int or List[Union[str, int]] = None,
-        key: str = None,
         level="stay_level",
+        value_col: str = 'value_source_value',
         aggregation_methods: Union[Literal["min", "max", "mean", "std", "count"], List[Literal["min", "max", "mean", "std", "count"]]]=None,
         add_aggregation_to_X: bool = True,
         verbose: bool = False,
+        use_dask: bool = None,
     ):
-        #TODO query this from OMOP CDM table
-        if key is None:
-            if source in ["measurement", "observation", "specimen"]:
-                key = f"{source}_concept_id"
-            elif source in ["device_exposure", "procedure_occurrence", "drug_exposure", "condition_occurrence"]:
-                key = f"{source.split('_')[0]}_concept_id"
-            else:
-                raise KeyError(f"Extracting data from {source} is not supported yet")
-            
-        #TODO
-        if source == 'measurement':
-            columns = ["value_as_number", "time", "visit_occurrence_id", "measurement_concept_id"]
-        elif source == 'observation':
-            columns = ["value_as_number", "value_as_string", "measurement_datetime"]
-        elif source == 'condition_occurrence':
-            columns = None
+        if source in ["measurement", "observation", "specimen"]:
+            key = f"{source}_concept_id"
+        elif source in ["device_exposure", "procedure_occurrence", "drug_exposure", "condition_occurrence"]:
+            key = f"{source.split('_')[0]}_concept_id"
         else:
             raise KeyError(f"Extracting data from {source} is not supported yet")
-        source_column_types, parse_dates = self._get_column_types(self.filepath[source])
-        df_source = self._read_table(self.filepath[source], dtype=source_column_types, usecols=columns, use_dask=True) 
+        
+        if source == 'measurement':
+            source_table_columns = ['visit_occurrence_id', 'measurement_datetime', key, value_col]
+        elif source == 'observation':
+            source_table_columns = ['visit_occurrence_id', "observation_datetime", key, value_col]
+        elif source == 'condition_occurrence':
+            source_table_columns = None
+        else:
+            raise KeyError(f"Extracting data from {source} is not supported yet")
+
+        if use_dask is None:
+            use_dask = self.use_dask
+        source_column_types = self._get_column_types(path = self.filepath[source], filename=source)
+        df_source = self._read_table(self.filepath[source], dtype=source_column_types, usecols=source_table_columns, use_dask=use_dask) 
         info_df = self.get_feature_info(adata, source=source, features=features, verbose=False)
         info_dict = info_df[['feature_id', 'feature_name']].set_index('feature_id').to_dict()['feature_name']
         
         # Select featrues
-        da_measurement = df_source[df_source.measurement_concept_id.isin(list(info_df.feature_id))]
-        #TODO
-        # Select time
-        da_measurement = da_measurement[(da_measurement.time >= 0) & (da_measurement.time <= 48*60*60)]
-        da_measurement[f'feature_name'] = da_measurement[key].replace(info_dict)
+        df_source = df_source[df_source[key].isin(list(info_df.feature_id))]
+        #TODO Select time
+        #da_measurement = da_measurement[(da_measurement.time >= 0) & (da_measurement.time <= 48*60*60)]
+        #df_source[f'{source}_name'] = df_source[key].map(info_dict)
         if aggregation_methods is None:
             aggregation_methods = ["min", "max", "mean", "std", "count"]
         if level == 'stay_level':
-            aggregated = da_measurement.groupby(['visit_occurrence_id', 'measurement_concept_id']).agg({
-                'value_as_number': aggregation_methods
-            })
-            result = aggregated.compute()
+            result = df_source.groupby(['visit_occurrence_id', key]).agg({
+                    value_col: aggregation_methods})
+            
+            if use_dask:
+                result = result.compute()
             result = result.reset_index(drop=False)
             result.columns = ["_".join(a) for a in result.columns.to_flat_index()]
             result.columns  = result.columns.str.removesuffix('_')
-            result.columns  = result.columns.str.removeprefix('value_as_number_')
-            result['measurement_name'] = result.measurement_concept_id.replace(info_dict)
+            result.columns  = result.columns.str.removeprefix(f'{value_col}_')
+            result[f'{source}_name'] = result[key].map(info_dict)
 
             df_statistics = result.pivot(index='visit_occurrence_id', 
-                                columns='measurement_name', 
+                                columns=f'{source}_name', 
                                 values=aggregation_methods)
             df_statistics.columns = df_statistics.columns.swaplevel()
             df_statistics.columns = ["_".join(a) for a in df_statistics.columns.to_flat_index()]
 
+            
             # TODO
             sort_columns = True
             if sort_columns:
@@ -820,8 +852,11 @@ class OMOP:
                             new_column_order.append(col_name)
 
                 df_statistics.columns = new_column_order
+            
+        df_statistics.index = df_statistics.index.astype(str)
         
         adata.obs = adata.obs.join(df_statistics, how='left')
+        
         if add_aggregation_to_X:
             adata = ep.ad.move_to_x(adata, list(df_statistics.columns))
         return adata
@@ -840,137 +875,535 @@ class OMOP:
             "condition_occurrence",
         ],
         features: str or int or List[Union[str, int]] = None,
-        key: str | None = None,
-        dropna: bool | None = True,
-        columns_in_source_table: str or List[str] = None,
-        map_concept: bool | None = True,
-        add_aggregation_to_X: bool | None = True,
-        aggregation_value_column: str = None,
-        aggregation_methods: Union[Literal["min", "max", "mean", "std", "count"], List[Literal["min", "max", "mean", "std", "count"]]]=None,
-        add_all_data: bool | None = True,
-        exact_match: bool | None = True,
-        remove_empty_column: bool | None = True,
-        ignore_not_shown_in_concept_table: bool | None = True,
-        verbose: bool | None = False,
+        source_table_columns: Union[str, List[str]] = None,
+        dropna: Optional[bool] = True,
+        verbose: Optional[bool] = True,
+        use_dask: bool = None,
     ):
-        if key is None:
-            if source in ["measurement", "observation", "specimen"]:
-                key = f"{source}_concept_id"
-            elif source in ["device_exposure", "procedure_occurrence", "drug_exposure", "condition_occurrence"]:
-                key = f"{source.split('_')[0]}_concept_id"
-            else:
-                raise KeyError(f"Extracting data from {source} is not supported yet")
         
-        if source == 'measurement':
-            columns = ['visit_occurrence_id', 'time', 'value_as_number', 'measurement_concept_id']
-        elif source == 'observation':
-            columns = ["value_as_number", "value_as_string", "measurement_datetime"]
-        elif source == 'condition_occurrence':
-            columns = None
+        if source in ["measurement", "observation", "specimen"]:
+            key = f"{source}_concept_id"
+        elif source in ["device_exposure", "procedure_occurrence", "drug_exposure", "condition_occurrence"]:
+            key = f"{source.split('_')[0]}_concept_id"
         else:
             raise KeyError(f"Extracting data from {source} is not supported yet")
+        
+        if source_table_columns is None:
+            if source == 'measurement':
+                source_table_columns = ['visit_occurrence_id', 'measurement_datetime', 'value_as_number', key]
+            elif source == 'observation':
+                source_table_columns = ['visit_occurrence_id', "value_as_number", "value_as_string", "observation_datetime", key]
+            elif source == 'condition_occurrence':
+                source_table_columns = None
+            else:
+                raise KeyError(f"Extracting data from {source} is not supported yet")
+        if use_dask is None:
+            use_dask = self.use_dask                
         
 
         # TODO load using Dask or Dask-Awkward
         # Load source table using dask
-        source_column_types, parse_dates = self._get_column_types(self.filepath[source])
-        df_source = self._read_table(self.filepath[source], dtype=source_column_types, usecols=columns, use_dask=True) 
+        source_column_types = self._get_column_types(path = self.filepath[source], filename=source)
+        df_source = self._read_table(self.filepath[source], dtype=source_column_types, usecols=source_table_columns, use_dask=use_dask) 
         info_df = self.get_feature_info(adata, source=source, features=features, verbose=False)
         info_dict = info_df[['feature_id', 'feature_name']].set_index('feature_id').to_dict()['feature_name']
         
         
         # Select featrues
-        df_source = df_source[df_source.measurement_concept_id.isin(list(info_df.feature_id))]
-        # TODO
-        # Select time
-        df_source = df_source[(df_source.time >= 0) & (df_source.time <= 48*60*60)]
+        df_source = df_source[df_source[key].isin(list(info_df.feature_id))]
+        
+        # TODO select time period  
+        #df_source = df_source[(df_source.time >= 0) & (df_source.time <= 48*60*60)]
         #da_measurement['measurement_name'] = da_measurement.measurement_concept_id.replace(info_dict)
-
-        if dropna == True:
-            da_measurement_in_memory = df_source.compute().dropna()
+        
+        # TODO dask caching
+        """ 
+        from dask.cache import Cache
+        cache = Cache(2e9)
+        cache.register()
+        """
+        if use_dask:
+            if dropna == True:
+                df_source = df_source.compute().dropna()
+            else:
+                df_source = df_source.compute()
         else:
-            da_measurement_in_memory = df_source.compute()
+            if dropna == True:
+                df_source = df_source.dropna()
+        
         # Preprocess steps outside the loop
-        unique_feature_ids = set(info_dict.keys())
-        unique_visit_occurrence_ids = set(adata.obs.index.astype(int))
-        empty_entry = {'value_as_number': [], 'time': []}
-
+        unique_visit_occurrence_ids = set(adata.obs.index)#.astype(int))
+        empty_entry = {source_table_column: [] for source_table_column in source_table_columns if source_table_column not in [key, 'visit_occurrence_id'] }
+        
         # Filter data once, if possible
-        # Example: Create a dictionary with each feature_id
-        # This assumes da_measurement_in_memory is a DataFrame-like object
         filtered_data = {
-            feature_id: da_measurement_in_memory[da_measurement_in_memory.measurement_concept_id == feature_id]
-            for feature_id in unique_feature_ids
+            feature_id: df_source[df_source[key] == feature_id]
+            for feature_id in set(info_dict.keys())
         }
 
-        for feature_id in unique_feature_ids:
-            df_feature = filtered_data[feature_id][['visit_occurrence_id', 'time', 'value_as_number']]
+        for feature_id in set(info_dict.keys()):
+            df_feature = filtered_data[feature_id][list(set(source_table_columns) - set([key]))]
             grouped = df_feature.groupby("visit_occurrence_id")
-            print(f"Adding feature [{info_dict[feature_id]}] into adata")
+            if verbose:
+                print(f"Adding feature [{info_dict[feature_id]}] into adata.obsm")
             
             # Use set difference and intersection more efficiently
             feature_ids = unique_visit_occurrence_ids.intersection(grouped.groups.keys())
 
             # Creating the array more efficiently
             adata.obsm[info_dict[feature_id]] = ak.Array([
-                grouped.get_group(visit_occurrence_id)[['value_as_number', 'time']].to_dict(orient='list') if visit_occurrence_id in feature_ids else empty_entry 
+                grouped.get_group(visit_occurrence_id)[list(set(source_table_columns) - set([key, 'visit_occurrence_id']))].to_dict(orient='list') if visit_occurrence_id in feature_ids else empty_entry 
                 for visit_occurrence_id in unique_visit_occurrence_ids
             ])
 
         return adata
 
 
-    def drop_nan(adata, 
-                 key: str,
-                 slot: str | None = 'obsm', 
+    def drop_nan(self, 
+                 adata, 
+                 key: Union[str, List[str]],
+                 slot: Union[str, None] = 'obsm', 
                  ):
+        if isinstance(key, str):
+            key_list = [key]
+        else:
+            key_list = key
         if slot == 'obsm':
-            ak_array = adata.obsm[key]
-            combined_mask = ak.zeros_like(ak_array[ak_array.fields[0]], dtype=bool)
-
-            # Update the combined mask based on the presence of None in each field
-            for field in ak_array.fields:
-                field_mask = ak.is_none(ak.nan_to_none(ak_array[field]), axis=1)
-                combined_mask = combined_mask | field_mask
-
-            ak_array = ak_array[~combined_mask]
-            adata.obsm[key] = ak_array
+            for key in key_list:
+                ak_array = adata.obsm[key]
+                
+                # Update the combined mask based on the presence of None in each field
+                for i, field in enumerate(ak_array.fields):
+                    field_mask = ak.is_none(ak.nan_to_none(ak_array[field]), axis=1)
+                    if i==0:
+                        combined_mask = ak.full_like(field_mask, fill_value=False, dtype=bool)
+                    combined_mask = combined_mask | field_mask
+                ak_array = ak_array[~combined_mask]
+                adata.obsm[key] = ak_array
 
         return adata
 
+    # downsampling
+    def aggregate_timeseries_in_bins(self,
+                                     adata,
+                                     features: Union[str, List[str]],
+                                     slot: Union[str, None] = 'obsm',
+                                     value_key: str = 'value_as_number',
+                                     time_key: str = 'measurement_datetime',
+                                     time_binning_method: Literal["floor", "ceil", "round"] = "floor",
+                                     bin_size: Union[str, Offset] = 'h',
+                                     aggregation_method: Literal['median', 'mean', 'min', 'max'] = 'median',
+                                     time_upper_bound: int = 48# TODO
+                                     ):
+
+        if isinstance(features, str):
+            features_list = [features]
+        else:
+            features_list = features
+
+        # Ensure the time_binning_method provided is one of the expected methods
+        if time_binning_method not in ["floor", "ceil", "round"]:
+            raise ValueError(f"time_binning_method {time_binning_method} is not supported. Choose from 'floor', 'ceil', or 'round'.")
+
+        if aggregation_method not in {'median', 'mean', 'min', 'max'}:
+            raise ValueError(f"aggregation_method {aggregation_method} is not supported. Choose from 'median', 'mean', 'min', or 'max'.")
+
+        if slot == 'obsm':
+            for feature in features_list:
+                print(f"processing feature [{feature}]")
+                df = self.to_dataframe(adata, features)
+                if pd.api.types.is_datetime64_any_dtype(df[time_key]):
+                    func = getattr(df[time_key].dt, time_binning_method, None)
+                    if func is not None:
+                        df[time_key] = func(bin_size)
+                else:
+                    # TODO need to take care of this if it doesn't follow omop standard
+                    if bin_size == 'h':
+                        df[time_key] = df[time_key] / 3600
+                        func = getattr(np, time_binning_method)
+                        df[time_key] = func(df[time_key])
+                
+                df[time_key] = df[time_key].astype(str)
+                # Adjust time values that are equal to the time_upper_bound
+                #df.loc[df[time_key] == time_upper_bound, time_key] = time_upper_bound - 1
+                
+                # Group and aggregate data
+                df = df.groupby(["visit_occurrence_id", time_key])[value_key].agg(aggregation_method).reset_index(drop=False)
+                grouped = df.groupby("visit_occurrence_id")
+
+                unique_visit_occurrence_ids = adata.obs.index
+                empty_entry = {value_key: [], time_key: []}
+
+                # Efficiently use set difference and intersection
+                feature_ids = unique_visit_occurrence_ids.intersection(grouped.groups.keys())
+                # Efficiently create the array
+                ak_array = ak.Array([
+                    grouped.get_group(visit_occurrence_id)[[value_key, time_key]].to_dict(orient='list') if visit_occurrence_id in feature_ids else empty_entry
+                    for visit_occurrence_id in unique_visit_occurrence_ids
+                ])
+                adata.obsm[feature] = ak_array
+
+        return adata
+    
+    def timeseries_discretizer(self,
+                              adata,
+                              key: Union[str, List[str]],
+                              slot: Union[str, None] = 'obsm',
+                              value_key: str = 'value_as_number',
+                              time_key: str = 'measurement_datetime',
+                              freq: str = 'hour', #TODO
+                              time_limit: int = 48, #TODO
+                              method: str = 'median' #TODO
+                              ):
+        
+        pass
     
     
+    
+    def from_dataframe(
+        self,
+        adata,
+        feature: str,
+        df
+    ):
+        grouped = df.groupby("visit_occurrence_id")
+        unique_visit_occurrence_ids = set(adata.obs.index)
+
+        # Use set difference and intersection more efficiently
+        feature_ids = unique_visit_occurrence_ids.intersection(grouped.groups.keys())
+        empty_entry = {source_table_column: [] for source_table_column in set(df.columns) if source_table_column not in ['visit_occurrence_id'] }
+
+        # Creating the array more efficiently
+        ak_array = ak.Array([
+            grouped.get_group(visit_occurrence_id)[list(set(df.columns) - set(['visit_occurrence_id']))].to_dict(orient='list') if visit_occurrence_id in feature_ids else empty_entry 
+            for visit_occurrence_id in unique_visit_occurrence_ids])
+        adata.obsm[feature] = ak_array
+        
+        return adata
+        
     # TODO add function to check feature and add concept
     # More IO functions
     def to_dataframe(
         self,
         adata,
-        feature: str,  # TODO also support list of features
+        features: Union[str, List[str]],  # TODO also support list of features
         # patient str or List,  # TODO also support subset of patients/visit
     ):
         # TODO
-        # join index (visit_occurrence_id) to df
         # can be viewed as patient level - only select some patient
+        # TODO change variable name here
+        if isinstance(features, str):
+            features = [features]
+        df_concat = pd.DataFrame([])
+        for feature in features:
+            df = ak.to_dataframe(adata.obsm[feature])
 
-        df = ak.to_dataframe(adata.obsm[feature])
+            df.reset_index(drop=False, inplace=True)
+            df["entry"] = adata.obs.index[df["entry"]]
+            df = df.rename(columns={"entry": "visit_occurrence_id"})
+            del df["subentry"]
+            for col in df.columns: 
+                if col.endswith('time'):
+                    df[col] = pd.to_datetime(df[col])
+            
+            df['feature_name'] = feature
+            df_concat = pd.concat([df_concat, df], axis= 0)
+        
+        
+        return df_concat
 
-        df.reset_index(drop=False, inplace=True)
-        df["entry"] = adata.obs.index[df["entry"]]
-        df = df.rename(columns={"entry": "visit_occurrence_id"})
-        del df["subentry"]
-        return df
 
-    # More Plot functions
-    def plot_timeseries(
-        self,
+    def plot_timeseries(self,
+                        adata,
+                        visit_occurrence_id: int,
+                        key: Union[str, List[str]],
+                        slot: Union[str, None] = 'obsm',
+                        value_key: str = 'value_as_number',
+                        time_key: str = 'measurement_datetime',
+                        x_label: str = None
     ):
-        # add one function from previous pipeline
-        pass
+    
+    
+        if isinstance(key, str):
+            key_list = [key]
+        else:
+            key_list = key
 
-    # More Pre-processing functions
-    def sampling(
+        # Initialize min_x and max_x
+        min_x = None
+        max_x = None
+
+        if slot == 'obsm':
+            fig, ax = plt.subplots(figsize=(20, 6))
+            # Scatter plot
+            for i, key in enumerate(key_list):
+                df = self.to_dataframe(adata, key)
+                x = df[df.visit_occurrence_id == visit_occurrence_id][time_key]
+                y = df[df.visit_occurrence_id == visit_occurrence_id][value_key]
+
+                # Check if x is empty
+                if not x.empty:
+                    ax.scatter(x=x, y=y, label=key)
+                    ax.legend(loc=9, bbox_to_anchor=(0.5, -0.1), ncol=len(key_list), prop={"size": 14})
+                    
+                    ax.plot(x, y)
+                    
+
+                    if min_x is None or min_x > x.min():
+                        min_x = x.min()
+                    if max_x is None or max_x < x.max():
+                        max_x = x.max()
+                    
+                    
+                else:
+                    # Skip this iteration if x is empty
+                    continue
+            
+            if min_x is not None and max_x is not None:
+                
+                # Adapt this to input data
+                # TODO step
+                #plt.xticks(np.arange(min_x, max_x, step=1))
+                # Adapt this to input data
+                plt.xlabel(x_label if x_label else "Hours since ICU admission")
+            
+            plt.show()
+
+
+    def violin(
         self,
-    ):
-        # function from dask
-        # need to check dask-awkward again
-        pass
+        adata: AnnData,
+        obsm_key: str = None,
+        keys: Union[str, Sequence[str]] = None,
+        groupby: Optional[str] = None,
+        log: Optional[bool] = False,
+        use_raw: Optional[bool] = None,
+        stripplot: bool = True,
+        jitter: Union[float, bool] = True,
+        size: int = 1,
+        layer: Optional[str] = None,
+        scale: Literal["area", "count", "width"] = "width",
+        order: Optional[Sequence[str]] = None,
+        multi_panel: Optional[bool] = None,
+        xlabel: str = "",
+        ylabel: Union[str, Sequence[str]] = None,
+        rotation: Optional[float] = None,
+        show: Optional[bool] = None,
+        save: Union[bool, str] = None,
+        ax: Optional[Axes] = None,
+        **kwds,
+    ):  # pragma: no cover
+        """Violin plot.
+
+        Wraps :func:`seaborn.violinplot` for :class:`~anndata.AnnData`.
+
+        Args:
+            adata: :class:`~anndata.AnnData` object object containing all observations.
+            keys: Keys for accessing variables of `.var_names` or fields of `.obs`.
+            groupby: The key of the observation grouping to consider.
+            log: Plot on logarithmic axis.
+            use_raw: Whether to use `raw` attribute of `adata`. Defaults to `True` if `.raw` is present.
+            stripplot: Add a stripplot on top of the violin plot. See :func:`~seaborn.stripplot`.
+            jitter: Add jitter to the stripplot (only when stripplot is True) See :func:`~seaborn.stripplot`.
+            size: Size of the jitter points.
+            layer: Name of the AnnData object layer that wants to be plotted. By
+                default adata.raw.X is plotted. If `use_raw=False` is set,
+                then `adata.X` is plotted. If `layer` is set to a valid layer name,
+                then the layer is plotted. `layer` takes precedence over `use_raw`.
+            scale: The method used to scale the width of each violin.
+                If 'width' (the default), each violin will have the same width.
+                If 'area', each violin will have the same area.
+                If 'count', a violin’s width corresponds to the number of observations.
+            order: Order in which to show the categories.
+            multi_panel: Display keys in multiple panels also when `groupby is not None`.
+            xlabel: Label of the x axis. Defaults to `groupby` if `rotation` is `None`, otherwise, no label is shown.
+            ylabel: Label of the y axis. If `None` and `groupby` is `None`, defaults to `'value'`.
+                    If `None` and `groubpy` is not `None`, defaults to `keys`.
+            rotation: Rotation of xtick labels.
+            {show_save_ax}
+            **kwds:
+                Are passed to :func:`~seaborn.violinplot`.
+
+        Returns:
+            A :class:`~matplotlib.axes.Axes` object if `ax` is `None` else `None`.
+
+        Example:
+            .. code-block:: python
+
+                import ehrapy as ep
+
+                adata = ep.dt.mimic_2(encoded=True)
+                ep.pp.knn_impute(adata)
+                ep.pp.log_norm(adata, offset=1)
+                ep.pp.neighbors(adata)
+                ep.tl.leiden(adata, resolution=0.5, key_added="leiden_0_5")
+                ep.pl.violin(adata, keys=["age"], groupby="leiden_0_5")
+
+        Preview:
+            .. image:: /_static/docstring_previews/violin.png
+        """
+        
+        if obsm_key:
+            df = self.to_dataframe(adata, features=obsm_key)
+            df = df[["visit_occurrence_id", "value_as_number"]]
+            df = df.rename(columns = {"value_as_number": obsm_key})
+            
+            if groupby:
+                df = df.set_index('visit_occurrence_id').join(adata.obs[groupby].to_frame()).reset_index(drop=False)
+                adata = ep.ad.df_to_anndata(df, columns_obs_only=['visit_occurrence_id', groupby])
+            else:
+                adata = ep.ad.df_to_anndata(df, columns_obs_only=['visit_occurrence_id'])
+            keys=obsm_key
+            
+        violin_partial = partial(
+            sc.pl.violin,
+            keys=keys,
+            log=log,
+            use_raw=use_raw,
+            stripplot=stripplot,
+            jitter=jitter,
+            size=size,
+            layer=layer,
+            scale=scale,
+            order=order,
+            multi_panel=multi_panel,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            rotation=rotation,
+            show=show,
+            save=save,
+            ax=ax,
+            **kwds,)
+            
+        return violin_partial(adata=adata, groupby=groupby)
+
+
+    def qc_lab_measurements(
+        self,
+        adata: AnnData,
+        reference_table: pd.DataFrame = None,
+        measurements: list[str] = None,
+        obsm_measurements: list[str] = None,
+        action: Literal["remove"] = "remove",
+        unit: Literal["traditional", "SI"] = None,
+        layer: str = None,
+        threshold: int = 20,
+        age_col: str = None,
+        age_range: str = None,
+        sex_col: str = None,
+        sex: str = None,
+        ethnicity_col: str = None,
+        ethnicity: str = None,
+        copy: bool = False,
+        verbose: bool = False,
+    ) -> AnnData:
+
+        if copy:
+            adata = adata.copy()
+
+        preprocessing_dir = '/Users/xinyuezhang/ehrapy/ehrapy/preprocessing'
+        if reference_table is None:
+            reference_table = pd.read_csv(
+                f"{preprocessing_dir}/laboratory_reference_tables/laposata.tsv", sep="\t", index_col="Measurement"
+            )
+        if obsm_measurements:
+            measurements = obsm_measurements
+        for measurement in measurements:
+            best_column_match, score = process.extractOne(
+                query=measurement, choices=reference_table.index, score_cutoff=threshold
+            )
+            if best_column_match is None:
+                rprint(f"[bold yellow]Unable to find a match for {measurement}")
+                continue
+            if verbose:
+                rprint(
+                    f"[bold blue]Detected [green]{best_column_match}[blue] for [green]{measurement}[blue] with score [green]{score}."
+                )
+
+            reference_column = "SI Reference Interval" if unit == "SI" else "Traditional Reference Interval"
+
+            # Fetch all non None columns from the reference statistics
+            not_none_columns = [col for col in [sex_col, age_col, ethnicity_col] if col is not None]
+            not_none_columns.append(reference_column)
+            reference_values = reference_table.loc[[best_column_match], not_none_columns]
+
+            additional_columns = False
+            if sex_col or age_col or ethnicity_col:  # check if additional columns were provided
+                additional_columns = True
+
+            # Check if multiple reference values occur and no additional information is available:
+            if reference_values.shape[0] > 1 and additional_columns is False:
+                raise ValueError(
+                    f"Several options for {best_column_match} reference value are available. Please specify sex, age or "
+                    f"ethnicity columns and their values."
+                )
+
+            try:
+                if age_col:
+                    min_age, max_age = age_range.split("-")
+                    reference_values = reference_values[
+                        (reference_values[age_col].str.split("-").str[0].astype(int) >= int(min_age))
+                        and (reference_values[age_col].str.split("-").str[1].astype(int) <= int(max_age))
+                    ]
+                if sex_col:
+                    sexes = "U|M" if sex is None else sex
+                    reference_values = reference_values[reference_values[sex_col].str.contains(sexes)]
+                if ethnicity_col:
+                    reference_values = reference_values[reference_values[ethnicity_col].isin([ethnicity])]
+
+                if layer is not None:
+                    actual_measurements = adata[:, measurement].layers[layer]
+                else:
+                    if obsm_measurements:
+                        actual_measurements = adata.obsm[measurement]['value_as_number']
+                        ak_measurements = adata.obsm[measurement]
+                    else:
+                        actual_measurements = adata[:, measurement].X
+            except TypeError:
+                rprint(f"[bold yellow]Unable to find specified reference values for {measurement}.")
+
+            check = reference_values[reference_column].values
+            check_str: str = np.array2string(check)
+            check_str = check_str.replace("[", "").replace("]", "").replace("'", "")
+            if "<" in check_str:
+                upperbound = float(check_str.replace("<", ""))
+                if verbose:
+                    rprint(f"[bold blue]Using upperbound [green]{upperbound}")
+                upperbound_check_results = actual_measurements < upperbound
+                if isinstance(actual_measurements, ak.Array):
+                    if action == 'remove':
+                        if verbose:
+                            rprint(f"Removing {ak.count(actual_measurements) - ak.count(actual_measurements[upperbound_check_results])} outliers")
+                        adata.obsm[measurement] = ak_measurements[upperbound_check_results]
+                else:
+                    upperbound_check_results_array: np.ndarray = upperbound_check_results.copy()       
+                    adata.obs[f"{measurement} normal"] = upperbound_check_results_array
+                    
+            elif ">" in check_str:
+                lower_bound = float(check_str.replace(">", ""))
+                if verbose:
+                    rprint(f"[bold blue]Using lowerbound [green]{lower_bound}")
+
+                lower_bound_check_results = actual_measurements > lower_bound
+                if isinstance(actual_measurements, ak.Array):
+                    if action == 'remove':
+                        adata.obsm[measurement] = ak_measurements[lower_bound_check_results]
+                else:
+                    adata.obs[f"{measurement} normal"] = lower_bound_check_results_array
+                    lower_bound_check_results_array = lower_bound_check_results.copy()
+            else:  # "-" range case
+                min_value = float(check_str.split("-")[0])
+                max_value = float(check_str.split("-")[1])
+                if verbose:
+                    rprint(f"[bold blue]Using minimum of [green]{min_value}[blue] and maximum of [green]{max_value}")
+
+                range_check_results = (actual_measurements >= min_value) & (actual_measurements <= max_value)
+                if isinstance(actual_measurements, ak.Array):
+                    if action == 'remove':
+                        adata.obsm[measurement] = ak_measurements[range_check_results]
+                else:
+                    adata.obs[f"{measurement} normal"] = range_check_results_array
+                    range_check_results_array: np.ndarray = range_check_results.copy()
+
+        if copy:
+            return adata
