@@ -1,10 +1,10 @@
 import pytest
 
-import ehrdata
+import ehrdata_source
 
 
 def test_package_has_version():
-    assert ehrdata.__version__ is not None
+    assert ehrdata_source.__version__ is not None
 
 
 @pytest.mark.skip(reason="This decorator should be removed when test passes.")
