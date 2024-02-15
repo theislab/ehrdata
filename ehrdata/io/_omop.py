@@ -52,7 +52,7 @@ def init_omop(
             # text.append(table_list_str)
             # yield None, f"{key} tables", "red"
     rprint(print_str)
-
+    # TODO add more tabels, maybe based on table size
     tables = ["person", "death", "visit_occurrence"]
     # TODO patient level and hospital level
     if level == "stay_level":
