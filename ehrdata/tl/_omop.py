@@ -1,28 +1,28 @@
-from ehrdata.utils.omop_utils import * #get_column_types, read_table, df_to_dict
-from typing import List, Union, Literal, Optional, Dict
 import numbers
-from rich import print as rprint
-from anndata import AnnData
+from typing import Union
 
-def get_concept_name(
-    adata: Union[AnnData, Dict],
-    concept_id: Union[str, List], 
-    raise_error=False, 
-    verbose=True):
-    
+from anndata import AnnData
+from rich import print as rprint
+
+from ehrdata.utils.omop_utils import df_to_dict, get_column_types, read_table
+
+
+def get_concept_name(adata: Union[AnnData, dict], concept_id: Union[str, list], raise_error=False, verbose=True):
     if isinstance(concept_id, numbers.Integral):
         concept_id = [concept_id]
-    
+
     if isinstance(adata, AnnData):
         adata_dict = adata.uns
     else:
         adata_dict = adata
-    
+
     column_types = get_column_types(adata_dict, table_name="concept")
     df_concept = read_table(adata_dict, table_name="concept", dtype=column_types)
     # TODO dask Support
-    #df_concept.compute().dropna(subset=["concept_id", "concept_name"], inplace=True, ignore_index=True)  # usecols=vocabularies_tables_columns["concept"]
-    df_concept.dropna(subset=["concept_id", "concept_name"], inplace=True, ignore_index=True)  # usecols=vocabularies_tables_columns["concept"]
+    # df_concept.compute().dropna(subset=["concept_id", "concept_name"], inplace=True, ignore_index=True)  # usecols=vocabularies_tables_columns["concept"]
+    df_concept.dropna(
+        subset=["concept_id", "concept_name"], inplace=True, ignore_index=True
+    )  # usecols=vocabularies_tables_columns["concept"]
     concept_dict = df_to_dict(df=df_concept, key="concept_id", value="concept_name")
     concept_name = []
     concept_name_not_found = []
@@ -42,6 +42,7 @@ def get_concept_name(
         return concept_name[0]
     else:
         return concept_name
+
 
 # TODO
 def get_concept_id():
