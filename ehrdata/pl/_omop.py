@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from ehrdata.tl import get_concept_name
-from ehrdata.utils.omop_utils import get_column_types, map_concept_id, read_table
+from ehrdata.utils._omop_utils import get_column_types, map_concept_id, read_table
 
 
 # TODO allow users to pass features

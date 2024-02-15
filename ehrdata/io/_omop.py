@@ -6,7 +6,7 @@ import ehrapy as ep
 import pandas as pd
 from rich import print as rprint
 
-from ehrdata.utils.omop_utils import check_with_omop_cdm, get_column_types, get_table_catalog_dict, read_table
+from ehrdata.utils._omop_utils import check_with_omop_cdm, get_column_types, get_table_catalog_dict, read_table
 
 
 def init_omop(

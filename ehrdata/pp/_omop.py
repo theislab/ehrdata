@@ -5,7 +5,7 @@ import ehrapy as ep
 import pandas as pd
 from rich import print as rprint
 
-from ehrdata.utils.omop_utils import get_column_types, get_feature_info, read_table
+from ehrdata.utils._omop_utils import get_column_types, get_feature_info, read_table
 
 
 def get_feature_statistics(
