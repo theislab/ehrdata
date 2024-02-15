@@ -1,1 +1,0 @@
-from ehrdata.dt._omop import init_omop
