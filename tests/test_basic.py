@@ -1,6 +1,5 @@
-import pytest
-
 import ehrdata as ehr
+import pytest
 
 
 def test_package_has_version():
