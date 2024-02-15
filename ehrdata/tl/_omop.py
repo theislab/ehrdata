@@ -4,7 +4,7 @@ from typing import Union
 from anndata import AnnData
 from rich import print as rprint
 
-from ehrdata.utils.omop_utils import df_to_dict, get_column_types, read_table
+from ehrdata.utils._omop_utils import df_to_dict, get_column_types, read_table
 
 
 def get_concept_name(adata: Union[AnnData, dict], concept_id: Union[str, list], raise_error=False, verbose=True):
