@@ -144,9 +144,11 @@ def from_dataframe(adata, feature: str, df):
     # Creating the array more efficiently
     ak_array = ak.Array(
         [
-            grouped.get_group(visit_occurrence_id)[columns_in_ak_array].to_dict(orient="list")
-            if visit_occurrence_id in feature_ids
-            else empty_entry
+            (
+                grouped.get_group(visit_occurrence_id)[columns_in_ak_array].to_dict(orient="list")
+                if visit_occurrence_id in feature_ids
+                else empty_entry
+            )
             for visit_occurrence_id in unique_visit_occurrence_ids
         ]
     )
