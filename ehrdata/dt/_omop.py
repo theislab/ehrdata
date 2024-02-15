@@ -125,6 +125,12 @@ def init_omop(folder_path,
         """
         
         adata.uns.update(adata_dict)
+    elif level == "patient_level":
+        # TODO patient level
+        # Each row in anndata would be a patient
+        pass
+    else:
+        raise ValueError("level should be 'stay_level' or 'patient_level'")
         
     return adata
 
