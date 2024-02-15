@@ -20,7 +20,16 @@ urls.Source = "https://github.com/theislab/ehrdata"
 urls.Home-page = "https://github.com/theislab/ehrdata"
 dependencies = [
     "anndata",
+    "ehrapy",
+    "scanpy",
     "awkward",
+    "matplotlib",
+    "pandas",
+    "dask",
+    "thefuzz",
+    "rich",
+    "seaborn",
+
     # for debug logging (referenced from the issue template)
     "session-info"
 ]
