@@ -1,5 +1,5 @@
 import os
-from typing import Literal, Union
+from typing import Literal, Optional, Union
 
 import awkward as ak
 import ehrapy as ep
@@ -15,7 +15,7 @@ def init_omop(
     make_filename_lowercase=True,
     use_dask=False,
     level: Literal["stay_level", "patient_level"] = "stay_level",
-    tables: Union[str, list[str]] = None,
+    load_tables: Optional[Union[str, list[str], tuple[str], Literal["auto"]]] = ("visit_occurrence", "person"),
     remove_empty_column=True,
 ):
     filepath_dict = check_with_omop_cdm(
@@ -27,7 +27,6 @@ def init_omop(
     adata_dict["tables"] = tables
     adata_dict["delimiter"] = delimiter
     adata_dict["use_dask"] = use_dask
-
     table_catalog_dict = get_table_catalog_dict()
 
     color_map = {
@@ -46,51 +45,101 @@ def init_omop(
         table_list = [table_name for table_name in tables if table_name in value]
         if len(table_list) != 0:
             print_str = print_str + f"[{color_map[key]}]{key} tables[/]: [black]{', '.join(table_list)}[/]\n"
-            # table_list_str = ', '.join(table_list)
-
-            # text = Text(f"{key} tables: ", style=color_map[key])
-            # text.append(table_list_str)
-            # yield None, f"{key} tables", "red"
     rprint(print_str)
-    # TODO add more tabels, maybe based on table size
-    tables = ["person", "death", "visit_occurrence"]
+
+    if load_tables == "auto" or load_tables is None:
+        load_tables = tables
+    elif isinstance(load_tables, str):
+        load_tables = [load_tables]
+    else:
+        pass
+
     # TODO patient level and hospital level
     if level == "stay_level":
-        # index = {"visit_occurrence": "visit_occurrence_id", "person": "person_id", "death": "person_id"}
-        # TODO Only support clinical_tables_columns
         table_dict = {}
-        for table in tables:
-            print(f"reading table [{table}]")
+        for table in ["visit_occurrence", "person"]:
             column_types = get_column_types(adata_dict, table_name=table)
-            df = read_table(adata_dict, table_name=table, dtype=column_types, index="person_id")
-            if remove_empty_column:
-                # TODO dask Support
-                # columns = [column for column in df.columns if not df[column].compute().isna().all()]
-                columns = [column for column in df.columns if not df[column].isna().all()]
-            df = df.loc[:, columns]
-            table_dict[table] = df
+            table_dict[table] = read_table(
+                adata_dict, table_name=table, dtype=column_types, remove_empty_column=remove_empty_column
+            )
 
-        # concept_id_list = list(self.concept.concept_id)
-        # concept_name_list = list(self.concept.concept_id)
-        # concept_domain_id_list = list(set(self.concept.domain_id))
-
-        # self.loaded_tabel = ['visit_occurrence', 'person', 'death', 'measurement', 'observation', 'drug_exposure']
-        # TODO dask Support
         joined_table = pd.merge(
-            table_dict["visit_occurrence"], table_dict["person"], left_index=True, right_index=True, how="left"
+            table_dict["visit_occurrence"],
+            table_dict["person"],
+            left_on="person_id",
+            right_on="person_id",
+            how="left",
+            suffixes=("_visit_occurrence", "_person"),
         )
 
-        joined_table = pd.merge(joined_table, table_dict["death"], left_index=True, right_index=True, how="left")
+        if "death" in load_tables:
+            column_types = get_column_types(adata_dict, table_name="death")
+            table_dict["death"] = read_table(
+                adata_dict, table_name="death", dtype=column_types, remove_empty_column=remove_empty_column
+            )
+            joined_table = pd.merge(
+                joined_table,
+                table_dict["death"],
+                left_on="person_id",
+                right_on="person_id",
+                how="left",
+                suffixes=(None, "_death"),
+            )
+
+        if "visit_detail" in load_tables:
+            column_types = get_column_types(adata_dict, table_name="visit_detail")
+            table_dict["visit_detail"] = read_table(
+                adata_dict, table_name="visit_detail", dtype=column_types, remove_empty_column=remove_empty_column
+            )
+            joined_table = pd.merge(
+                joined_table,
+                table_dict["visit_detail"],
+                left_on="visit_occurrence_id",
+                right_on="visit_occurrence_id",
+                how="left",
+                suffixes=(None, "_visit_detail"),
+            )
+
+        if "provider" in load_tables:
+            column_types = get_column_types(adata_dict, table_name="provider")
+            table_dict["provider"] = read_table(
+                adata_dict, table_name="provider", dtype=column_types, remove_empty_column=remove_empty_column
+            )
+            joined_table = pd.merge(
+                joined_table,
+                table_dict["provider"],
+                left_on="provider_id",
+                right_on="provider_id",
+                how="left",
+                suffixes=(None, "_provider"),
+            )
+
+        if "location" in load_tables:
+            column_types = get_column_types(adata_dict, table_name="location")
+            table_dict["location"] = read_table(
+                adata_dict, table_name="location", dtype=column_types, remove_empty_column=remove_empty_column
+            )
+            joined_table = pd.merge(
+                joined_table,
+                table_dict["location"],
+                left_on="location_id",
+                right_on="location_id",
+                how="left",
+                suffixes=(None, "_location"),
+            )
 
         # TODO dask Support
         # joined_table = joined_table.compute()
 
         # TODO check this earlier
-        joined_table = joined_table.drop_duplicates(subset="visit_occurrence_id")
+        # joined_table = joined_table.drop_duplicates(subset="visit_occurrence_id")
         joined_table = joined_table.set_index("visit_occurrence_id")
         # obs_only_list = list(self.joined_table.columns)
         # obs_only_list.remove('visit_occurrence_id')
-        columns_obs_only = list(set(joined_table.columns) - {"year_of_birth", "gender_source_value"})
+        if remove_empty_column:
+            columns = [column for column in joined_table.columns if not joined_table[column].isna().all()]
+            joined_table = joined_table.loc[:, columns]
+        columns_obs_only = list(set(joined_table.columns))
         adata = ep.ad.df_to_anndata(joined_table, index_column="visit_occurrence_id", columns_obs_only=columns_obs_only)
         # TODO this needs to be fixed because anndata set obs index as string by default
         # adata.obs.index = adata.obs.index.astype(int)
@@ -123,6 +172,77 @@ def init_omop(
         # TODO patient level
         # Each row in anndata would be a patient
         pass
+        table_dict = {}
+        # for table in ['visit_occurrence', 'person']:
+        column_types = get_column_types(adata_dict, table_name="person")
+        table_dict[table] = read_table(
+            adata_dict, table_name="person", dtype=column_types, remove_empty_column=remove_empty_column
+        )
+
+        joined_table = table_dict["person"]
+
+        if "death" in load_tables:
+            column_types = get_column_types(adata_dict, table_name="death")
+            table_dict["death"] = read_table(
+                adata_dict, table_name="death", dtype=column_types, remove_empty_column=remove_empty_column
+            )
+            joined_table = pd.merge(
+                joined_table,
+                table_dict["death"],
+                left_on="person_id",
+                right_on="person_id",
+                how="left",
+                suffixes=(None, "_death"),
+            )
+
+        if "visit_detail" in load_tables:
+            column_types = get_column_types(adata_dict, table_name="visit_detail")
+            table_dict["visit_detail"] = read_table(
+                adata_dict, table_name="visit_detail", dtype=column_types, remove_empty_column=remove_empty_column
+            )
+            joined_table = pd.merge(
+                joined_table,
+                table_dict["visit_detail"],
+                left_on="visit_occurrence_id",
+                right_on="visit_occurrence_id",
+                how="left",
+                suffixes=(None, "_visit_detail"),
+            )
+
+        if "provider" in load_tables:
+            column_types = get_column_types(adata_dict, table_name="provider")
+            table_dict["provider"] = read_table(
+                adata_dict, table_name="provider", dtype=column_types, remove_empty_column=remove_empty_column
+            )
+            joined_table = pd.merge(
+                joined_table,
+                table_dict["provider"],
+                left_on="provider_id",
+                right_on="provider_id",
+                how="left",
+                suffixes=(None, "_provider"),
+            )
+
+        if "location" in load_tables:
+            column_types = get_column_types(adata_dict, table_name="location")
+            table_dict["location"] = read_table(
+                adata_dict, table_name="location", dtype=column_types, remove_empty_column=remove_empty_column
+            )
+            joined_table = pd.merge(
+                joined_table,
+                table_dict["location"],
+                left_on="location_id",
+                right_on="location_id",
+                how="left",
+                suffixes=(None, "_location"),
+            )
+
+        if remove_empty_column:
+            columns = [column for column in joined_table.columns if not joined_table[column].isna().all()]
+            joined_table = joined_table.loc[:, columns]
+        columns_obs_only = list(set(joined_table.columns))
+        adata = ep.ad.df_to_anndata(joined_table, index_column="person_id", columns_obs_only=columns_obs_only)
+
     else:
         raise ValueError("level should be 'stay_level' or 'patient_level'")
 

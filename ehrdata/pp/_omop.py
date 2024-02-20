@@ -8,6 +8,7 @@ from rich import print as rprint
 from ehrdata.utils._omop_utils import get_column_types, get_feature_info, read_table
 
 
+# TODO should be able to also extract data from .obsm
 def get_feature_statistics(
     adata,
     source: Literal[

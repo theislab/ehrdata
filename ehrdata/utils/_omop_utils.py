@@ -122,7 +122,6 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
     -------
         dict: a dictionary of the table path. The key is the table name, and the value is the path of the table
     """
-    # TODO check if each column's data type adheres to the OMOP CDM
     print("Checking if your data adheres to the OMOP Common Data Model (CDM) version 5.4 standards.")
     filepath_list = glob.glob(os.path.join(folder_path, "*.csv")) + glob.glob(os.path.join(folder_path, "*.parquet"))
     filepath_dict = {}
@@ -146,7 +145,7 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
             if make_filename_lowercase:
                 new_path = os.path.join(folder_path, path.split("/")[-1].lower())
                 if path != new_path:
-                    warnings(f"Rename file [{path}] to [{new_path}]")
+                    warnings.warn(f"Rename file [{path}] to [{new_path}]", stacklevel=2)
                     os.rename(path, new_path)
                     path = new_path
 
@@ -273,6 +272,7 @@ def read_table(
     parse_dates: Union[list[str], str] = None,
     index: str = None,
     usecols: Union[list[str], str] = None,
+    remove_empty_column: bool = True,
     use_dask: bool = None,
 ) -> Union[pd.DataFrame, dd.DataFrame]:
     """Read the table either in CSV or Parquet format using pandas or dask
@@ -328,14 +328,20 @@ def read_table(
                 dtype = {key: dtype[key] for key in usecols if key in dtype}
                 if parse_dates:
                     parse_dates = {key: parse_dates[key] for key in usecols if key in parse_dates}
+            # TODO dtype and parse_dates has been disabled
             df = pd.read_csv(
-                path, delimiter=adata_dict["delimiter"], dtype=dtype, parse_dates=parse_dates, usecols=usecols
-            )
+                path, delimiter=adata_dict["delimiter"], usecols=usecols
+            )  # dtype=dtype, parse_dates=parse_dates,
         elif filetype == "parquet":
             df = pd.read_parquet(path, columns=usecols)
 
         else:
             raise TypeError("Only support CSV and Parquet file!")
+    if remove_empty_column:
+        # TODO dask Support
+        # columns = [column for column in df.columns if not df[column].compute().isna().all()]
+        columns = [column for column in df.columns if not df[column].isna().all()]
+    df = df.loc[:, columns]
 
     if index:
         df = df.set_index(index)
