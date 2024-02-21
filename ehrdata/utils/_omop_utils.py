@@ -337,11 +337,11 @@ def read_table(
 
         else:
             raise TypeError("Only support CSV and Parquet file!")
-    if remove_empty_column:
+    if remove_empty_column and not use_dask:
         # TODO dask Support
         # columns = [column for column in df.columns if not df[column].compute().isna().all()]
         columns = [column for column in df.columns if not df[column].isna().all()]
-    df = df.loc[:, columns]
+        df = df.loc[:, columns]
 
     if index:
         df = df.set_index(index)

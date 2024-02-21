@@ -1,9 +1,14 @@
 import numbers
-from typing import Union
+from typing import Literal, Union
 
+import awkward as ak
+import numpy as np
+import pandas as pd
 from anndata import AnnData
+from pandas.tseries.offsets import DateOffset as Offset
 from rich import print as rprint
 
+from ehrdata.io._omop import to_dataframe
 from ehrdata.utils._omop_utils import df_to_dict, get_column_types, read_table
 
 
@@ -44,6 +49,89 @@ def get_concept_name(adata: Union[AnnData, dict], concept_id: Union[str, list], 
         return concept_name
 
 
+# downsampling
+def aggregate_timeseries_in_bins(
+    adata,
+    features: Union[str, list[str]],
+    slot: Union[str, None] = "obsm",
+    value_key: str = "value_as_number",
+    time_key: str = "measurement_datetime",
+    time_binning_method: Literal["floor", "ceil", "round"] = "floor",
+    bin_size: Union[str, Offset] = "h",
+    aggregation_method: Literal["median", "mean", "min", "max"] = "median",
+    time_upper_bound: int = 48,  # TODO
+):
+    if isinstance(features, str):
+        features_list = [features]
+    else:
+        features_list = features
+
+    # Ensure the time_binning_method provided is one of the expected methods
+    if time_binning_method not in ["floor", "ceil", "round"]:
+        raise ValueError(
+            f"time_binning_method {time_binning_method} is not supported. Choose from 'floor', 'ceil', or 'round'."
+        )
+
+    if aggregation_method not in {"median", "mean", "min", "max"}:
+        raise ValueError(
+            f"aggregation_method {aggregation_method} is not supported. Choose from 'median', 'mean', 'min', or 'max'."
+        )
+
+    if slot == "obsm":
+        for feature in features_list:
+            print(f"processing feature [{feature}]")
+            df = to_dataframe(adata, features)
+            if pd.api.types.is_datetime64_any_dtype(df[time_key]):
+                func = getattr(df[time_key].dt, time_binning_method, None)
+                if func is not None:
+                    df[time_key] = func(bin_size)
+            else:
+                # TODO need to take care of this if it doesn't follow omop standard
+                if bin_size == "h":
+                    df[time_key] = df[time_key] / 3600
+                    func = getattr(np, time_binning_method)
+                    df[time_key] = func(df[time_key])
+
+            df[time_key] = df[time_key].astype(str)
+            # Adjust time values that are equal to the time_upper_bound
+            # df.loc[df[time_key] == time_upper_bound, time_key] = time_upper_bound - 1
+
+            # Group and aggregate data
+            df = (
+                df.groupby(["visit_occurrence_id", time_key])[value_key].agg(aggregation_method).reset_index(drop=False)
+            )
+            grouped = df.groupby("visit_occurrence_id")
+
+            unique_visit_occurrence_ids = adata.obs.index
+            empty_entry = {value_key: [], time_key: []}
+
+            # Efficiently use set difference and intersection
+            feature_ids = unique_visit_occurrence_ids.intersection(grouped.groups.keys())
+            # Efficiently create the array
+            ak_array = ak.Array(
+                [
+                    (
+                        grouped.get_group(visit_occurrence_id)[[value_key, time_key]].to_dict(orient="list")
+                        if visit_occurrence_id in feature_ids
+                        else empty_entry
+                    )
+                    for visit_occurrence_id in unique_visit_occurrence_ids
+                ]
+            )
+            adata.obsm[feature] = ak_array
+
+    return adata
+
+
 # TODO
 def get_concept_id():
+    pass
+
+
+# TODO
+def note_nlp_map(
+    self,
+):
+    # Got some inspirations from: https://github.com/aws-samples/amazon-comprehend-medical-omop-notes-mapping
+    # connect with existing functions
     pass
