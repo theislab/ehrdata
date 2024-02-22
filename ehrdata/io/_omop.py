@@ -338,7 +338,7 @@ def extract_features(
     cache = Cache(2e9)
     cache.register()
     """
-    print("Reading source table")
+    print(f"Reading {source} table")
     if use_dask:
         if dropna:
             df_source = df_source.compute().dropna()
