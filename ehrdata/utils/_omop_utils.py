@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Union
 
 import dask.dataframe as dd
+import numpy as np
 import pandas as pd
 from rich import print as rprint
 
@@ -124,6 +125,8 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
     """
     print("Checking if your data adheres to the OMOP Common Data Model (CDM) version 5.4 standards.")
     filepath_list = glob.glob(os.path.join(folder_path, "*.csv")) + glob.glob(os.path.join(folder_path, "*.parquet"))
+    filepath_list = glob.glob(os.path.join(folder_path, "*"))
+
     filepath_dict = {}
     for path in filepath_list:
         if os.path.isfile(path):
@@ -140,7 +143,7 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
             file = os.path.join(path, first_file_in_folder)
             is_single_file = False
         """
-        if is_single_file and not check_csv_has_only_header(path):
+        if is_single_file:
             # Make filename into lowercase
             if make_filename_lowercase:
                 new_path = os.path.join(folder_path, path.split("/")[-1].lower())
@@ -148,9 +151,22 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
                     warnings.warn(f"Rename file [{path}] to [{new_path}]", stacklevel=2)
                     os.rename(path, new_path)
                     path = new_path
-
-            # check if table name adheres to the OMOP CDM
             file_name = os.path.basename(path).split(".")[0]
+            if not check_csv_has_only_header(path):
+                filepath_dict[file_name] = path
+        else:
+            # path(s) to individual parquet/csv files
+            folder_walk = os.walk(path)
+            files_in_folder = next(folder_walk)[2]
+            if not all(filename.endswith((".csv", ".parquet")) for filename in files_in_folder):
+                raise TypeError("Only support CSV and Parquet file!")
+            file_name = os.path.basename(path).split("/")[-1]
+            filepath_dict[file_name] = np.char.add(f"{path}/", files_in_folder).tolist()
+            # If not a single file, take the first one as sample
+            path = os.path.join(path, files_in_folder[0])
+
+        if not check_csv_has_only_header(path):
+            # check if table name adheres to the OMOP CDM
             field_level = get_omop_cdm_field_level()
             if file_name not in set(field_level.cdmTableName):
                 raise KeyError(
@@ -175,12 +191,10 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
                 if column not in cdm_columns:
                     invalid_column_name.append(column)
             if len(invalid_column_name) > 0:
-                print(
+                raise KeyError(
                     f"Column {invalid_column_name} is not defined in Table [{file_name}] in OMOP CDM v5.4! Please change the column name manually!\nFor more information, please refer to: https://ohdsi.github.io/CommonDataModel/cdm54.html#{file_name.upper()}"
                 )
-                raise KeyError
 
-            filepath_dict[file_name] = path
     return filepath_dict
 
 
@@ -221,11 +235,8 @@ def get_column_types(adata_dict: dict, table_name: str) -> dict:
     path = adata_dict["filepath_dict"][table_name]
     column_types = {}
     # If not a single file, read the first one
-    if not os.path.isfile(path):
-        folder_walk = os.walk(path)
-        first_file_in_folder = next(folder_walk)[2][0]
-        path = os.path.join(path, first_file_in_folder)
-
+    if isinstance(path, list):
+        path = path[0]
     if path.endswith("csv"):
         with open(path) as f:
             dict_reader = csv.DictReader(f, delimiter=adata_dict["delimiter"])
@@ -290,18 +301,21 @@ def read_table(
     -------
         Union[pd.DataFrame, dd.DataFrame]: a pandas or dask DataFrame
     """
+    path = adata_dict["filepath_dict"][table_name]
+    if isinstance(path, list):
+        if not use_dask or use_dask is None:
+            use_dask = True
+            warnings.warn(
+                f"Multiple files detected for table [{table_name}]. Using dask to read the table.", stacklevel=2
+            )
     if not use_dask:
         use_dask = adata_dict["use_dask"]
-    path = adata_dict["filepath_dict"][table_name]
     if use_dask:
-        if not os.path.isfile(path):
-            folder_walk = os.walk(path)
-            filetype = next(folder_walk)[2][0].split(".")[-1]
+        if isinstance(path, list):
+            filetype = path[0].split(".")[-1]
         else:
             filetype = path.split(".")[-1]
         if filetype == "csv":
-            if not os.path.isfile(path):
-                path = f"{path}/*.csv"
             if usecols:
                 dtype = {key: dtype[key] for key in usecols if key in dtype}
                 if parse_dates:
@@ -310,8 +324,6 @@ def read_table(
                 path, delimiter=adata_dict["delimiter"], dtype=dtype, parse_dates=parse_dates, usecols=usecols
             )
         elif filetype == "parquet":
-            if not os.path.isfile(path):
-                path = f"{path}/*.parquet"
             if usecols:
                 dtype = {key: dtype[key] for key in usecols if key in dtype}
                 if parse_dates:

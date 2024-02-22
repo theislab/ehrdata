@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Sequence
 from functools import partial
 from typing import Literal, Optional, Union
@@ -27,6 +28,7 @@ def feature_counts(
     ],
     number=20,
     key=None,
+    use_dask=None,
 ):
     # if source == 'measurement':
     #     columns = ["value_as_number", "time", "visit_occurrence_id", "measurement_concept_id"]
@@ -36,11 +38,18 @@ def feature_counts(
     #     columns = None
     # else:
     #     raise KeyError(f"Extracting data from {source} is not supported yet")
+    path = adata.uns["filepath_dict"][source]
+    if isinstance(path, list):
+        if not use_dask or use_dask is None:
+            use_dask = True
+            warnings.warn(f"Multiple files detected for table [{source}]. Using dask to read the table.", stacklevel=2)
+    if not use_dask:
+        use_dask = adata.uns["use_dask"]
 
     column_types = get_column_types(adata.uns, table_name=source)
     df_source = read_table(adata.uns, table_name=source, dtype=column_types, usecols=[f"{source}_concept_id"])
     feature_counts = df_source[f"{source}_concept_id"].value_counts()
-    if adata.uns["use_dask"]:
+    if use_dask:
         feature_counts = feature_counts.compute()
     feature_counts = feature_counts.to_frame().reset_index(drop=False)[0:number]
 

@@ -328,7 +328,6 @@ def extract_features(
 
     # Select featrues
     df_source = df_source[df_source[key].isin(list(info_df.feature_id))]
-
     # TODO select time period
     # df_source = df_source[(df_source.time >= 0) & (df_source.time <= 48*60*60)]
     # da_measurement['measurement_name'] = da_measurement.measurement_concept_id.replace(info_dict)
@@ -339,6 +338,7 @@ def extract_features(
     cache = Cache(2e9)
     cache.register()
     """
+    print("Reading source table")
     if use_dask:
         if dropna:
             df_source = df_source.compute().dropna()
@@ -348,39 +348,12 @@ def extract_features(
         if dropna:
             df_source = df_source.dropna()
 
-    # Preprocess steps outside the loop
-    unique_visit_occurrence_ids = set(adata.obs.index.astype(int))
-    empty_entry = {
-        source_table_column: []
-        for source_table_column in source_table_columns
-        if source_table_column not in [key, "visit_occurrence_id"]
-    }
-
     # Filter data once, if possible
     filtered_data = {feature_id: df_source[df_source[key] == feature_id] for feature_id in set(info_dict.keys())}
 
     for feature_id in set(info_dict.keys()):
-        df_feature = filtered_data[feature_id][list(set(source_table_columns) - {key})]
-        grouped = df_feature.groupby("visit_occurrence_id")
-        if verbose:
-            print(f"Adding feature [{info_dict[feature_id]}] into adata.obsm")
-
-        # Use set difference and intersection more efficiently
-        feature_ids = unique_visit_occurrence_ids.intersection(grouped.groups.keys())
-
-        # Creating the array more efficiently
-        adata.obsm[info_dict[feature_id]] = ak.Array(
-            [
-                (
-                    grouped.get_group(visit_occurrence_id)[
-                        list(set(source_table_columns) - {key, "visit_occurrence_id"})
-                    ].to_dict(orient="list")
-                    if visit_occurrence_id in feature_ids
-                    else empty_entry
-                )
-                for visit_occurrence_id in unique_visit_occurrence_ids
-            ]
-        )
+        print(f"Adding feature [{feature_id}] from source table")
+        adata = from_dataframe(adata, feature_id, filtered_data[feature_id])
 
     return adata
 
@@ -412,7 +385,7 @@ def from_dataframe(adata, feature: str, df):
     new_row_dict = {col: [] for col in df.columns}
     for key in new_row_dict.keys():
         if key == "visit_occurrence_id":
-            new_row_dict[key] = list(set(adata.obs.index) - set(df.visit_occurrence_id))
+            new_row_dict[key] = list(set(adata.obs.index) - set(df.visit_occurrence_id.unique()))
         else:
             new_row_dict[key] = [None] * len(new_row_dict["visit_occurrence_id"])
     new_rows = pd.DataFrame(new_row_dict)
