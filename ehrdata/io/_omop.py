@@ -349,11 +349,11 @@ def extract_features(
             df_source = df_source.dropna()
 
     # Filter data once, if possible
-    filtered_data = {feature_id: df_source[df_source[key] == feature_id] for feature_id in set(info_dict.keys())}
+    filtered_data = {feature_id: df_source[df_source[key] == feature_id] for feature_id in info_dict.keys()}
 
-    for feature_id in set(info_dict.keys()):
-        print(f"Adding feature [{feature_id}] from source table")
-        adata = from_dataframe(adata, feature_id, filtered_data[feature_id])
+    for feature_id, feature_name in info_dict.items():
+        print(f"Adding feature [{feature_name}] from source table")
+        adata = from_dataframe(adata, feature_name, filtered_data[feature_id])
 
     return adata
 
@@ -383,10 +383,9 @@ def extract_note(
 def from_dataframe(adata, feature: str, df):
     # Add new rows for those visit_occurrence_id that don't have any data
     new_row_dict = {col: [] for col in df.columns}
+    new_row_dict["visit_occurrence_id"] = list(set(adata.obs.index) - set(df.visit_occurrence_id.unique()))
     for key in new_row_dict.keys():
-        if key == "visit_occurrence_id":
-            new_row_dict[key] = list(set(adata.obs.index) - set(df.visit_occurrence_id.unique()))
-        else:
+        if key != "visit_occurrence_id":
             new_row_dict[key] = [None] * len(new_row_dict["visit_occurrence_id"])
     new_rows = pd.DataFrame(new_row_dict)
     df = pd.concat([df, new_rows], ignore_index=True)
@@ -414,8 +413,8 @@ def from_dataframe(adata, feature: str, df):
 
 def to_dataframe(
     adata,
-    features: Union[str, list[str]],  # TODO also support list of features
-    # patient str or List,  # TODO also support subset of patients/visit
+    features: Union[str, list[str]],
+    visit_occurrence_id: Optional[Union[str, list[str]]] = None,
 ):
     # TODO
     # can be viewed as patient level - only select some patient
@@ -424,12 +423,31 @@ def to_dataframe(
         features = [features]
     df_concat = pd.DataFrame([])
     for feature in features:
-        df = ak.to_dataframe(adata.obsm[feature])
+        if visit_occurrence_id is not None:
+            if isinstance(visit_occurrence_id, str):
+                visit_occurrence_id = [visit_occurrence_id]
+            index_list = adata.obs.index.to_list()
+            ids = [index_list.index(id) for id in visit_occurrence_id]
+            df = ak.to_dataframe(adata.obsm[feature][ids])
+            #
+            df.reset_index(drop=False, inplace=True)
+            if len(visit_occurrence_id) == 1:
+                df["visit_occurrence_id"] = visit_occurrence_id[0]
+                del df["entry"]
+                del df["subentry"]
+            else:
+                mapping = dict(zip(range(len(visit_occurrence_id)), visit_occurrence_id))
+                df["visit_occurrence_id"] = df["entry"].map(mapping)
+                del df["subentry"]
+                del df["entry"]
+        else:
+            df = ak.to_dataframe(adata.obsm[feature])
 
-        df.reset_index(drop=False, inplace=True)
-        df["entry"] = adata.obs.index[df["entry"]]
-        df = df.rename(columns={"entry": "visit_occurrence_id"})
-        del df["subentry"]
+            df.reset_index(drop=False, inplace=True)
+            df["entry"] = adata.obs.index[df["entry"]]
+            df = df.rename(columns={"entry": "visit_occurrence_id"})
+            del df["subentry"]
+
         for col in df.columns:
             if col.endswith("time"):
                 df[col] = pd.to_datetime(df[col])

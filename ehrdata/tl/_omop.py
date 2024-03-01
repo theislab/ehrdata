@@ -1,14 +1,13 @@
 import numbers
 from typing import Literal, Union
 
-import awkward as ak
 import numpy as np
 import pandas as pd
 from anndata import AnnData
 from pandas.tseries.offsets import DateOffset as Offset
 from rich import print as rprint
 
-from ehrdata.io._omop import to_dataframe
+from ehrdata.io._omop import from_dataframe, to_dataframe
 from ehrdata.utils._omop_utils import df_to_dict, get_column_types, read_table
 
 
@@ -59,7 +58,6 @@ def aggregate_timeseries_in_bins(
     time_binning_method: Literal["floor", "ceil", "round"] = "floor",
     bin_size: Union[str, Offset] = "h",
     aggregation_method: Literal["median", "mean", "min", "max"] = "median",
-    time_upper_bound: int = 48,  # TODO
 ):
     if isinstance(features, str):
         features_list = [features]
@@ -100,25 +98,7 @@ def aggregate_timeseries_in_bins(
             df = (
                 df.groupby(["visit_occurrence_id", time_key])[value_key].agg(aggregation_method).reset_index(drop=False)
             )
-            grouped = df.groupby("visit_occurrence_id")
-
-            unique_visit_occurrence_ids = adata.obs.index
-            empty_entry = {value_key: [], time_key: []}
-
-            # Efficiently use set difference and intersection
-            feature_ids = unique_visit_occurrence_ids.intersection(grouped.groups.keys())
-            # Efficiently create the array
-            ak_array = ak.Array(
-                [
-                    (
-                        grouped.get_group(visit_occurrence_id)[[value_key, time_key]].to_dict(orient="list")
-                        if visit_occurrence_id in feature_ids
-                        else empty_entry
-                    )
-                    for visit_occurrence_id in unique_visit_occurrence_ids
-                ]
-            )
-            adata.obsm[feature] = ak_array
+            adata = from_dataframe(adata, feature, df)
 
     return adata
 

@@ -191,9 +191,10 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
                 if column not in cdm_columns:
                     invalid_column_name.append(column)
             if len(invalid_column_name) > 0:
-                raise KeyError(
+                print(
                     f"Column {invalid_column_name} is not defined in Table [{file_name}] in OMOP CDM v5.4! Please change the column name manually!\nFor more information, please refer to: https://ohdsi.github.io/CommonDataModel/cdm54.html#{file_name.upper()}"
                 )
+                raise KeyError
 
     return filepath_dict
 

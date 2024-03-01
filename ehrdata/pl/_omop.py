@@ -101,7 +101,7 @@ def plot_timeseries(
             # Check if x is empty
             if not x.empty:
                 ax.scatter(x=x, y=y, label=key)
-                ax.legend(loc=9, bbox_to_anchor=(0.5, -0.1), ncol=len(key_list), prop={"size": 14})
+                ax.legend(bbox_to_anchor=(0.5, -0.1), ncol=4)
 
                 ax.plot(x, y)
 
@@ -121,6 +121,7 @@ def plot_timeseries(
             # Adapt this to input data
             plt.xlabel(x_label if x_label else "Hours since ICU admission")
 
+        plt.tight_layout()
         plt.show()
 
 

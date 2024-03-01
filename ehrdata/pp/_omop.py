@@ -81,6 +81,8 @@ def get_feature_statistics(
     # df_source[f'{source}_name'] = df_source[key].map(info_dict)
     if aggregation_methods is None:
         aggregation_methods = ["min", "max", "mean", "std", "count"]
+    if isinstance(aggregation_methods, str):
+        aggregation_methods = [aggregation_methods]
     if level == "stay_level":
         result = df_source.groupby(["visit_occurrence_id", key]).agg({value_col: aggregation_methods})
 
