@@ -86,6 +86,7 @@ def get_feature_statistics(
     if level == "stay_level":
         result = df_source.groupby(["visit_occurrence_id", key]).agg({value_col: aggregation_methods})
 
+        print("Calculating statistics")
         if use_dask:
             result = result.compute()
         result = result.reset_index(drop=False)
