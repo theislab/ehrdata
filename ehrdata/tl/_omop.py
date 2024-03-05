@@ -11,7 +11,22 @@ from ehrdata.io._omop import from_dataframe, to_dataframe
 from ehrdata.utils._omop_utils import df_to_dict, get_column_types, read_table
 
 
-def get_concept_name(adata: Union[AnnData, dict], concept_id: Union[str, list], raise_error=False, verbose=True):
+def get_concept_name(
+    adata: Union[AnnData, dict],
+    concept_id: Union[str, list],
+    raise_error: bool = False,
+) -> Union[str, list[str]]:
+    """Get concept name from concept_id using concept table
+
+    Args:
+        adata (Union[AnnData, dict]): Anndata object or adata.uns
+        concept_id (Union[str, list]): concept_id or list of concept_id
+        raise_error (bool, optional): If True, raise error if concept_id not found. Defaults to False.
+
+    Returns
+    -------
+        Union[str, list[str]]: concept_name or list of concept_name
+    """
     if isinstance(concept_id, numbers.Integral):
         concept_id = [concept_id]
 
@@ -38,8 +53,7 @@ def get_concept_name(adata: Union[AnnData, dict], concept_id: Union[str, list], 
             concept_name_not_found.append(id)
     if len(concept_name_not_found) > 0:
         # warnings.warn(f"Couldn't find concept {id} in concept table!")
-        if verbose:
-            rprint(f"Couldn't find concept {concept_name_not_found} in concept table!")
+        rprint(f"Couldn't find concept {concept_name_not_found} in concept table!")
         if raise_error:
             raise KeyError
     if len(concept_name) == 1:
@@ -50,7 +64,7 @@ def get_concept_name(adata: Union[AnnData, dict], concept_id: Union[str, list], 
 
 # downsampling
 def aggregate_timeseries_in_bins(
-    adata,
+    adata: AnnData,
     features: Union[str, list[str]],
     slot: Union[str, None] = "obsm",
     value_key: str = "value_as_number",
@@ -58,7 +72,23 @@ def aggregate_timeseries_in_bins(
     time_binning_method: Literal["floor", "ceil", "round"] = "floor",
     bin_size: Union[str, Offset] = "h",
     aggregation_method: Literal["median", "mean", "min", "max"] = "median",
-):
+) -> AnnData:
+    """Aggregate timeseries data in bins
+
+    Args:
+        adata (AnnData): Anndata object
+        features (Union[str, list[str]]):  concept_id or concept_name, or list of concept_id or concept_name. Defaults to None.
+        slot (Union[str, None], optional): Slot to read the data. Defaults to "obsm".
+        value_key (str, optional): key in awkward array in adata.obsm to be used as value. Defaults to "value_as_number".
+        time_key (str, optional): key in awkward array in adata.obsm to be used as time. Defaults to "measurement_datetime".
+        time_binning_method (Literal[&quot;floor&quot;, &quot;ceil&quot;, &quot;round&quot;], optional): Time binning method. Defaults to "floor".
+        bin_size (Union[str, Offset], optional): Time bin size. Defaults to "h".
+        aggregation_method (Literal[&quot;median&quot;, &quot;mean&quot;, &quot;min&quot;, &quot;max&quot;], optional): Aggregation method. Defaults to "median".
+
+    Returns
+    -------
+        AnnData: Anndata object
+    """
     if isinstance(features, str):
         features_list = [features]
     else:
@@ -101,11 +131,6 @@ def aggregate_timeseries_in_bins(
             adata = from_dataframe(adata, feature, df)
 
     return adata
-
-
-# TODO
-def get_concept_id():
-    pass
 
 
 # TODO

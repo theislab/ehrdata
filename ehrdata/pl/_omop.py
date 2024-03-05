@@ -5,6 +5,7 @@ from typing import Literal, Optional, Union
 
 import ehrapy as ep
 import matplotlib.pyplot as plt
+import pandas as pd
 import scanpy as sc
 import seaborn as sns
 from anndata import AnnData
@@ -16,7 +17,7 @@ from ehrdata.utils._omop_utils import get_column_types, map_concept_id, read_tab
 
 
 def feature_counts(
-    adata,
+    adata: AnnData,
     source: Literal[
         "observation",
         "measurement",
@@ -26,18 +27,21 @@ def feature_counts(
         "drug_exposure",
         "condition_occurrence",
     ],
-    number=20,
-    key=None,
-    use_dask=None,
-):
-    # if source == 'measurement':
-    #     columns = ["value_as_number", "time", "visit_occurrence_id", "measurement_concept_id"]
-    # elif source == 'observation':
-    #     columns = ["value_as_number", "value_as_string", "measurement_datetime"]
-    # elif source == 'condition_occurrence':
-    #     columns = None
-    # else:
-    #     raise KeyError(f"Extracting data from {source} is not supported yet")
+    number: int = 20,
+    use_dask: bool = None,
+) -> pd.DataFrame:
+    """Plot feature counts for a given source table and return a dataframe with feature names and counts.
+
+    Args:
+        adata (AnnData): Anndata object
+        source (Literal[ &quot;observation&quot;, &quot;measurement&quot;, &quot;procedure_occurrence&quot;, &quot;specimen&quot;, &quot;device_exposure&quot;, &quot;drug_exposure&quot;, &quot;condition_occurrence&quot;, ]): source table name. Defaults to None.
+        number (int, optional): Number of top features to plot. Defaults to 20.
+        use_dask (bool, optional): If True, dask will be used to read the tables. For large tables, it is highly recommended to use dask. If None, it will be set to adata.uns[&quot;use_dask&quot;]. Defaults to None.
+
+    Returns
+    -------
+        pd.DataFrame: Dataframe with feature names and counts
+    """
     path = adata.uns["filepath_dict"][source]
     if isinstance(path, list):
         if not use_dask or use_dask is None:
@@ -80,7 +84,21 @@ def plot_timeseries(
     value_key: str = "value_as_number",
     time_key: str = "measurement_datetime",
     x_label: str = None,
+    show: Optional[bool] = None,
 ):
+    """Plot timeseries data using data from adata.obsm.
+
+    Args:
+        adata (AnnData): Anndata object
+        visit_occurrence_id (int): visit_occurrence_id to plot
+        key (Union[str, list[str]]): feature key or list of keys in adata.obsm to plot
+        slot (Union[str, None], optional): Slot to use. Defaults to &quot;obsm&quot;.
+        value_key (str, optional): key in awkward array in adata.obsm to be used as value. Defaults to "value_as_number".
+        time_key (str, optional): key in awkward array in adata.obsm to be used as time. Defaults to "measurement_datetime".
+        x_label (str, optional): x labe name. Defaults to None.
+        show (Optional[bool], optional): Show the plot, do not return axis.
+
+    """
     if isinstance(key, str):
         key_list = [key]
     else:
@@ -122,7 +140,10 @@ def plot_timeseries(
             plt.xlabel(x_label if x_label else "Hours since ICU admission")
 
         plt.tight_layout()
-        plt.show()
+        if not show:
+            return ax
+        else:
+            plt.show()
 
 
 def violin(
@@ -153,6 +174,7 @@ def violin(
 
     Args:
         adata: :class:`~anndata.AnnData` object object containing all observations.
+        obsm_key: feature key or list of keys in adata.obsm to plot
         keys: Keys for accessing variables of `.var_names` or fields of `.obs`.
         groupby: The key of the observation grouping to consider.
         log: Plot on logarithmic axis.

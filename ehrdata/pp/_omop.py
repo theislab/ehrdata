@@ -39,7 +39,7 @@ def get_feature_statistics(
     Args:
         adata (AnnData): Anndata object
         source (Literal[ &quot;observation&quot;, &quot;measurement&quot;, &quot;procedure_occurrence&quot;, &quot;specimen&quot;, &quot;device_exposure&quot;, &quot;drug_exposure&quot;, &quot;condition_occurrence&quot;, ]): source table name. Defaults to None.
-        features (Union[str, int, list[Union[str, int]]], optional): feature_id or feature_name, or list of feature_id or feature_name. Defaults to None.
+        features (Union[str, int, list[Union[str, int]]], optional): concept_id or concept_name, or list of concept_id or concept_name. Defaults to None.
         level (Literal[&quot;stay_level&quot;, &quot;patient_level&quot;], optional): For stay level, statistics are calculated for each stay. For patient level, statistics are calculated for each patient. It should be aligned with the setting of the adata object. Defaults to &quot;stay_level&quot;.
         value_col (str, optional): column name in source table to extract value from. Defaults to None.
         aggregation_methods (Union[ Literal[&quot;min&quot;, &quot;max&quot;, &quot;mean&quot;, &quot;std&quot;, &quot;count&quot;], list[Literal[&quot;min&quot;, &quot;max&quot;, &quot;mean&quot;, &quot;std&quot;, &quot;count&quot;]] ], optional): aggregation methods to calculate statistics. Defaults to [&quot;min&quot;, &quot;max&quot;, &quot;mean&quot;, &quot;std&quot;, &quot;count&quot;].
