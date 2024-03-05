@@ -298,7 +298,7 @@ def extract_features(
         source_table_columns (Union[str, list[str]], optional): columns to be extracted from source table. If None, all columns will be extracted. Defaults to None.
         dropna (Optional[bool], optional): drop rows with missing values. Defaults to True.
         verbose (Optional[bool], optional): print progress. Defaults to True.
-        use_dask (bool, optional): If True, dask will be used to read the tables. For large tables, it is recommended to use dask. If None, it will be set to adata.uns[&quot;use_dask&quot;]. Defaults to None.
+        use_dask (bool, optional): If True, dask will be used to read the tables. For large tables, it is highly recommended to use dask. If None, it will be set to adata.uns[&quot;use_dask&quot;]. Defaults to None.
 
     Returns
     -------
@@ -440,10 +440,6 @@ def from_dataframe(adata: AnnData, feature: str, df: pd.DataFrame) -> AnnData:
     adata.obsm[feature] = ak_array[columns_in_ak_array]
 
     return adata
-
-
-# TODO add function to check feature and add concept
-# More IO functions
 
 
 def to_dataframe(

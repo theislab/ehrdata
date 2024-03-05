@@ -14,7 +14,7 @@ from ehrdata.utils._omop_utils import get_column_types, get_feature_info, read_t
 
 # TODO should be able to also extract data from .obsm
 def get_feature_statistics(
-    adata,
+    adata: AnnData,
     source: Literal[
         "observation",
         "measurement",
@@ -25,7 +25,7 @@ def get_feature_statistics(
         "condition_occurrence",
     ],
     features: Union[str, int, list[Union[str, int]]] = None,
-    level="stay_level",
+    level: Literal["stay_level", "patient_level"] = "stay_level",
     value_col: str = None,
     aggregation_methods: Union[
         Literal["min", "max", "mean", "std", "count"], list[Literal["min", "max", "mean", "std", "count"]]
@@ -33,7 +33,24 @@ def get_feature_statistics(
     add_aggregation_to_X: bool = True,
     verbose: bool = False,
     use_dask: bool = None,
-):
+) -> AnnData:
+    """Calculate statistics for the specified features from the OMOP tables and adds them to the AnnData object.
+
+    Args:
+        adata (AnnData): Anndata object
+        source (Literal[ &quot;observation&quot;, &quot;measurement&quot;, &quot;procedure_occurrence&quot;, &quot;specimen&quot;, &quot;device_exposure&quot;, &quot;drug_exposure&quot;, &quot;condition_occurrence&quot;, ]): source table name. Defaults to None.
+        features (Union[str, int, list[Union[str, int]]], optional): feature_id or feature_name, or list of feature_id or feature_name. Defaults to None.
+        level (Literal[&quot;stay_level&quot;, &quot;patient_level&quot;], optional): For stay level, statistics are calculated for each stay. For patient level, statistics are calculated for each patient. It should be aligned with the setting of the adata object. Defaults to &quot;stay_level&quot;.
+        value_col (str, optional): column name in source table to extract value from. Defaults to None.
+        aggregation_methods (Union[ Literal[&quot;min&quot;, &quot;max&quot;, &quot;mean&quot;, &quot;std&quot;, &quot;count&quot;], list[Literal[&quot;min&quot;, &quot;max&quot;, &quot;mean&quot;, &quot;std&quot;, &quot;count&quot;]] ], optional): aggregation methods to calculate statistics. Defaults to [&quot;min&quot;, &quot;max&quot;, &quot;mean&quot;, &quot;std&quot;, &quot;count&quot;].
+        add_aggregation_to_X (bool, optional): add the calculated statistics to adata.X. If False, the statistics will be added to adata.obs. Defaults to True.
+        verbose (bool, optional): print verbose information. Defaults to False.
+        use_dask (bool, optional): If True, dask will be used to read the tables. For large tables, it is highly recommended to use dask. If None, it will be set to adata.uns[&quot;use_dask&quot;]. Defaults to None.
+
+    Returns
+    -------
+        AnnData: Anndata object with added statistics either in adata.obs (if add_aggregation_to_X=False) or adata.X (if add_aggregation_to_X=True)
+    """
     if source in ["measurement", "observation", "specimen"]:
         key = f"{source}_concept_id"
     elif source in ["device_exposure", "procedure_occurrence", "drug_exposure", "condition_occurrence"]:
@@ -42,18 +59,20 @@ def get_feature_statistics(
         raise KeyError(f"Extracting data from {source} is not supported yet")
 
     if source == "measurement":
-        value_col = "value_as_number"
-        warnings.warn(
-            f"Extracting values from {value_col}. Value in measurement table could be saved in these columns: value_as_number, value_source_value.\nSpecify value_col to extract value from desired column.",
-            stacklevel=2,
-        )
+        if value_col is None:
+            value_col = "value_as_number"
+            warnings.warn(
+                f"Extracting values from {value_col}. Value in measurement table could be saved in these columns: value_as_number, value_source_value.\nSpecify value_col to extract value from desired column.",
+                stacklevel=2,
+            )
         source_table_columns = ["visit_occurrence_id", "measurement_datetime", key, value_col]
     elif source == "observation":
-        value_col = "value_as_number"
-        warnings.warn(
-            f"Extracting values from {value_col}. Value in observation table could be saved in these columns: value_as_number, value_as_string, value_source_value.\nSpecify value_col to extract value from desired column.",
-            stacklevel=2,
-        )
+        if value_col is None:
+            value_col = "value_as_number"
+            warnings.warn(
+                f"Extracting values from {value_col}. Value in observation table could be saved in these columns: value_as_number, value_as_string, value_source_value.\nSpecify value_col to extract value from desired column.",
+                stacklevel=2,
+            )
         source_table_columns = ["visit_occurrence_id", "observation_datetime", key, value_col]
     elif source == "condition_occurrence":
         source_table_columns = None
@@ -147,6 +166,67 @@ def qc_lab_measurements(
     copy: bool = False,
     verbose: bool = False,
 ) -> AnnData:
+    """Examines lab measurements for reference ranges and outliers.
+
+    Source:
+        The used reference values were obtained from https://accessmedicine.mhmedical.com/content.aspx?bookid=1069&sectionid=60775149 .
+        This table is compiled from data in the following sources:
+
+        * Tietz NW, ed. Clinical Guide to Laboratory Tests. 3rd ed. Philadelphia: WB Saunders Co; 1995;
+        * Laposata M. SI Unit Conversion Guide. Boston: NEJM Books; 1992;
+        * American Medical Association Manual of Style: A Guide for Authors and Editors. 9th ed. Chicago: AMA; 1998:486–503. Copyright 1998, American Medical Association;
+        * Jacobs DS, DeMott WR, Oxley DK, eds. Jacobs & DeMott Laboratory Test Handbook With Key Word Index. 5th ed. Hudson, OH: Lexi-Comp Inc; 2001;
+        * Henry JB, ed. Clinical Diagnosis and Management by Laboratory Methods. 20th ed. Philadelphia: WB Saunders Co; 2001;
+        * Kratz A, et al. Laboratory reference values. N Engl J Med. 2006;351:1548–1563; 7) Burtis CA, ed. Tietz Textbook of Clinical Chemistry and Molecular Diagnostics. 5th ed. St. Louis: Elsevier; 2012.
+
+        This version of the table of reference ranges was reviewed and updated by Jessica Franco-Colon, PhD, and Kay Brooks.
+
+    Limitations:
+        * Reference ranges differ between continents, countries and even laboratories (https://informatics.bmj.com/content/28/1/e100419).
+          The default values used here are only one of many options.
+        * Ensure that the values used as input are provided with the correct units. We recommend the usage of SI values.
+        * The reference values pertain to adults. Many of the reference ranges need to be adapted for children.
+        * By default if no gender is provided and no unisex values are available, we use the **male** reference ranges.
+        * The used reference ranges may be biased for ethnicity. Please examine the primary sources if required.
+        * We recommend a glance at https://www.nature.com/articles/s41591-021-01468-6 for the effect of such covariates.
+
+    Additional values:
+        * Interleukin-6 based on https://pubmed.ncbi.nlm.nih.gov/33155686/
+
+    If you want to specify your own table as a Pandas DataFrame please examine the existing default table.
+    Ethnicity and age columns can be added.
+    https://github.com/theislab/ehrapy/blob/main/ehrapy/preprocessing/laboratory_reference_tables/laposata.tsv
+
+    Args:
+        adata: Annotated data matrix.
+        reference_table: A custom DataFrame with reference values. Defaults to the laposata table if not specified.
+        measurements: A list of measurements to check.
+        obsm_measurements: A list of measurements to check from the obsm. If specified, measurements will be ignored.
+        action: The action to take if a measurement is outside the reference range. Defaults to 'remove'.
+        unit: The unit of the measurements. Defaults to 'traditional'.
+        layer: Layer containing the matrix to calculate the metrics for.
+        threshold: Minimum required matching confidence score of the fuzzysearch.
+                   0 = no matches, 100 = all must match. Defaults to 20.
+        age_col: Column containing age values.
+        age_range: The inclusive age-range to filter for such as 5-99.
+        sex_col: Column containing sex values. Column must contain 'U', 'M' or 'F'.
+        sex: Sex to filter the reference values for. Use U for unisex which uses male values when male and female conflict.
+             Defaults to 'U|M'.
+        ethnicity_col: Column containing ethnicity values.
+        ethnicity: Ethnicity to filter for.
+        copy: Whether to return a copy. Defaults to False.
+        verbose: Whether to have verbose stdout. Notifies user of matched columns and value ranges.
+
+    Returns
+    -------
+        A modified AnnData object (copy if specified).
+
+    Examples
+    --------
+        >>> import ehrapy as ep
+        >>> adata = ep.dt.mimic_2(encoded=True)
+        >>> ep.pp.qc_lab_measurements(adata, measurements=["potassium_first"], verbose=True)
+    """
     if copy:
         adata = adata.copy()
 
