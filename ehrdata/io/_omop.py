@@ -490,10 +490,11 @@ def to_dataframe(
             df = df.rename(columns={"entry": "visit_occurrence_id"})
             del df["subentry"]
 
+        """
         for col in df.columns:
             if col.endswith("time"):
                 df[col] = pd.to_datetime(df[col])
-
+        """
         df["feature_name"] = feature
         df_concat = pd.concat([df_concat, df], axis=0)
 

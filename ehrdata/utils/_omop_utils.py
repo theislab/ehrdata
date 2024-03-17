@@ -109,6 +109,7 @@ def get_omop_cdm_field_level():
     return df
 
 
+# TODO also check column data type
 def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_lowercase: bool = True) -> dict:
     """Check if the data adheres to the OMOP Common Data Model (CDM) version 5.4 standards
 
@@ -519,15 +520,15 @@ def get_feature_info(
         if isinstance(feature, numbers.Integral):
             feature_id = feature
             feature_id_1, feature_id_2 = map_concept_id(adata_dict=adata_dict, concept_id=feature_id, verbose=False)
-            try:
+            if feature_id_1 in df_concept["concept_id"].values:
                 feature_name = df_concept[df_concept["concept_id"] == feature_id_1]["concept_name"].values[0]
-            except KeyError:
+            else:
                 if ignore_not_shown_in_concept_table:
                     fetures_not_shown_in_concept_table.append(feature)
-                    continue
+                    feature_name = feature_id_1
                 else:
                     rprint(f"Feature ID - [red]{feature_id_1}[/] could not be found in concept table")
-                    raise
+                    raise ValueError
             match_1_ratio = 100
 
         # if the input is feature name

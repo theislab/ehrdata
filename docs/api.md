@@ -1,5 +1,22 @@
 # API
 
+## IOs
+
+```{eval-rst}
+.. module:: ehrdata.io
+.. currentmodule:: ehrdata
+
+.. autosummary::
+    :toctree: generated
+
+    io.init_omop
+    io.extract_features
+    io.extract_note
+    io.from_dataframe
+    io.to_dataframe
+
+```
+
 ## Preprocessing
 
 ```{eval-rst}
@@ -9,7 +26,8 @@
 .. autosummary::
     :toctree: generated
 
-    pp.basic_preproc
+    pp.get_feature_statistics
+    pp.qc_lab_measurements
 ```
 
 ## Tools
