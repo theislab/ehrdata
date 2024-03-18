@@ -2,10 +2,10 @@ import warnings
 from typing import Literal, Union
 
 import awkward as ak
-import ehrapy as ep
 import numpy as np
 import pandas as pd
 from anndata import AnnData
+from ehrapy.anndata import move_to_x
 from rich import print as rprint
 from thefuzz import process
 
@@ -30,7 +30,7 @@ def get_feature_statistics(
     aggregation_methods: Union[
         Literal["min", "max", "mean", "std", "count"], list[Literal["min", "max", "mean", "std", "count"]]
     ] = None,
-    add_aggregation_to_X: bool = True,
+    add_aggregation_to: Literal["obs", "X", "return"] = "return",
     verbose: bool = False,
     use_dask: bool = None,
 ) -> AnnData:
@@ -74,8 +74,9 @@ def get_feature_statistics(
                 stacklevel=2,
             )
         source_table_columns = ["visit_occurrence_id", "observation_datetime", key, value_col]
-    elif source == "condition_occurrence":
-        source_table_columns = None
+    elif source in ["procedure_occurrence", "specimen", "device_exposure", "drug_exposure", "condition_occurrence"]:
+        if source_table_columns is None:
+            raise KeyError(f"Please specify value_col for {source} table.")
     else:
         raise KeyError(f"Extracting data from {source} is not supported yet")
     if isinstance(features, str):
@@ -91,10 +92,10 @@ def get_feature_statistics(
     )
 
     info_df = get_feature_info(adata.uns, features=features, verbose=verbose)
-    info_dict = info_df[["feature_id", "feature_name"]].set_index("feature_id").to_dict()["feature_name"]
+    info_dict = info_df[["feature_id_2", "feature_name"]].set_index("feature_id_2").to_dict()["feature_name"]
 
     # Select featrues
-    df_source = df_source[df_source[key].isin(list(info_df.feature_id))]
+    df_source = df_source[df_source[key].isin(list(info_df.feature_id_2))]
     # TODO Select time
     # da_measurement = da_measurement[(da_measurement.time >= 0) & (da_measurement.time <= 48*60*60)]
     # df_source[f'{source}_name'] = df_source[key].map(info_dict)
@@ -122,7 +123,7 @@ def get_feature_statistics(
         sort_columns = True
         if sort_columns:
             new_column_order = []
-            for feature in features:
+            for feature in list(info_dict.values()):
                 for suffix in (f"_{aggregation_method}" for aggregation_method in aggregation_methods):
                     col_name = f"{feature}{suffix}"
                     if col_name in df_statistics.columns:
@@ -131,21 +132,24 @@ def get_feature_statistics(
             df_statistics.columns = new_column_order
 
     df_statistics.index = df_statistics.index.astype(str)
-
-    adata.obs = pd.merge(adata.obs, df_statistics, how="left", left_index=True, right_index=True)
-
-    if add_aggregation_to_X:
+    if add_aggregation_to == "return":
+        return df_statistics
+    elif add_aggregation_to == "obs":
+        adata.obs = pd.merge(adata.obs, df_statistics, how="left", left_index=True, right_index=True)
+        return adata
+    elif add_aggregation_to == "X":
+        adata.obs = pd.merge(adata.obs, df_statistics, how="left", left_index=True, right_index=True)
         uns = adata.uns
         obsm = adata.obsm
         varm = adata.varm
         # layers = adata.layers
-        adata = ep.ad.move_to_x(adata, list(df_statistics.columns))
+        adata = move_to_x(adata, list(df_statistics.columns))
         adata.uns = uns
         adata.obsm = obsm
         adata.varm = varm
-        # It will change
-        # adata.layers = layers
-    return adata
+        return adata
+    else:
+        raise ValueError(f"add_aggregation_to should be one of ['obs', 'X', 'return'], not {add_aggregation_to}")
 
 
 def qc_lab_measurements(

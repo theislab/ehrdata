@@ -602,10 +602,5 @@ def get_feature_info(
                 f"Detected: feature [green]{feature_name}[/], feature ID [green]{feature_id}[/] in concept table, match ratio = [green]{match_1_ratio}."
             )
 
-    if info_df["feature_id_1"].equals(info_df["feature_id_2"]):
-        info_df.drop("feature_id_2", axis=1, inplace=True)
-        info_df = info_df.rename(columns={"feature_id_1": "feature_id"})
-        info_df = info_df.reset_index(drop=True)
-    else:
-        info_df = info_df.reset_index(drop=True)
+    info_df = info_df.reset_index(drop=True)
     return info_df

@@ -3,12 +3,12 @@ from collections.abc import Sequence
 from functools import partial
 from typing import Literal, Optional, Union
 
-import ehrapy as ep
 import matplotlib.pyplot as plt
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
 from anndata import AnnData
+from ehrapy.anndata import df_to_anndata
 from matplotlib.axes import Axes
 
 from ehrdata.io._omop import to_dataframe
@@ -51,26 +51,28 @@ def feature_counts(
         use_dask = adata.uns["use_dask"]
 
     column_types = get_column_types(adata.uns, table_name=source)
-    df_source = read_table(adata.uns, table_name=source, dtype=column_types, usecols=[f"{source}_concept_id"])
-    feature_counts = df_source[f"{source}_concept_id"].value_counts()
+    if source in ["observation", "measurement", "specimen"]:
+        id_key = f"{source}_concept_id"
+    else:
+        id_key = source.split("_")[0] + "_concept_id"
+    df_source = read_table(adata.uns, table_name=source, dtype=column_types, usecols=[id_key])
+    feature_counts = df_source[id_key].value_counts()
     if use_dask:
         feature_counts = feature_counts.compute()
     feature_counts = feature_counts.to_frame().reset_index(drop=False)[0:number]
 
-    feature_counts[f"{source}_concept_id_1"], feature_counts[f"{source}_concept_id_2"] = map_concept_id(
-        adata.uns, concept_id=feature_counts[f"{source}_concept_id"], verbose=False
+    feature_counts[f"{id_key}_1"], feature_counts[f"{id_key}_2"] = map_concept_id(
+        adata.uns, concept_id=feature_counts[id_key], verbose=False
     )
-    feature_counts["feature_name"] = get_concept_name(adata, concept_id=feature_counts[f"{source}_concept_id_1"])
-    if feature_counts[f"{source}_concept_id_1"].equals(feature_counts[f"{source}_concept_id_2"]):
-        feature_counts.drop(f"{source}_concept_id_2", axis=1, inplace=True)
-        feature_counts.rename(columns={f"{source}_concept_id_1": f"{source}_concept_id"})
-        feature_counts = feature_counts.reindex(columns=["feature_name", f"{source}_concept_id", "count"])
+    feature_counts["feature_name"] = get_concept_name(adata, concept_id=feature_counts[f"{id_key}_1"])
+    if feature_counts[f"{id_key}_1"].equals(feature_counts[f"{id_key}_2"]):
+        feature_counts.drop(f"{id_key}_2", axis=1, inplace=True)
+        feature_counts.rename(columns={f"{id_key}_1": id_key})
+        feature_counts = feature_counts.reindex(columns=["feature_name", id_key, "count"])
     else:
-        feature_counts = feature_counts.reindex(
-            columns=["feature_name", f"{source}_concept_id_1", f"{source}_concept_id_2", "count"]
-        )
-
-    ax = sns.barplot(feature_counts, x="feature_name", y="count")
+        feature_counts = feature_counts.reindex(columns=["feature_name", f"{id_key}_1", f"{id_key}_2", "count"])
+    # sns.color_palette("Paired")
+    ax = sns.barplot(feature_counts, x="feature_name", y="count", palette=sns.color_palette("Paired"))
     ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
     plt.tight_layout()
     return feature_counts
@@ -226,9 +228,9 @@ def violin(
 
         if groupby:
             df = df.set_index("visit_occurrence_id").join(adata.obs[groupby].to_frame()).reset_index(drop=False)
-            adata = ep.ad.df_to_anndata(df, columns_obs_only=["visit_occurrence_id", groupby])
+            adata = df_to_anndata(df, columns_obs_only=["visit_occurrence_id", groupby])
         else:
-            adata = ep.ad.df_to_anndata(df, columns_obs_only=["visit_occurrence_id"])
+            adata = df_to_anndata(df, columns_obs_only=["visit_occurrence_id"])
         keys = obsm_key
 
     violin_partial = partial(

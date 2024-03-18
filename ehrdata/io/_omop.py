@@ -2,10 +2,10 @@ import os
 from typing import Literal, Optional, Union
 
 import awkward as ak
-import ehrapy as ep
 import pandas as pd
 import pyarrow as pa
 from anndata import AnnData
+from ehrapy.anndata import df_to_anndata
 from rich import print as rprint
 
 from ehrdata.utils._omop_utils import (
@@ -19,28 +19,30 @@ from ehrdata.utils._omop_utils import (
 
 def init_omop(
     folder_path: str,
-    delimiter: str = None,
+    delimiter: str = ",",
     make_filename_lowercase: bool = True,
     use_dask: bool = False,
     level: Literal["stay_level", "patient_level"] = "stay_level",
-    load_tables: Optional[Union[str, list[str], tuple[str], Literal["auto"]]] = ("visit_occurrence", "person"),
+    load_tables: Optional[Union[str, list[str], tuple[str], Literal["auto"]]] = None,
     remove_empty_column: bool = True,
 ) -> AnnData:
     """Initialize an OMOP database, load tables and create anndata object
 
     Args:
         folder_path (str): Path to the folder containing the OMOP CDM tables.
-        delimiter (str, optional): If data is in csv format, delimiter can be specified. Defaults to None.
+        delimiter (str, optional): If data is in csv format, delimiter can be specified. Defaults to ','.
         make_filename_lowercase (bool, optional): If True, the filename will be converted to lowercase. Defaults to True.
         use_dask (bool, optional): If True, dask will be used to read the tables. For large tables, it is recommended to use dask. Defaults to False.
         level (Literal[&quot;stay_level&quot;, &quot;patient_level&quot;], optional): For stay level, each row in anndata would be a visit_occurrence. For patient level, each row in anndata would be a patient. Defaults to "stay_level".
-        load_tables (Optional[Union[str, list[str], tuple[str], Literal[&quot;auto&quot;]]], optional): _description_. Defaults to ("visit_occurrence", "person").
+        load_tables (Optional[Union[str, list[str], tuple[str], Literal[&quot;auto&quot;]]], optional): Basic tables to load. Support loading one of those: ["visit_occurrence", "person", "death", "visit_detail", "provider"]. If is None, it will try to load all non-empty supported tables.
         remove_empty_column (bool, optional): If True, columns with all missing values will be removed when loading tables. Defaults to True.
 
     Returns
     -------
         AnnData: Anndata object
     """
+    if delimiter is None:
+        delimiter = ","
     filepath_dict = check_with_omop_cdm(
         folder_path=folder_path, delimiter=delimiter, make_filename_lowercase=make_filename_lowercase
     )
@@ -71,11 +73,16 @@ def init_omop(
     rprint(print_str)
 
     if load_tables == "auto" or load_tables is None:
-        load_tables = tables
+        load_tables = {"visit_occurrence", "person", "death", "visit_detail", "provider"}.intersection(set(tables))
     elif isinstance(load_tables, str):
         load_tables = [load_tables]
     else:
         pass
+    not_supported_load_tables = set(load_tables) - {"visit_occurrence", "person", "death", "visit_detail", "provider"}
+    if len(not_supported_load_tables) > 0:
+        raise ValueError(
+            f"Loading {not_supported_load_tables} not supported. Only loading visit_occurrence, person, death, visit_detail, provider tables are supported"
+        )
 
     # TODO patient level and hospital level
     if level == "stay_level":
@@ -137,20 +144,6 @@ def init_omop(
                 suffixes=(None, "_provider"),
             )
 
-        if "location" in load_tables:
-            column_types = get_column_types(adata_dict, table_name="location")
-            table_dict["location"] = read_table(
-                adata_dict, table_name="location", dtype=column_types, remove_empty_column=remove_empty_column
-            )
-            joined_table = pd.merge(
-                joined_table,
-                table_dict["location"],
-                left_on="location_id",
-                right_on="location_id",
-                how="left",
-                suffixes=(None, "_location"),
-            )
-
         # TODO dask Support
         # joined_table = joined_table.compute()
 
@@ -163,7 +156,7 @@ def init_omop(
             columns = [column for column in joined_table.columns if not joined_table[column].isna().all()]
             joined_table = joined_table.loc[:, columns]
         columns_obs_only = list(set(joined_table.columns))
-        adata = ep.ad.df_to_anndata(joined_table, index_column="visit_occurrence_id", columns_obs_only=columns_obs_only)
+        adata = df_to_anndata(joined_table, index_column="visit_occurrence_id", columns_obs_only=columns_obs_only)
         # TODO this needs to be fixed because anndata set obs index as string by default
         # adata.obs.index = adata.obs.index.astype(int)
 
@@ -246,29 +239,15 @@ def init_omop(
                 suffixes=(None, "_provider"),
             )
 
-        if "location" in load_tables:
-            column_types = get_column_types(adata_dict, table_name="location")
-            table_dict["location"] = read_table(
-                adata_dict, table_name="location", dtype=column_types, remove_empty_column=remove_empty_column
-            )
-            joined_table = pd.merge(
-                joined_table,
-                table_dict["location"],
-                left_on="location_id",
-                right_on="location_id",
-                how="left",
-                suffixes=(None, "_location"),
-            )
-
         if remove_empty_column:
             columns = [column for column in joined_table.columns if not joined_table[column].isna().all()]
             joined_table = joined_table.loc[:, columns]
         columns_obs_only = list(set(joined_table.columns))
-        adata = ep.ad.df_to_anndata(joined_table, index_column="person_id", columns_obs_only=columns_obs_only)
+        adata = df_to_anndata(joined_table, index_column="person_id", columns_obs_only=columns_obs_only)
 
     else:
         raise ValueError("level should be 'stay_level' or 'patient_level'")
-
+    print(f"Loading tables: {load_tables}")
     return adata
 
 
@@ -335,10 +314,10 @@ def extract_features(
         adata.uns, table_name=source, dtype=source_column_types, usecols=source_table_columns, use_dask=use_dask
     )
     info_df = get_feature_info(adata.uns, features=features, verbose=False)
-    info_dict = info_df[["feature_id", "feature_name"]].set_index("feature_id").to_dict()["feature_name"]
+    info_dict = info_df[["feature_id_2", "feature_name"]].set_index("feature_id_2").to_dict()["feature_name"]
 
     # Select featrues
-    df_source = df_source[df_source[key].isin(list(info_df.feature_id))]
+    df_source = df_source[df_source[key].isin(list(info_df.feature_id_2))]
     # TODO select time period
     # df_source = df_source[(df_source.time >= 0) & (df_source.time <= 48*60*60)]
     # da_measurement['measurement_name'] = da_measurement.measurement_concept_id.replace(info_dict)
@@ -424,13 +403,13 @@ def from_dataframe(adata: AnnData, feature: str, df: pd.DataFrame) -> AnnData:
             new_row_dict[key] = [None] * len(new_row_dict["visit_occurrence_id"])
     new_rows = pd.DataFrame(new_row_dict)
     df = pd.concat([df, new_rows], ignore_index=True)
-
+    df["visit_occurrence_id"] = df["visit_occurrence_id"].astype(int)
     ak_array = ak.from_arrow(pa.Table.from_pandas(df), highlevel=True)
     ak_array = ak.unflatten(ak_array, df["visit_occurrence_id"].value_counts(sort=False).values)
 
     # Need to sort the visit_occurrence_id in awkward array accoring to the sequence in the indices in the adata
     id_in_df = list(df["visit_occurrence_id"].unique())
-    id_in_adata = list(adata.obs.index)
+    id_in_adata = list(adata.obs.index.astype(int))
     index_dict = {value: index for index, value in enumerate(id_in_df)}
     index = [index_dict[x] for x in id_in_adata]
 
