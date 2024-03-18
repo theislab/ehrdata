@@ -25,7 +25,7 @@ dependencies = [
     "awkward",
     "matplotlib",
     "pandas",
-    "dask",
+    "dask[complete]",
     "thefuzz",
     "rich",
     "seaborn",
