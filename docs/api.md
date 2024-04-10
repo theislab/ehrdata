@@ -39,7 +39,6 @@
 .. autosummary::
     :toctree: generated
 
-    tl.basic_tool
 ```
 
 ## Plotting
@@ -51,6 +50,4 @@
 .. autosummary::
     :toctree: generated
 
-    pl.basic_plot
-    pl.BasicClass
 ```
