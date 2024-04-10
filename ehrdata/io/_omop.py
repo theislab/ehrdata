@@ -5,6 +5,7 @@ import awkward as ak
 import pandas as pd
 import pyarrow as pa
 from anndata import AnnData
+from dateutil.parser import ParserError
 from ehrapy.anndata import df_to_anndata
 from rich import print as rprint
 
@@ -115,7 +116,7 @@ def init_omop(
                 how="left",
                 suffixes=(None, "_death"),
             )
-
+        """
         if "visit_detail" in load_tables:
             column_types = get_column_types(adata_dict, table_name="visit_detail")
             table_dict["visit_detail"] = read_table(
@@ -129,7 +130,7 @@ def init_omop(
                 how="left",
                 suffixes=(None, "_visit_detail"),
             )
-
+        """
         if "provider" in load_tables:
             column_types = get_column_types(adata_dict, table_name="provider")
             table_dict["provider"] = read_table(
@@ -210,7 +211,7 @@ def init_omop(
                 how="left",
                 suffixes=(None, "_death"),
             )
-
+        """
         if "visit_detail" in load_tables:
             column_types = get_column_types(adata_dict, table_name="visit_detail")
             table_dict["visit_detail"] = read_table(
@@ -224,7 +225,7 @@ def init_omop(
                 how="left",
                 suffixes=(None, "_visit_detail"),
             )
-
+        """
         if "provider" in load_tables:
             column_types = get_column_types(adata_dict, table_name="provider")
             table_dict["provider"] = read_table(
@@ -303,8 +304,15 @@ def extract_features(
             ]
         elif source == "condition_occurrence":
             source_table_columns = None
+        elif source == "drug_exposure":
+            source_table_columns = None
         else:
             raise KeyError(f"Extracting data from {source} is not supported yet")
+    else:
+        if "visit_occurrence_id" not in source_table_columns:
+            source_table_columns.append("visit_occurrence_id")
+        if key not in source_table_columns:
+            source_table_columns.append(key)
     if use_dask is None:
         use_dask = use_dask = adata.uns["use_dask"]
     # TODO load using Dask or Dask-Awkward
@@ -317,6 +325,7 @@ def extract_features(
     info_dict = info_df[["feature_id_2", "feature_name"]].set_index("feature_id_2").to_dict()["feature_name"]
 
     # Select featrues
+    df_source = df_source[df_source["visit_occurrence_id"].isin(list(adata.obs.index))]
     df_source = df_source[df_source[key].isin(list(info_df.feature_id_2))]
     # TODO select time period
     # df_source = df_source[(df_source.time >= 0) & (df_source.time <= 48*60*60)]
@@ -325,18 +334,19 @@ def extract_features(
     # TODO dask caching
     """
     from dask.cache import Cache
+
     cache = Cache(2e9)
     cache.register()
     """
     print(f"Reading {source} table")
     if use_dask:
         if dropna:
-            df_source = df_source.compute().dropna()
+            df_source = df_source.compute().dropna(how="any")
         else:
             df_source = df_source.compute()
     else:
         if dropna:
-            df_source = df_source.dropna()
+            df_source = df_source.dropna(how="any")
 
     # Filter data once, if possible
     filtered_data = {feature_id: df_source[df_source[key] == feature_id] for feature_id in info_dict.keys()}
@@ -389,7 +399,7 @@ def from_dataframe(adata: AnnData, feature: str, df: pd.DataFrame) -> AnnData:
     Args:
         adata (AnnData): Anndata object
         feature (str): feature name. It will be used as the key in .obsm
-        df (pd.DataFrame): dataframe containing the data. It should have a column named 'visit_occurrence_id'
+        df: dataframe containing the data. It should have a column named 'visit_occurrence_id'
 
     Returns
     -------
@@ -403,13 +413,13 @@ def from_dataframe(adata: AnnData, feature: str, df: pd.DataFrame) -> AnnData:
             new_row_dict[key] = [None] * len(new_row_dict["visit_occurrence_id"])
     new_rows = pd.DataFrame(new_row_dict)
     df = pd.concat([df, new_rows], ignore_index=True)
-    df["visit_occurrence_id"] = df["visit_occurrence_id"].astype(int)
+    df["visit_occurrence_id"] = df["visit_occurrence_id"]
     ak_array = ak.from_arrow(pa.Table.from_pandas(df), highlevel=True)
     ak_array = ak.unflatten(ak_array, df["visit_occurrence_id"].value_counts(sort=False).values)
 
     # Need to sort the visit_occurrence_id in awkward array accoring to the sequence in the indices in the adata
     id_in_df = list(df["visit_occurrence_id"].unique())
-    id_in_adata = list(adata.obs.index.astype(int))
+    id_in_adata = list(adata.obs.index)
     index_dict = {value: index for index, value in enumerate(id_in_df)}
     index = [index_dict[x] for x in id_in_adata]
 
@@ -425,6 +435,8 @@ def to_dataframe(
     adata: AnnData,
     features: Union[str, list[str]],
     visit_occurrence_id: Optional[Union[str, list[str]]] = None,
+    keep_na: Optional[bool] = False,
+    convert_to_datetime: Optional[bool] = True,
 ) -> pd.DataFrame:
     """Convert data in .obsm of anndata object to dataframe
 
@@ -435,7 +447,7 @@ def to_dataframe(
 
     Returns
     -------
-        pd.DataFrame: dataframe containing the data
+        dataframe containing the data
     """
     # TODO
     # can be viewed as patient level - only select some patient
@@ -476,5 +488,17 @@ def to_dataframe(
         """
         df["feature_name"] = feature
         df_concat = pd.concat([df_concat, df], axis=0)
+    if not keep_na:
+        df_concat = df_concat.dropna(how="any")
+    if convert_to_datetime:
+        for col in df_concat.columns:
+            if col.endswith("datetime"):
+                try:
+                    df_concat[col] = pd.to_datetime(df_concat[col])
+                except (ParserError, ValueError):
+                    print(f"Couldn't convert {col} to datetime")
+                    pass
+                except:
+                    raise
 
     return df_concat
