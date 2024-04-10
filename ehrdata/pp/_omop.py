@@ -1,4 +1,5 @@
 import warnings
+from pathlib import Path
 from typing import Literal, Union
 
 import awkward as ak
@@ -131,25 +132,33 @@ def get_feature_statistics(
 
             df_statistics.columns = new_column_order
 
-    df_statistics.index = df_statistics.index.astype(str)
-    if add_aggregation_to == "return":
-        return df_statistics
-    elif add_aggregation_to == "obs":
-        adata.obs = pd.merge(adata.obs, df_statistics, how="left", left_index=True, right_index=True)
-        return adata
-    elif add_aggregation_to == "X":
-        adata.obs = pd.merge(adata.obs, df_statistics, how="left", left_index=True, right_index=True)
-        uns = adata.uns
-        obsm = adata.obsm
-        varm = adata.varm
-        # layers = adata.layers
-        adata = move_to_x(adata, list(df_statistics.columns))
-        adata.uns = uns
-        adata.obsm = obsm
-        adata.varm = varm
-        return adata
-    else:
-        raise ValueError(f"add_aggregation_to should be one of ['obs', 'X', 'return'], not {add_aggregation_to}")
+        df_statistics.index = df_statistics.index.astype(str)
+        if add_aggregation_to == "return":
+            return df_statistics
+        elif add_aggregation_to == "obs":
+            adata.obs = pd.merge(adata.obs, df_statistics, how="left", left_index=True, right_index=True)
+            return adata
+        elif add_aggregation_to == "X":
+            adata.obs = pd.merge(adata.obs, df_statistics, how="left", left_index=True, right_index=True)
+            uns = adata.uns
+            obsm = adata.obsm
+            varm = adata.varm
+            # layers = adata.layers
+            adata = move_to_x(adata, list(df_statistics.columns))
+            adata.uns = uns
+            adata.obsm = obsm
+            adata.varm = varm
+            return adata
+        else:
+            raise ValueError(f"add_aggregation_to should be one of ['obs', 'X', 'return'], not {add_aggregation_to}")
+    elif level == "patient_level":
+        pass
+    elif level == "population_level":
+        result = df_source.groupby([key]).agg({value_col: aggregation_methods})
+        print("Calculating statistics")
+        if use_dask:
+            result = result.compute()
+        return result
 
 
 def qc_lab_measurements(
@@ -209,13 +218,11 @@ def qc_lab_measurements(
         action: The action to take if a measurement is outside the reference range. Defaults to 'remove'.
         unit: The unit of the measurements. Defaults to 'traditional'.
         layer: Layer containing the matrix to calculate the metrics for.
-        threshold: Minimum required matching confidence score of the fuzzysearch.
-                   0 = no matches, 100 = all must match. Defaults to 20.
+        threshold: Minimum required matching confidence score of the fuzzysearch. 0 = no matches, 100 = all must match. Defaults to 20.
         age_col: Column containing age values.
         age_range: The inclusive age-range to filter for such as 5-99.
         sex_col: Column containing sex values. Column must contain 'U', 'M' or 'F'.
-        sex: Sex to filter the reference values for. Use U for unisex which uses male values when male and female conflict.
-             Defaults to 'U|M'.
+        sex: Sex to filter the reference values for. Use U for unisex which uses male values when male and female conflict. Defaults to 'U|M'.
         ethnicity_col: Column containing ethnicity values.
         ethnicity: Ethnicity to filter for.
         copy: Whether to return a copy. Defaults to False.
@@ -234,7 +241,7 @@ def qc_lab_measurements(
     if copy:
         adata = adata.copy()
 
-    preprocessing_dir = "/Users/xinyuezhang/ehrapy/ehrapy/preprocessing"
+    preprocessing_dir = Path(__file__).parent.resolve()
     if reference_table is None:
         reference_table = pd.read_csv(
             f"{preprocessing_dir}/laboratory_reference_tables/laposata.tsv", sep="\t", index_col="Measurement"
