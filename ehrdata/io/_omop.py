@@ -30,13 +30,13 @@ def init_omop(
     """Initialize an OMOP database, load tables and create anndata object
 
     Args:
-        folder_path (str): Path to the folder containing the OMOP CDM tables.
-        delimiter (str, optional): If data is in csv format, delimiter can be specified. Defaults to ','.
-        make_filename_lowercase (bool, optional): If True, the filename will be converted to lowercase. Defaults to True.
-        use_dask (bool, optional): If True, dask will be used to read the tables. For large tables, it is recommended to use dask. Defaults to False.
-        level (Literal[&quot;stay_level&quot;, &quot;patient_level&quot;], optional): For stay level, each row in anndata would be a visit_occurrence. For patient level, each row in anndata would be a patient. Defaults to "stay_level".
-        load_tables (Optional[Union[str, list[str], tuple[str], Literal[&quot;auto&quot;]]], optional): Basic tables to load. Support loading one of those: ["visit_occurrence", "person", "death", "visit_detail", "provider"]. If is None, it will try to load all non-empty supported tables.
-        remove_empty_column (bool, optional): If True, columns with all missing values will be removed when loading tables. Defaults to True.
+        folder_path: Path to the folder containing the OMOP CDM tables.
+        delimiter: If data is in csv format, delimiter can be specified. Defaults to ','.
+        make_filename_lowercase: If True, the filename will be converted to lowercase. Defaults to True.
+        use_dask: If True, dask will be used to read the tables. For large tables, it is recommended to use dask. Defaults to False.
+        level: For stay level, each row in anndata would be a visit_occurrence. For patient level, each row in anndata would be a patient. Defaults to "stay_level".
+        load_tables: Basic tables to load. Support loading one of those: ["visit_occurrence", "person", "death", "visit_detail", "provider"]. If is None, it will try to load all non-empty supported tables.
+        remove_empty_column: If True, columns with all missing values will be removed when loading tables. Defaults to True.
 
     Returns
     -------
