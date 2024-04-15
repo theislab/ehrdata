@@ -30,7 +30,7 @@ def init_omop(
     """Initialize an OMOP database, load tables and create anndata object
 
     Args:
-        folder_path: Path to the folder containing the OMOP CDM tables.
+        folder_path: Path to the folder containing the OMOP CDM tables
         delimiter: If data is in csv format, delimiter can be specified. Defaults to ','.
         make_filename_lowercase: If True, the filename will be converted to lowercase. Defaults to True.
         use_dask: If True, dask will be used to read the tables. For large tables, it is recommended to use dask. Defaults to False.
