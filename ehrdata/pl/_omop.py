@@ -1,3 +1,4 @@
+import datetime
 import warnings
 from collections.abc import Sequence
 from functools import partial
@@ -40,7 +41,7 @@ def feature_counts(
 
     Returns
     -------
-        pd.DataFrame: Dataframe with feature names and counts
+        Dataframe with feature names and counts
     """
     path = adata.uns["filepath_dict"][source]
     if isinstance(path, list):
@@ -55,7 +56,8 @@ def feature_counts(
         id_key = f"{source}_concept_id"
     else:
         id_key = source.split("_")[0] + "_concept_id"
-    df_source = read_table(adata.uns, table_name=source, dtype=column_types, usecols=[id_key])
+    df_source = read_table(adata.uns, table_name=source, dtype=column_types, usecols=[id_key, "visit_occurrence_id"])
+    df_source = df_source[df_source["visit_occurrence_id"].isin(set(adata.obs.index))]
     feature_counts = df_source[id_key].value_counts()
     if use_dask:
         feature_counts = feature_counts.compute()
@@ -86,6 +88,10 @@ def plot_timeseries(
     value_key: str = "value_as_number",
     time_key: str = "measurement_datetime",
     x_label: str = None,
+    y_label: str = None,
+    title: str = None,
+    from_time: Optional[Union[str, datetime.datetime]] = None,
+    to_time: Optional[Union[str, datetime.datetime]] = None,
     show: Optional[bool] = None,
 ):
     """Plot timeseries data using data from adata.obsm.
@@ -97,7 +103,12 @@ def plot_timeseries(
         slot (Union[str, None], optional): Slot to use. Defaults to &quot;obsm&quot;.
         value_key (str, optional): key in awkward array in adata.obsm to be used as value. Defaults to "value_as_number".
         time_key (str, optional): key in awkward array in adata.obsm to be used as time. Defaults to "measurement_datetime".
+        from_time (Optional[str], optional): Start time for the plot. Defaults to None.
+        to_time (Optional[str], optional): End time for the plot. Defaults to None.
         x_label (str, optional): x labe name. Defaults to None.
+        y_label (str, optional): y label name. Defaults to None.
+        title (str, optional): title of the plot. Defaults to None.
+
         show (Optional[bool], optional): Show the plot, do not return axis.
 
     """
@@ -114,9 +125,18 @@ def plot_timeseries(
         _, ax = plt.subplots(figsize=(20, 6))
         # Scatter plot
         for key in key_list:
-            df = to_dataframe(adata, key)
-            x = df[df.visit_occurrence_id == visit_occurrence_id][time_key]
-            y = df[df.visit_occurrence_id == visit_occurrence_id][value_key]
+            df = to_dataframe(adata, features=key, visit_occurrence_id=visit_occurrence_id)
+            if from_time:
+                if isinstance(from_time, str):
+                    from_time = pd.to_datetime(from_time)
+                df = df[df[time_key] >= from_time]
+            if to_time:
+                if isinstance(to_time, str):
+                    to_time = pd.to_datetime(to_time)
+                df = df[df[time_key] <= to_time]
+            df.sort_values(by=time_key, inplace=True)
+            x = df[time_key]
+            y = df[value_key]
 
             # Check if x is empty
             if not x.empty:
@@ -139,8 +159,9 @@ def plot_timeseries(
             # TODO step
             # plt.xticks(np.arange(min_x, max_x, step=1))
             # Adapt this to input data
-            plt.xlabel(x_label if x_label else "Hours since ICU admission")
-
+            plt.xlabel(x_label if x_label else "Datetime")
+        plt.ylabel(y_label if y_label else "Value")
+        plt.title(title if title else f"Timeseries plot for visit_occurrence_id: {visit_occurrence_id}")
         plt.tight_layout()
         if not show:
             return ax

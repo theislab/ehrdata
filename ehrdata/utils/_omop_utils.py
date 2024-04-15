@@ -301,7 +301,7 @@ def read_table(
 
     Returns
     -------
-        Union[pd.DataFrame, dd.DataFrame]: a pandas or dask DataFrame
+        a pandas or dask DataFrame
     """
     path = adata_dict["filepath_dict"][table_name]
     if isinstance(path, list):
@@ -436,9 +436,9 @@ def df_to_dict(df: pd.DataFrame, key: str, value: str) -> dict:
     """Convert a DataFrame to a dictionary
 
     Args:
-        df (pd.DataFrame): a DataFrame
-        key (str): the column name to be used as the key of the dictionary
-        value (str): the column name to be used as the value of the dictionary
+        df: a DataFrame
+        key: the column name to be used as the key of the dictionary
+        value: the column name to be used as the value of the dictionary
 
     Returns
     -------
@@ -497,7 +497,7 @@ def get_feature_info(
 
     Returns
     -------
-        pd.DataFrame: a DataFrame containing the feature information
+        a DataFrame containing the feature information
     """
     if "concept" in adata_dict["tables"]:
         column_types = get_column_types(adata_dict, table_name="concept")

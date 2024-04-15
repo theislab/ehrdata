@@ -4,6 +4,7 @@ from typing import Literal, Union
 import numpy as np
 import pandas as pd
 from anndata import AnnData
+from dateutil.parser import ParserError
 from pandas.tseries.offsets import DateOffset as Offset
 from rich import print as rprint
 
@@ -108,12 +109,13 @@ def aggregate_timeseries_in_bins(
     if slot == "obsm":
         for feature in features_list:
             print(f"processing feature [{feature}]")
-            df = to_dataframe(adata, features)
-            if pd.api.types.is_datetime64_any_dtype(df[time_key]):
+            df = to_dataframe(adata, feature)
+            try:
+                df[time_key] = pd.to_datetime(df[time_key])
                 func = getattr(df[time_key].dt, time_binning_method, None)
                 if func is not None:
                     df[time_key] = func(bin_size)
-            else:
+            except (ParserError, ValueError):
                 # TODO need to take care of this if it doesn't follow omop standard
                 if bin_size == "h":
                     df[time_key] = df[time_key] / 3600
