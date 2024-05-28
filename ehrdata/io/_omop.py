@@ -7,6 +7,7 @@ import pyarrow as pa
 from anndata import AnnData
 from dateutil.parser import ParserError
 from ehrapy.anndata import df_to_anndata
+from pandas import DataFrame
 from rich import print as rprint
 
 from ehrdata.utils._omop_utils import (
@@ -437,7 +438,7 @@ def to_dataframe(
     visit_occurrence_id: Optional[Union[str, list[str]]] = None,
     keep_na: Optional[bool] = False,
     convert_to_datetime: Optional[bool] = True,
-) -> pd.DataFrame:
+) -> DataFrame:
     """Convert data in .obsm of anndata object to dataframe
 
     Args:

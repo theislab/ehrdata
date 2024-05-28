@@ -10,9 +10,6 @@
     :toctree: generated
 
     io.init_omop
-    io.extract_features
-    io.extract_note
-    io.from_dataframe
     io.to_dataframe
 ```
 
