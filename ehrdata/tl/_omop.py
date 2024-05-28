@@ -20,9 +20,9 @@ def get_concept_name(
     """Get concept name from concept_id using concept table
 
     Args:
-        adata (Union[AnnData, dict]): Anndata object or adata.uns
-        concept_id (Union[str, list]): concept_id or list of concept_id
-        raise_error (bool, optional): If True, raise error if concept_id not found. Defaults to False.
+        adata: Anndata object or adata.uns
+        concept_id: concept_id or list of concept_id
+        raise_error: If True, raise error if concept_id not found. Defaults to False.
 
     Returns
     -------
@@ -77,14 +77,14 @@ def aggregate_timeseries_in_bins(
     """Aggregate timeseries data in bins
 
     Args:
-        adata (AnnData): Anndata object
-        features (Union[str, list[str]]): concept_id or concept_name, or list of concept_id or concept_name. Defaults to None.
-        slot (Union[str, None], optional): Slot to read the data. Defaults to "obsm".
-        value_key (str, optional): key in awkward array in adata.obsm to be used as value. Defaults to "value_as_number".
-        time_key (str, optional): key in awkward array in adata.obsm to be used as time. Defaults to "measurement_datetime".
-        time_binning_method (Literal["floor", "ceil", "round"], optional): Time binning method. Defaults to "floor".
-        bin_size (Union[str, Offset], optional): Time bin size. Defaults to "h".
-        aggregation_method (Literal["median", "mean", "min", "max"], optional): Aggregation method. Defaults to "median".
+        adata: Anndata object
+        features: concept_id or concept_name, or list of concept_id or concept_name. Defaults to None.
+        slot: Slot to read the data. Defaults to "obsm".
+        value_key: key in awkward array in adata.obsm to be used as value. Defaults to "value_as_number".
+        time_key: key in awkward array in adata.obsm to be used as time. Defaults to "measurement_datetime".
+        time_binning_method: Time binning method. Defaults to "floor".
+        bin_size: Time bin size. Defaults to "h".
+        aggregation_method: Aggregation method. Defaults to "median".
 
     Returns
     -------

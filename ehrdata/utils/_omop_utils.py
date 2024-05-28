@@ -117,8 +117,8 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
 
     Args:
         folder_path (str): The path of the folder containing the OMOP data
-        delimiter (str, optional): The delimiter of the CSV file. Defaults to None.
-        make_filename_lowercase (bool, optional): Whether to make the filename into lowercase. Defaults to True.
+        delimiter (str, Optional): The delimiter of the CSV file. Defaults to None.
+        make_filename_lowercase (bool, Optional): Whether to make the filename into lowercase. Defaults to True.
 
     Returns
     -------
@@ -265,7 +265,7 @@ def get_primary_key(table_name: str) -> str:
     """Get the primary key of the table
 
     Args:
-        table_name (str, optional): Table name in OMOP CDM v5.4.
+        table_name (str, Optional): Table name in OMOP CDM v5.4.
 
     Returns
     -------
@@ -292,12 +292,12 @@ def read_table(
 
     Args:
         adata_dict (dict): a dictionary containing filepath_dict, delimiter, use_dask, tables information
-        table_name (str, optional): Table name in OMOP CDM v5.4.
-        dtype (dict, optional): Data type of the columns. Defaults to None.
-        parse_dates (Union[List[str], str], optional): Columns to parse as dates. Defaults to None.
-        index (str, optional): set the index of the DataFrame. Defaults to None.
-        usecols (Union[List[str], str], optional): Columns to read. Defaults to None.
-        use_dask (bool, optional): Whether to use dask. It is recommended to use dask when the table is large. Defaults to None.
+        table_name (str, Optional): Table name in OMOP CDM v5.4.
+        dtype (dict, Optional): Data type of the columns. Defaults to None.
+        parse_dates (Union[List[str], str], Optional): Columns to parse as dates. Defaults to None.
+        index (str, Optional): set the index of the DataFrame. Defaults to None.
+        usecols (Union[List[str], str], Optional): Columns to read. Defaults to None.
+        use_dask (bool, Optional): Whether to use dask. It is recommended to use dask when the table is large. Defaults to None.
 
     Returns
     -------
@@ -370,7 +370,7 @@ def map_concept_id(
     Args:
         adata_dict (dict): a dictionary containing filepath_dict, delimiter, tables information.
         concept_id (Union[str, list[int]]): It could be a single concept_id or a list of concept_id.
-        verbose (bool, optional): Defaults to True.
+        verbose (bool, Optional): Defaults to True.
 
     Returns
     -------
@@ -490,10 +490,10 @@ def get_feature_info(
 
     Args:
         adata_dict (dict): a dictionary containing filepath_dict, delimiter, tables information.
-        features (Union[str, int, list[Union[str, int]]], optional): a feature name or a feature id. Defaults to None.
-        ignore_not_shown_in_concept_table (bool, optional): If True, it will ignore the features that are not shown in the concept table. Defaults to True.
-        exact_match (bool, optional): If True, it will only return the exact match if the feature name is input. Defaults to True.
-        verbose (bool, optional): Defaults to True.
+        features (Union[str, int, list[Union[str, int]]], Optional): a feature name or a feature id. Defaults to None.
+        ignore_not_shown_in_concept_table (bool, Optional): If True, it will ignore the features that are not shown in the concept table. Defaults to True.
+        exact_match (bool, Optional): If True, it will only return the exact match if the feature name is input. Defaults to True.
+        verbose (bool, Optional): Defaults to True.
 
     Returns
     -------

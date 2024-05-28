@@ -359,9 +359,9 @@ def drop_nan(
     """Remove observations with NaN values from the AnnData object.
 
     Args:
-        adata (AnnData): Annotated data matrix.
-        key (Union[str, List[str]]): Key or list of keys representing the data to be checked for NaN values.
-        slot (Optional[str], optional): Slot to check for NaN values. Defaults to "obsm".
+        adata: Annotated data matrix.
+        key: Key or list of keys representing the data to be checked for NaN values.
+        slot: Slot to check for NaN values. Defaults to "obsm".
 
     Returns
     -------
