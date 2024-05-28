@@ -24,6 +24,11 @@
 
 .. autosummary::
     :toctree: generated
+
+    pp.get_feature_statistics
+    pp.qc_lab_measurements
+    pp.drop_nan
+
 ```
 
 ## Tools
@@ -35,6 +40,8 @@
 .. autosummary::
     :toctree: generated
 
+    tl.get_concept_name
+    tl.aggregate_timeseries_in_bins
 ```
 
 ## Plotting
@@ -46,4 +53,7 @@
 .. autosummary::
     :toctree: generated
 
+    pl.feature_counts
+    pl.plot_timeseries
+    pl.violin
 ```
