@@ -34,14 +34,14 @@ def feature_counts(
     """Plot feature counts for a given source table and return a dataframe with feature names and counts.
 
     Args:
-        adata (AnnData): Anndata object
-        source (Literal[ &quot;observation&quot;, &quot;measurement&quot;, &quot;procedure_occurrence&quot;, &quot;specimen&quot;, &quot;device_exposure&quot;, &quot;drug_exposure&quot;, &quot;condition_occurrence&quot;, ]): source table name. Defaults to None.
-        number (int, optional): Number of top features to plot. Defaults to 20.
-        use_dask (bool, optional): If True, dask will be used to read the tables. For large tables, it is highly recommended to use dask. If None, it will be set to adata.uns[&quot;use_dask&quot;]. Defaults to None.
+        adata: Anndata object.
+        source: Source table name.
+        number: Number of top features to plot. Defaults to 20.
+        use_dask: If True, dask will be used to read the tables. For large tables, it is highly recommended to use dask. If None, it will be set to adata.uns["use_dask"]. Defaults to None.
 
     Returns
     -------
-        Dataframe with feature names and counts
+        Dataframe with feature names and counts.
     """
     path = adata.uns["filepath_dict"][source]
     if isinstance(path, list):
@@ -97,20 +97,18 @@ def plot_timeseries(
     """Plot timeseries data using data from adata.obsm.
 
     Args:
-        adata (AnnData): Anndata object
-        visit_occurrence_id (int): visit_occurrence_id to plot
-        key (Union[str, list[str]]): feature key or list of keys in adata.obsm to plot
-        slot (Union[str, None], optional): Slot to use. Defaults to &quot;obsm&quot;.
-        value_key (str, optional): key in awkward array in adata.obsm to be used as value. Defaults to "value_as_number".
-        time_key (str, optional): key in awkward array in adata.obsm to be used as time. Defaults to "measurement_datetime".
-        from_time (Optional[str], optional): Start time for the plot. Defaults to None.
-        to_time (Optional[str], optional): End time for the plot. Defaults to None.
-        x_label (str, optional): x labe name. Defaults to None.
-        y_label (str, optional): y label name. Defaults to None.
-        title (str, optional): title of the plot. Defaults to None.
-
-        show (Optional[bool], optional): Show the plot, do not return axis.
-
+        adata: Anndata object.
+        visit_occurrence_id: Visit_occurrence_id to plot.
+        key: Feature key or list of keys in adata.obsm to plot.
+        slot: Slot to use. Defaults to "obsm".
+        value_key: Key in awkward array in adata.obsm to be used as value. Defaults to "value_as_number".
+        time_key: Key in awkward array in adata.obsm to be used as time. Defaults to "measurement_datetime".
+        from_time: Start time for the plot. Defaults to None.
+        to_time: End time for the plot. Defaults to None.
+        x_label: x label name. Defaults to None.
+        y_label: y label name. Defaults to None.
+        title: Title of the plot. Defaults to None.
+        show: Show the plot, do not return axis.
     """
     if isinstance(key, str):
         key_list = [key]
@@ -193,54 +191,31 @@ def violin(
 ):  # pragma: no cover
     """Violin plot.
 
-    Wraps :func:`seaborn.violinplot` for :class:`~anndata.AnnData`.
-
     Args:
-        adata: :class:`~anndata.AnnData` object object containing all observations.
-        obsm_key: feature key or list of keys in adata.obsm to plot
+        adata: AnnData object containing all observations.
+        obsm_key: Feature key or list of keys in adata.obsm to plot.
         keys: Keys for accessing variables of `.var_names` or fields of `.obs`.
         groupby: The key of the observation grouping to consider.
         log: Plot on logarithmic axis.
         use_raw: Whether to use `raw` attribute of `adata`. Defaults to `True` if `.raw` is present.
-        stripplot: Add a stripplot on top of the violin plot. See :func:`~seaborn.stripplot`.
-        jitter: Add jitter to the stripplot (only when stripplot is True) See :func:`~seaborn.stripplot`.
+        stripplot: Add a stripplot on top of the violin plot.
+        jitter: Add jitter to the stripplot (only when stripplot is True).
         size: Size of the jitter points.
-        layer: Name of the AnnData object layer that wants to be plotted. By
-            default adata.raw.X is plotted. If `use_raw=False` is set,
-            then `adata.X` is plotted. If `layer` is set to a valid layer name,
-            then the layer is plotted. `layer` takes precedence over `use_raw`.
+        layer: Name of the AnnData object layer that wants to be plotted.
         scale: The method used to scale the width of each violin.
-            If 'width' (the default), each violin will have the same width.
-            If 'area', each violin will have the same area.
-            If 'count', a violin’s width corresponds to the number of observations.
         order: Order in which to show the categories.
-        multi_panel: Display keys in multiple panels also when `groupby is not None`.
-        xlabel: Label of the x axis. Defaults to `groupby` if `rotation` is `None`, otherwise, no label is shown.
-        ylabel: Label of the y axis. If `None` and `groupby` is `None`, defaults to `'value'`.
-                If `None` and `groubpy` is not `None`, defaults to `keys`.
+        multi_panel: Display keys in multiple panels also when `groupby` is not None.
+        xlabel: Label of the x axis.
+        ylabel: Label of the y axis.
         rotation: Rotation of xtick labels.
-        {show_save_ax}
-        **kwds:
-            Are passed to :func:`~seaborn.violinplot`.
+        show: Show the plot, do not return axis.
+        save: Save the plot to file.
+        ax: Matplotlib Axes object to use. If not passed, uses the current Axes instance.
+        **kwds: Additional keyword arguments passed to seaborn.violinplot.
 
     Returns
     -------
-        A :class:`~matplotlib.axes.Axes` object if `ax` is `None` else `None`.
-
-    Example:
-        .. code-block:: python
-
-            import ehrapy as ep
-
-            adata = ep.dt.mimic_2(encoded=True)
-            ep.pp.knn_impute(adata)
-            ep.pp.log_norm(adata, offset=1)
-            ep.pp.neighbors(adata)
-            ep.tl.leiden(adata, resolution=0.5, key_added="leiden_0_5")
-            ep.pl.violin(adata, keys=["age"], groupby="leiden_0_5")
-
-    Preview:
-        .. image:: /_static/docstring_previews/violin.png
+        A matplotlib Axes object if ax is None, else None.
     """
     if obsm_key:
         df = to_dataframe(adata, features=obsm_key)

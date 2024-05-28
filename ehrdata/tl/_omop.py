@@ -78,13 +78,13 @@ def aggregate_timeseries_in_bins(
 
     Args:
         adata (AnnData): Anndata object
-        features (Union[str, list[str]]):  concept_id or concept_name, or list of concept_id or concept_name. Defaults to None.
+        features (Union[str, list[str]]): concept_id or concept_name, or list of concept_id or concept_name. Defaults to None.
         slot (Union[str, None], optional): Slot to read the data. Defaults to "obsm".
         value_key (str, optional): key in awkward array in adata.obsm to be used as value. Defaults to "value_as_number".
         time_key (str, optional): key in awkward array in adata.obsm to be used as time. Defaults to "measurement_datetime".
-        time_binning_method (Literal[&quot;floor&quot;, &quot;ceil&quot;, &quot;round&quot;], optional): Time binning method. Defaults to "floor".
+        time_binning_method (Literal["floor", "ceil", "round"], optional): Time binning method. Defaults to "floor".
         bin_size (Union[str, Offset], optional): Time bin size. Defaults to "h".
-        aggregation_method (Literal[&quot;median&quot;, &quot;mean&quot;, &quot;min&quot;, &quot;max&quot;], optional): Aggregation method. Defaults to "median".
+        aggregation_method (Literal["median", "mean", "min", "max"], optional): Aggregation method. Defaults to "median".
 
     Returns
     -------
@@ -133,12 +133,3 @@ def aggregate_timeseries_in_bins(
             adata = from_dataframe(adata, feature, df)
 
     return adata
-
-
-# TODO
-def note_nlp_map(
-    self,
-):
-    # Got some inspirations from: https://github.com/aws-samples/amazon-comprehend-medical-omop-notes-mapping
-    # connect with existing functions
-    pass

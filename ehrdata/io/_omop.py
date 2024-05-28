@@ -28,11 +28,11 @@ def init_omop(
     load_tables: Optional[Union[str, list[str], tuple[str], Literal["auto"]]] = None,
     remove_empty_column: bool = True,
 ) -> AnnData:
-    """Initialize an OMOP database, load tables and create anndata object
+    """Initialize an OMOP database, load tables, and create anndata object.
 
     Args:
-        folder_path: Path to the folder containing the OMOP CDM tables
-        delimiter: If data is in csv format, delimiter can be specified. Defaults to ','.
+        folder_path: Path to the folder containing the OMOP CDM tables.
+        delimiter: If data is in CSV format, delimiter can be specified. Defaults to ','.
         make_filename_lowercase: If True, the filename will be converted to lowercase. Defaults to True.
         use_dask: If True, dask will be used to read the tables. For large tables, it is recommended to use dask. Defaults to False.
         level: For stay level, each row in anndata would be a visit_occurrence. For patient level, each row in anndata would be a patient. Defaults to "stay_level".
@@ -41,7 +41,7 @@ def init_omop(
 
     Returns
     -------
-        AnnData: Anndata object
+        AnnData: Anndata object.
     """
     if delimiter is None:
         delimiter = ","
@@ -270,20 +270,20 @@ def extract_features(
     verbose: Optional[bool] = True,
     use_dask: bool = None,
 ) -> AnnData:
-    """Extract features from OMOP CDM tables and add them to .obsm of anndata object
+    """Extract features from OMOP CDM tables and add them to .obsm of anndata object.
 
     Args:
-        adata (AnnData): Anndata object
-        source (Literal[ &quot;observation&quot;, &quot;measurement&quot;, &quot;procedure_occurrence&quot;, &quot;specimen&quot;, &quot;device_exposure&quot;, &quot;drug_exposure&quot;, &quot;condition_occurrence&quot;, ]): source table name. Defaults to None.
-        features (Union[str, int, list[Union[str, int]]], optional): feature_id or feature_name, or list of feature_id or feature_name. Defaults to None.
-        source_table_columns (Union[str, list[str]], optional): columns to be extracted from source table. If None, all columns will be extracted. Defaults to None.
-        dropna (Optional[bool], optional): drop rows with missing values. Defaults to True.
-        verbose (Optional[bool], optional): print progress. Defaults to True.
-        use_dask (bool, optional): If True, dask will be used to read the tables. For large tables, it is highly recommended to use dask. If None, it will be set to adata.uns[&quot;use_dask&quot;]. Defaults to None.
+        adata: Anndata object.
+        source: Source table name. One of {"observation", "measurement", "procedure_occurrence", "specimen", "device_exposure", "drug_exposure", "condition_occurrence"}.
+        features: Feature_id or feature_name, or list of feature_id or feature_name. Defaults to None.
+        source_table_columns: Columns to be extracted from source table. If None, all columns will be extracted. Defaults to None.
+        dropna: Drop rows with missing values. Defaults to True.
+        verbose: Print progress. Defaults to True.
+        use_dask: If True, dask will be used to read the tables. For large tables, it is highly recommended to use dask. If None, it will be set to adata.uns["use_dask"]. Defaults to None.
 
     Returns
     -------
-        AnnData: Anndata object
+        Anndata object.
     """
     if source in ["measurement", "observation", "specimen"]:
         key = f"{source}_concept_id"
@@ -365,16 +365,16 @@ def extract_note(
     use_dask: bool = None,
     columns: Optional[list[str]] = None,
 ) -> AnnData:
-    """Extract note from OMOP CDM Note table and add them to .obsm of anndata object
+    """Extract note from OMOP CDM Note table and add them to .obsm of anndata object.
 
     Args:
-        adata (AnnData): Anndata object
-        use_dask (bool, optional): If True, dask will be used to read the tables. For large tables, it is recommended to use dask. If None, it will be set to adata.uns[&quot;use_dask&quot;]. Defaults to None.
-        columns (Optional[list[str]], optional): columns to be extracted from note table. If None, all columns will be extracted. Defaults to None.
+        adata: Anndata object.
+        use_dask: If True, dask will be used to read the tables. For large tables, it is recommended to use dask. If None, it will be set to adata.uns["use_dask"]. Defaults to None.
+        columns: Columns to be extracted from note table. If None, all columns will be extracted. Defaults to None.
 
     Returns
     -------
-        AnnData: Anndata object
+        Anndata object.
     """
     if use_dask is None:
         use_dask = use_dask = adata.uns["use_dask"]
@@ -395,16 +395,16 @@ def extract_note(
 
 
 def from_dataframe(adata: AnnData, feature: str, df: pd.DataFrame) -> AnnData:
-    """Add data from a dataframe to .obsm of anndata object
+    """Add data from a dataframe to .obsm of anndata object.
 
     Args:
-        adata (AnnData): Anndata object
-        feature (str): feature name. It will be used as the key in .obsm
-        df: dataframe containing the data. It should have a column named 'visit_occurrence_id'
+        adata: Anndata object.
+        feature: Feature name. It will be used as the key in .obsm.
+        df: Dataframe containing the data. It should have a column named 'visit_occurrence_id'.
 
     Returns
     -------
-        AnnData: Anndata object with an awkward array in obsm[feature]
+        Anndata object with an awkward array in obsm[feature].
     """
     # Add new rows for those visit_occurrence_id that don't have any data
     new_row_dict = {col: [] for col in df.columns}
@@ -439,16 +439,18 @@ def to_dataframe(
     keep_na: Optional[bool] = False,
     convert_to_datetime: Optional[bool] = True,
 ) -> DataFrame:
-    """Convert data in .obsm of anndata object to dataframe
+    """Convert data in .obsm of anndata object to dataframe.
 
     Args:
-        adata (AnnData): Anndata object with data in .obsm
-        features (Union[str, list[str]]): feature name or list of feature names
-        visit_occurrence_id (Optional[Union[str, list[str]]], optional): visit_occurrence_id or list of visit_occurrence_id. If None, all visit_occurrence_id will be selected. Defaults to None.
+        adata: Anndata object with data in .obsm.
+        features: Feature name or list of feature names.
+        visit_occurrence_id: Visit_occurrence_id or list of visit_occurrence_id. If None, all visit_occurrence_id will be selected. Defaults to None.
+        keep_na: Keep rows with missing values. Defaults to False.
+        convert_to_datetime: Convert datetime columns to datetime dtype. Defaults to True.
 
     Returns
     -------
-        dataframe containing the data
+        Dataframe containing the data.
     """
     # TODO
     # can be viewed as patient level - only select some patient

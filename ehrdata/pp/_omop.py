@@ -35,22 +35,22 @@ def get_feature_statistics(
     verbose: bool = False,
     use_dask: bool = None,
 ) -> AnnData:
-    """Calculate statistics for the specified features from the OMOP tables and adds them to the AnnData object.
+    """Calculates statistics for specified features from the OMOP tables and adds them to the AnnData object.
 
     Args:
-        adata (AnnData): Anndata object
-        source (Literal[ &quot;observation&quot;, &quot;measurement&quot;, &quot;procedure_occurrence&quot;, &quot;specimen&quot;, &quot;device_exposure&quot;, &quot;drug_exposure&quot;, &quot;condition_occurrence&quot;, ]): source table name. Defaults to None.
-        features (Union[str, int, list[Union[str, int]]], optional): concept_id or concept_name, or list of concept_id or concept_name. Defaults to None.
-        level (Literal[&quot;stay_level&quot;, &quot;patient_level&quot;], optional): For stay level, statistics are calculated for each stay. For patient level, statistics are calculated for each patient. It should be aligned with the setting of the adata object. Defaults to &quot;stay_level&quot;.
-        value_col (str, optional): column name in source table to extract value from. Defaults to None.
-        aggregation_methods (Union[ Literal[&quot;min&quot;, &quot;max&quot;, &quot;mean&quot;, &quot;std&quot;, &quot;count&quot;], list[Literal[&quot;min&quot;, &quot;max&quot;, &quot;mean&quot;, &quot;std&quot;, &quot;count&quot;]] ], optional): aggregation methods to calculate statistics. Defaults to [&quot;min&quot;, &quot;max&quot;, &quot;mean&quot;, &quot;std&quot;, &quot;count&quot;].
-        add_aggregation_to_X (bool, optional): add the calculated statistics to adata.X. If False, the statistics will be added to adata.obs. Defaults to True.
-        verbose (bool, optional): print verbose information. Defaults to False.
-        use_dask (bool, optional): If True, dask will be used to read the tables. For large tables, it is highly recommended to use dask. If None, it will be set to adata.uns[&quot;use_dask&quot;]. Defaults to None.
+        adata: Anndata object.
+        source: Source table name.
+        features: Concept ID or concept name, or list of concept IDs or concept names.
+        level: Determines whether statistics are calculated for each stay or each patient.
+        value_col: Column name in the source table to extract value from.
+        aggregation_methods: Aggregation methods to calculate statistics.
+        add_aggregation_to: Determines where the calculated statistics are added.
+        verbose: Prints verbose information.
+        use_dask: Determines whether to use Dask for reading tables.
 
     Returns
     -------
-        AnnData: Anndata object with added statistics either in adata.obs (if add_aggregation_to_X=False) or adata.X (if add_aggregation_to_X=True)
+        Anndata object with added statistics either in adata.obs (if add_aggregation_to='obs') or adata.X (if add_aggregation_to='X').
     """
     if source in ["measurement", "observation", "specimen"]:
         key = f"{source}_concept_id"
@@ -356,6 +356,17 @@ def drop_nan(
     key: Union[str, list[str]],
     slot: Union[str, None] = "obsm",
 ):
+    """Remove observations with NaN values from the AnnData object.
+
+    Args:
+        adata (AnnData): Annotated data matrix.
+        key (Union[str, List[str]]): Key or list of keys representing the data to be checked for NaN values.
+        slot (Optional[str], optional): Slot to check for NaN values. Defaults to "obsm".
+
+    Returns
+    -------
+        AnnData: Annotated data matrix with NaN observations removed.
+    """
     if isinstance(key, str):
         key_list = [key]
     else:
