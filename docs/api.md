@@ -11,6 +11,9 @@
 
     io.init_omop
     io.to_dataframe
+    io.extract_features
+    io.extract_note
+    io.from_dataframe
 ```
 
 ## Preprocessing

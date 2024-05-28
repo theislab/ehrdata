@@ -10,9 +10,10 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
 authors = [
-    {name = "Lukas Heumos"},
+    {name = "Xinyue Zhang"},
 ]
 maintainers = [
+    {name = "Xinyue Zhang", email = "xinyue.zhang@tum.de"},
     {name = "Lukas Heumos", email = "lukas.heumos@posteo.net"},
 ]
 urls.Documentation = "https://ehrdata.readthedocs.io/"
