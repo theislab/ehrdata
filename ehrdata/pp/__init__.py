@@ -1,1 +1,1 @@
-from ehrdata.pp._omop import drop_nan, get_feature_statistics, qc_lab_measurements
+from ehrdata.pp._omop import last_observation_carried_forward, time_interval_table
