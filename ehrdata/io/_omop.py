@@ -25,7 +25,7 @@ def init_omop(
     make_filename_lowercase: bool = True,
     use_dask: bool = False,
     level: Literal["stay_level", "patient_level"] = "stay_level",
-    load_tables: Optional[Union[str, list[str], tuple[str], Literal["auto"]]] = None,
+    load_tables: str | list[str] | tuple[str] | Literal["auto"] | None = None,
     remove_empty_column: bool = True,
 ) -> AnnData:
     """Initialize an OMOP database, load tables, and create anndata object.
