@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 import csv
 import glob
 import numbers
 import os
 import warnings
 from pathlib import Path
-from typing import Union
 
 import dask.dataframe as dd
 import numpy as np
@@ -282,22 +283,22 @@ def read_table(
     adata_dict: dict,
     table_name: str,
     dtype: dict = None,
-    parse_dates: Union[list[str], str] = None,
+    parse_dates: list[str] | str = None,
     index: str = None,
-    usecols: Union[list[str], str] = None,
+    usecols: list[str] | str = None,
     remove_empty_column: bool = True,
     use_dask: bool = None,
-) -> Union[pd.DataFrame, dd.DataFrame]:
+) -> pd.DataFrame | dd.DataFrame:
     """Read the table either in CSV or Parquet format using pandas or dask
 
     Args:
-        adata_dict (dict): a dictionary containing filepath_dict, delimiter, use_dask, tables information
-        table_name (str, Optional): Table name in OMOP CDM v5.4.
-        dtype (dict, Optional): Data type of the columns. Defaults to None.
-        parse_dates (Union[List[str], str], Optional): Columns to parse as dates. Defaults to None.
-        index (str, Optional): set the index of the DataFrame. Defaults to None.
-        usecols (Union[List[str], str], Optional): Columns to read. Defaults to None.
-        use_dask (bool, Optional): Whether to use dask. It is recommended to use dask when the table is large. Defaults to None.
+        adata_dict: a dictionary containing filepath_dict, delimiter, use_dask, tables information
+        table_name: Table name in OMOP CDM v5.4.
+        dtype: Data type of the columns. Defaults to None.
+        parse_dates: Columns to parse as dates. Defaults to None.
+        index: set the index of the DataFrame. Defaults to None.
+        usecols: Columns to read. Defaults to None.
+        use_dask: Whether to use dask. It is recommended to use dask when the table is large. Defaults to None.
 
     Returns
     -------
@@ -362,19 +363,17 @@ def read_table(
     return df
 
 
-def map_concept_id(
-    adata_dict: dict, concept_id: Union[str, list[int]], verbose: bool = True
-) -> tuple[list[int], list[int]]:
+def map_concept_id(adata_dict: dict, concept_id: str | list[int], verbose: bool = True) -> tuple[list[int], list[int]]:
     """Map between concept_id_1 and concept_id_2 using concept_relationship table
 
     Args:
-        adata_dict (dict): a dictionary containing filepath_dict, delimiter, tables information.
-        concept_id (Union[str, list[int]]): It could be a single concept_id or a list of concept_id.
-        verbose (bool, Optional): Defaults to True.
+        adata_dict: a dictionary containing filepath_dict, delimiter, tables information.
+        concept_id: It could be a single concept_id or a list of concept_id.
+        verbose: Defaults to True.
 
     Returns
     -------
-        Tuple[list[int], list[int]]: a tuple of list of concept_id_1 and list of concept_id_2. If no map is found, the concept_id_1 and concept_id_2 will be the same.
+        (concept_id1, concept_id2) a tuple of list of concept_id_1 and list of concept_id_2. If no map is found, the concept_id_1 and concept_id_2 will be the same.
     """
     filepath_dict = adata_dict["filepath_dict"]
     tables = adata_dict["tables"]
@@ -481,7 +480,7 @@ def df_to_dict(df: pd.DataFrame, key: str, value: str) -> dict:
 
 def get_feature_info(
     adata_dict: dict,
-    features: Union[str, int, list[Union[str, int]]] = None,
+    features: str | int | list[str | int] = None,
     ignore_not_shown_in_concept_table: bool = True,
     exact_match: bool = True,
     verbose: bool = True,
@@ -489,11 +488,11 @@ def get_feature_info(
     """Get the feature information from the concept table
 
     Args:
-        adata_dict (dict): a dictionary containing filepath_dict, delimiter, tables information.
-        features (Union[str, int, list[Union[str, int]]], Optional): a feature name or a feature id. Defaults to None.
-        ignore_not_shown_in_concept_table (bool, Optional): If True, it will ignore the features that are not shown in the concept table. Defaults to True.
-        exact_match (bool, Optional): If True, it will only return the exact match if the feature name is input. Defaults to True.
-        verbose (bool, Optional): Defaults to True.
+        adata_dict : a dictionary containing filepath_dict, delimiter, tables information.
+        features: a feature name or a feature id. Defaults to None.
+        ignore_not_shown_in_concept_table: If True, it will ignore the features that are not shown in the concept table. Defaults to True.
+        exact_match: If True, it will only return the exact match if the feature name is input. Defaults to True.
+        verbose: Defaults to True.
 
     Returns
     -------

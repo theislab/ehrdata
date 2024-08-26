@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import numbers
-from typing import Union
 
 from anndata import AnnData
 from rich import print as rprint
@@ -9,10 +10,10 @@ from ehrdata.utils._omop_utils import df_to_dict, get_column_types, read_table
 
 # TODO: overhaul
 def get_concept_name(
-    adata: Union[AnnData, dict],
-    concept_id: Union[str, list],
+    adata: AnnData | dict,
+    concept_id: str | list,
     raise_error: bool = False,
-) -> Union[str, list[str]]:
+) -> str | list[str]:
     """Get concept name from concept_id using concept table
 
     Args:
@@ -22,7 +23,7 @@ def get_concept_name(
 
     Returns
     -------
-        Union[str, list[str]]: concept_name or list of concept_name
+        concept_name: concept name or list of concept names
     """
     if isinstance(concept_id, numbers.Integral):
         concept_id = [concept_id]

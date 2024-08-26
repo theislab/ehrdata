@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Literal, Union
+from typing import Literal
 
 import duckdb
 
 
-def _check_sanity_of_folder(folder_path: Union[str, Path]):
+def _check_sanity_of_folder(folder_path: str | Path):
     pass
 
 

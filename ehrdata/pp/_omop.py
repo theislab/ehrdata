@@ -1,4 +1,6 @@
-from collections.abc import Iterable
+from __future__ import annotations
+
+from collections.abc import Sequence
 from typing import Literal
 
 from anndata import AnnData
@@ -12,7 +14,7 @@ def time_interval_table(
     start_time: str = "patient_hospital_entry",
     observation_duration: int = 48,
     interval_length: float = 60,
-    concept_ids: str | Iterable = "all",
+    concept_ids: str | Sequence = "all",
     interval_unit="minutes",
 ) -> None:
     """Takes as input extracted time series; returns person x feature x timestep table"""
