@@ -40,6 +40,7 @@ def extract_person():
 
 
 def extract_measurement():
+    # TODO: handle units if numeric values. Pint? https://github.com/hgrecco/pint
     pass
 
 
