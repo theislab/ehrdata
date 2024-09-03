@@ -35,6 +35,17 @@ def load(
         raise NotImplementedError(f"Backend {backend_handle} not supported. Choose a valid backend.")
 
 
+def extract_tables():
+    # extract person, measurements, ....
+    # define features
+    # make vars and corresponding .obsm, with specific key
+    # then can get "static" into .X with
+    # ep.ts.aggregate(adata, metric="counts")
+    # or
+    # ep.ts.aggregate(adata, metrics={counts: [Antibiotic treatment, BP measruement], "average": [Heart Rate]})
+    pass
+
+
 def extract_person():
     pass
 
