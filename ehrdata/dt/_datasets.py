@@ -50,11 +50,11 @@ def mimic_iv_omop(backend="duckdb", backend_handle=None) -> None:
         Currently, only "duckdb" is supported.
         backend_handle: A handle to the backend which shall be used. Should be a duckdb connection.
 
-    Returns
+    Returns:
     -------
         None. Maybe a report in the future
 
-    Examples
+    Examples:
     --------
         >>> import ehrapy as ep
         >>> import ehrdata as ed

@@ -21,7 +21,7 @@ def get_concept_name(
         concept_id: concept_id or list of concept_id
         raise_error: If True, raise error if concept_id not found. Defaults to False.
 
-    Returns
+    Returns:
     -------
         concept_name: concept name or list of concept names
     """

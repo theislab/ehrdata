@@ -41,7 +41,7 @@ def feature_counts(
         number: Number of top features to plot. Defaults to 20.
         use_dask: If True, dask will be used to read the tables. For large tables, it is highly recommended to use dask. If None, it will be set to adata.uns["use_dask"]. Defaults to None.
 
-    Returns
+    Returns:
     -------
         Dataframe with feature names and counts.
     """
@@ -215,7 +215,7 @@ def violin(
         ax: Matplotlib Axes object to use. If not passed, uses the current Axes instance.
         **kwds: Additional keyword arguments passed to seaborn.violinplot.
 
-    Returns
+    Returns:
     -------
         A matplotlib Axes object if ax is None, else None.
     """

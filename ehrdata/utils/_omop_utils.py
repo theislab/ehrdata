@@ -16,7 +16,7 @@ from rich import print as rprint
 def get_table_catalog_dict():
     """Get the table catalog dictionary of the OMOP CDM v5.4
 
-    Returns
+    Returns:
     -------
         Dictionary: a dictionary of the table catalog. The key is the category of the table, and the value is a list of table names
     """
@@ -67,7 +67,7 @@ def get_table_catalog_dict():
 def get_dtype_mapping():
     """Get the data type mapping of the OMOP CDM v5.4
 
-    Returns
+    Returns:
     -------
         Dictionary: a dictionary of the data type mapping from OMOP CDM v5.4 to Python
     """
@@ -101,7 +101,7 @@ def get_dtype_mapping():
 def get_omop_cdm_field_level():
     """Get the field level table sof the OMOP CDM v5.4
 
-    Returns
+    Returns:
     -------
         Pandas DataFrame
     """
@@ -121,7 +121,7 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
         delimiter (str, Optional): The delimiter of the CSV file. Defaults to None.
         make_filename_lowercase (bool, Optional): Whether to make the filename into lowercase. Defaults to True.
 
-    Returns
+    Returns:
     -------
         dict: a dictionary of the table path. The key is the table name, and the value is the path of the table
     """
@@ -207,7 +207,7 @@ def check_csv_has_only_header(file_path: str) -> bool:
     Args:
         file_path (str): The path of the CSV file
 
-    Returns
+    Returns:
     -------
         bool: True if the CSV file has only header, False otherwise
     """
@@ -231,7 +231,7 @@ def get_column_types(adata_dict: dict, table_name: str) -> dict:
         adata_dict (dict): a dictionary containing filepath_dict and delimiter information
         table_name (str): Table name in OMOP CDM v5.4.
 
-    Returns
+    Returns:
     -------
         dict: a dictionary of the column types. The key is the column name, and the value is the column type
     """
@@ -268,7 +268,7 @@ def get_primary_key(table_name: str) -> str:
     Args:
         table_name (str, Optional): Table name in OMOP CDM v5.4.
 
-    Returns
+    Returns:
     -------
         str: the primary key of the table
     """
@@ -300,7 +300,7 @@ def read_table(
         usecols: Columns to read. Defaults to None.
         use_dask: Whether to use dask. It is recommended to use dask when the table is large. Defaults to None.
 
-    Returns
+    Returns:
     -------
         a pandas or dask DataFrame
     """
@@ -371,7 +371,7 @@ def map_concept_id(adata_dict: dict, concept_id: str | list[int], verbose: bool 
         concept_id: It could be a single concept_id or a list of concept_id.
         verbose: Defaults to True.
 
-    Returns
+    Returns:
     -------
         (concept_id1, concept_id2) a tuple of list of concept_id_1 and list of concept_id_2. If no map is found, the concept_id_1 and concept_id_2 will be the same.
     """
@@ -439,7 +439,7 @@ def df_to_dict(df: pd.DataFrame, key: str, value: str) -> dict:
         key: the column name to be used as the key of the dictionary
         value: the column name to be used as the value of the dictionary
 
-    Returns
+    Returns:
     -------
         dict: a dictionary
     """
@@ -494,7 +494,7 @@ def get_feature_info(
         exact_match: If True, it will only return the exact match if the feature name is input. Defaults to True.
         verbose: Defaults to True.
 
-    Returns
+    Returns:
     -------
         a DataFrame containing the feature information
     """
