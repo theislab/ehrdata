@@ -11,6 +11,7 @@ requires-python = ">=3.9"
 license = {file = "LICENSE"}
 authors = [
     {name = "Xinyue Zhang"},
+    {name = "Eljas Roellin"},
 ]
 maintainers = [
     {name = "Xinyue Zhang", email = "xinyue.zhang@tum.de"},
@@ -20,17 +21,11 @@ urls.Documentation = "https://ehrdata.readthedocs.io/"
 urls.Source = "https://github.com/theislab/ehrdata"
 urls.Home-page = "https://github.com/theislab/ehrdata"
 dependencies = [
-    "anndata",
     "ehrapy",
-    "scanpy",
     "awkward",
-    "matplotlib",
-    "pandas",
+    "duckdb",
     "dask[complete]",
     "thefuzz",
-    "rich",
-    "seaborn",
-
     # for debug logging (referenced from the issue template)
     "session-info",
 ]
@@ -123,7 +118,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.pydocstyle]
-convention = "numpy"
+convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "docs/*" = ["I"]
