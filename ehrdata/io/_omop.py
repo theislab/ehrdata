@@ -30,7 +30,7 @@ def load(
     # load_tables: str | list[str] | tuple[str] | Literal["auto"] | None = None,
     # remove_empty_column: bool = True,
 ) -> None:
-    """Initialize a connection to the OMOP CDM Database"""
+    """Initialize a connection to the OMOP CDM Database."""
     if isinstance(backend_handle, str) or isinstance(backend_handle, Path):
         _check_sanity_of_folder(backend_handle)
     elif isinstance(backend_handle, duckdb.DuckDB):
@@ -156,7 +156,7 @@ def time_interval_table(
     # self,
     ts: ak.Array,
     obs: pd.DataFrame,
-    duckdb_instance,
+    # duckdb_instance,
     start_time: str = "patient_hospital_entry",
     observation_duration: int = 48,
     interval_length: float = 60,

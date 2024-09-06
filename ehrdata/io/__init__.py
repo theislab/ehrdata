@@ -4,8 +4,10 @@ from ehrdata.io._omop import (
     extract_measurement,
     extract_note,
     extract_observation,
+    extract_observation_period,
     extract_person,
     extract_procedure_occurrence,
     extract_specimen,
     load,
+    time_interval_table,
 )

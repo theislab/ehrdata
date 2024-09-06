@@ -1,24 +1,22 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import Literal
 
 from anndata import AnnData
 
-
 # TODO: check against aggregate_timeseries_in_bins
 # TODO: here just some draft arguments to spark ideas
-def time_interval_table(
-    self,
-    duckdb_instance,
-    start_time: str = "patient_hospital_entry",
-    observation_duration: int = 48,
-    interval_length: float = 60,
-    concept_ids: str | Sequence = "all",
-    interval_unit="minutes",
-) -> None:
-    """Takes as input extracted time series; returns person x feature x timestep table"""
-    pass
+# def time_interval_table(
+#     self,
+#     duckdb_instance,
+#     start_time: str = "patient_hospital_entry",
+#     observation_duration: int = 48,
+#     interval_length: float = 60,
+#     concept_ids: str | Sequence = "all",
+#     interval_unit="minutes",
+# ) -> None:
+#     """Takes as input extracted time series; returns person x feature x timestep table"""
+#     pass
 
 
 # TODO should be able to also extract data from .obsm
