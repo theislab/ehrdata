@@ -1,1 +1,1 @@
-from ehrdata.pp._omop import last_observation_carried_forward, time_interval_table
+from ehrdata.pp._omop import get_feature_statistics, last_observation_carried_forward
