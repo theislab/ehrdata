@@ -1,7 +1,7 @@
 from importlib.metadata import version
 
-from . import io, pl, pp, tl
+from . import dt, io, pl, pp, tl
 
-__all__ = ["pl", "pp", "tl", "io"]
+__all__ = ["pl", "pp", "tl", "io", "dt"]
 
 __version__ = "0.0.0"

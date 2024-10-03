@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import datetime
 import warnings
 from collections.abc import Sequence
 from functools import partial
-from typing import Literal, Optional, Union
+from typing import Literal
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -39,7 +41,7 @@ def feature_counts(
         number: Number of top features to plot. Defaults to 20.
         use_dask: If True, dask will be used to read the tables. For large tables, it is highly recommended to use dask. If None, it will be set to adata.uns["use_dask"]. Defaults to None.
 
-    Returns
+    Returns:
     -------
         Dataframe with feature names and counts.
     """
@@ -83,16 +85,16 @@ def feature_counts(
 def plot_timeseries(
     adata: AnnData,
     visit_occurrence_id: int,
-    key: Union[str, list[str]],
-    slot: Union[str, None] = "obsm",
+    key: str | list[str],
+    slot: str | None = "obsm",
     value_key: str = "value_as_number",
     time_key: str = "measurement_datetime",
     x_label: str = None,
     y_label: str = None,
     title: str = None,
-    from_time: Optional[Union[str, datetime.datetime]] = None,
-    to_time: Optional[Union[str, datetime.datetime]] = None,
-    show: Optional[bool] = None,
+    from_time: str | datetime.datetime | None = None,
+    to_time: str | datetime.datetime | None = None,
+    show: bool | None = None,
 ):
     """Plot timeseries data using data from adata.obsm.
 
@@ -170,23 +172,23 @@ def plot_timeseries(
 def violin(
     adata: AnnData,
     obsm_key: str = None,
-    keys: Union[str, Sequence[str]] = None,
-    groupby: Optional[str] = None,
-    log: Optional[bool] = False,
-    use_raw: Optional[bool] = None,
+    keys: str | Sequence[str] = None,
+    groupby: str | None = None,
+    log: bool | None = False,
+    use_raw: bool | None = None,
     stripplot: bool = True,
-    jitter: Union[float, bool] = True,
+    jitter: float | bool = True,
     size: int = 1,
-    layer: Optional[str] = None,
+    layer: str | None = None,
     scale: Literal["area", "count", "width"] = "width",
-    order: Optional[Sequence[str]] = None,
-    multi_panel: Optional[bool] = None,
+    order: Sequence[str] | None = None,
+    multi_panel: bool | None = None,
     xlabel: str = "",
-    ylabel: Union[str, Sequence[str]] = None,
-    rotation: Optional[float] = None,
-    show: Optional[bool] = None,
-    save: Union[bool, str] = None,
-    ax: Optional[Axes] = None,
+    ylabel: str | Sequence[str] = None,
+    rotation: float | None = None,
+    show: bool | None = None,
+    save: bool | str | None = None,
+    ax: Axes | None = None,
     **kwds,
 ):  # pragma: no cover
     """Violin plot.
@@ -213,7 +215,7 @@ def violin(
         ax: Matplotlib Axes object to use. If not passed, uses the current Axes instance.
         **kwds: Additional keyword arguments passed to seaborn.violinplot.
 
-    Returns
+    Returns:
     -------
         A matplotlib Axes object if ax is None, else None.
     """
