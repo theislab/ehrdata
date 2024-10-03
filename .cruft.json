@@ -1,0 +1,30 @@
+{
+  "template": "https://github.com/scverse/cookiecutter-scverse",
+  "commit": "ab6df8677b2e65fc8ae7ae9b7425373b706af3ee",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "project_name": "ehrdata",
+      "package_name": "ehrdata",
+      "project_description": "A Python package for EHR data",
+      "author_full_name": "Eljas Roellin, Lukas Heumos, Xinyue Zhang",
+      "author_email": "eljas.roellin@helmholtz-munich.de",
+      "github_user": "theislab",
+      "github_repo": "ehrdata",
+      "license": "Apache License Version 2.0",
+      "ide_integration": true,
+      "_copy_without_render": [
+        ".github/workflows/build.yaml",
+        ".github/workflows/test.yaml",
+        "docs/_templates/autosummary/**.rst"
+      ],
+      "_render_devdocs": false,
+      "_jinja2_env_vars": {
+        "lstrip_blocks": true,
+        "trim_blocks": true
+      },
+      "_template": "https://github.com/scverse/cookiecutter-scverse"
+    }
+  },
+  "directory": null
+}
