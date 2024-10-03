@@ -14,7 +14,7 @@ from rich import print as rprint
 
 
 def get_table_catalog_dict():
-    """Get the table catalog dictionary of the OMOP CDM v5.4
+    """Get the table catalog dictionary of the OMOP CDM v5.4.
 
     Returns:
     -------
@@ -65,7 +65,7 @@ def get_table_catalog_dict():
 
 
 def get_dtype_mapping():
-    """Get the data type mapping of the OMOP CDM v5.4
+    """Get the data type mapping of the OMOP CDM v5.4.
 
     Returns:
     -------
@@ -99,7 +99,7 @@ def get_dtype_mapping():
 
 
 def get_omop_cdm_field_level():
-    """Get the field level table sof the OMOP CDM v5.4
+    """Get the field level table sof the OMOP CDM v5.4.
 
     Returns:
     -------
@@ -112,7 +112,7 @@ def get_omop_cdm_field_level():
 
 # TODO also check column data type
 def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_lowercase: bool = True) -> dict:
-    """Check if the data adheres to the OMOP Common Data Model (CDM) version 5.4 standards
+    """Check if the data adheres to the OMOP Common Data Model (CDM) version 5.4 standards.
 
     Check if the table name and column names adhere to the OMOP CDM v5.4
 
@@ -202,7 +202,7 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
 
 
 def check_csv_has_only_header(file_path: str) -> bool:
-    """Check if the CSV file has only header
+    """Check if the CSV file has only header.
 
     Args:
         file_path (str): The path of the CSV file
@@ -225,7 +225,7 @@ def check_csv_has_only_header(file_path: str) -> bool:
 
 
 def get_column_types(adata_dict: dict, table_name: str) -> dict:
-    """Get the column types of the table
+    """Get the column types of the table.
 
     Args:
         adata_dict (dict): a dictionary containing filepath_dict and delimiter information
@@ -263,7 +263,7 @@ def get_column_types(adata_dict: dict, table_name: str) -> dict:
 
 
 def get_primary_key(table_name: str) -> str:
-    """Get the primary key of the table
+    """Get the primary key of the table.
 
     Args:
         table_name (str, Optional): Table name in OMOP CDM v5.4.
@@ -289,7 +289,7 @@ def read_table(
     remove_empty_column: bool = True,
     use_dask: bool = None,
 ) -> pd.DataFrame | dd.DataFrame:
-    """Read the table either in CSV or Parquet format using pandas or dask
+    """Read the table either in CSV or Parquet format using pandas or dask.
 
     Args:
         adata_dict: a dictionary containing filepath_dict, delimiter, use_dask, tables information
@@ -298,6 +298,7 @@ def read_table(
         parse_dates: Columns to parse as dates. Defaults to None.
         index: set the index of the DataFrame. Defaults to None.
         usecols: Columns to read. Defaults to None.
+        remove_empty_column: Whether empty columns should be removed.
         use_dask: Whether to use dask. It is recommended to use dask when the table is large. Defaults to None.
 
     Returns:
@@ -364,7 +365,7 @@ def read_table(
 
 
 def map_concept_id(adata_dict: dict, concept_id: str | list[int], verbose: bool = True) -> tuple[list[int], list[int]]:
-    """Map between concept_id_1 and concept_id_2 using concept_relationship table
+    """Map between concept_id_1 and concept_id_2 using concept_relationship table.
 
     Args:
         adata_dict: a dictionary containing filepath_dict, delimiter, tables information.
@@ -432,7 +433,7 @@ def map_concept_id(adata_dict: dict, concept_id: str | list[int], verbose: bool 
 
 
 def df_to_dict(df: pd.DataFrame, key: str, value: str) -> dict:
-    """Convert a DataFrame to a dictionary
+    """Convert a DataFrame to a dictionary.
 
     Args:
         df: a DataFrame
@@ -485,7 +486,7 @@ def get_feature_info(
     exact_match: bool = True,
     verbose: bool = True,
 ) -> pd.DataFrame:
-    """Get the feature information from the concept table
+    """Get the feature information from the concept table.
 
     Args:
         adata_dict : a dictionary containing filepath_dict, delimiter, tables information.

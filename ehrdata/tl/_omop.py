@@ -14,7 +14,7 @@ def get_concept_name(
     concept_id: str | list,
     raise_error: bool = False,
 ) -> str | list[str]:
-    """Get concept name from concept_id using concept table
+    """Get concept name from concept_id using concept table.
 
     Args:
         adata: Anndata object or adata.uns
