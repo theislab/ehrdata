@@ -25,6 +25,8 @@ classifiers = [
 ]
 dependencies = [
   "anndata",
+  "awkward",
+  "duckdb",
   # for debug logging (referenced from the issue template)
   "session-info",
 ]
@@ -48,9 +50,20 @@ optional-dependencies.doc = [
   "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
 ]
+optional-dependencies.ehrapy = [
+  "ehrapy",
+]
+optional-dependencies.lamin = [
+  "bionty",
+  "lamindb",
+  "omop",
+]
 optional-dependencies.test = [
   "coverage",
   "pytest",
+]
+optional-dependencies.vitessce = [
+  "vitessce[all]",
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://ehrdata.readthedocs.io/"
