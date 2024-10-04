@@ -63,7 +63,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
         data_path = "ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9"
 
     if os.path.exists(data_path):
-        print(f"Load downloaded tables from {data_path}")
+        print(f"Path to data exists, load tables from there: {data_path}")
     else:
         print("Downloading data...")
         URL = "https://physionet.org/static/published-projects/mimic-iv-demo-omop/mimic-iv-demo-data-in-the-omop-common-data-model-0.9.zip"
