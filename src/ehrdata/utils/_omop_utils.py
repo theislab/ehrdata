@@ -7,7 +7,7 @@ import os
 import warnings
 from pathlib import Path
 
-import dask.dataframe as dd
+# import dask.dataframe as dd
 import numpy as np
 import pandas as pd
 from rich import print as rprint
@@ -110,7 +110,7 @@ def get_omop_cdm_field_level():
     return df
 
 
-# TODO also check column data type
+# TODO likely do not revive, data curation with lamin should do
 def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_lowercase: bool = True) -> dict:
     """Check if the data adheres to the OMOP Common Data Model (CDM) version 5.4 standards.
 
@@ -182,7 +182,7 @@ def check_with_omop_cdm(folder_path: str, delimiter: str = None, make_filename_l
                     columns = dict_reader.fieldnames
                     columns = list(filter(None, columns))
             elif path.endswith("parquet"):
-                df = dd.read_parquet(path)
+                df = pd.read_parquet(path)
                 columns = list(df.columns)
             else:
                 raise TypeError("Only support CSV and Parquet file!")
@@ -224,6 +224,7 @@ def check_csv_has_only_header(file_path: str) -> bool:
         return False
 
 
+# TODO: likely remove
 def get_column_types(adata_dict: dict, table_name: str) -> dict:
     """Get the column types of the table.
 
@@ -246,7 +247,7 @@ def get_column_types(adata_dict: dict, table_name: str) -> dict:
             columns = dict_reader.fieldnames
             columns = list(filter(None, columns))
     elif path.endswith("parquet"):
-        df = dd.read_parquet(path)
+        df = pd.read_parquet(path)
         columns = list(df.columns)
     else:
         raise TypeError("Only support CSV and Parquet file!")
@@ -279,6 +280,7 @@ def get_primary_key(table_name: str) -> str:
     return primary_key
 
 
+# TODO: look at what this was supposed to do. likely remove.
 def read_table(
     adata_dict: dict,
     table_name: str,
@@ -288,7 +290,7 @@ def read_table(
     usecols: list[str] | str = None,
     remove_empty_column: bool = True,
     use_dask: bool = None,
-) -> pd.DataFrame | dd.DataFrame:
+) -> pd.DataFrame:
     """Read the table either in CSV or Parquet format using pandas or dask.
 
     Args:
@@ -324,7 +326,7 @@ def read_table(
                 dtype = {key: dtype[key] for key in usecols if key in dtype}
                 if parse_dates:
                     parse_dates = {key: parse_dates[key] for key in usecols if key in parse_dates}
-            df = dd.read_csv(
+            df = pd.read_csv(
                 path, delimiter=adata_dict["delimiter"], dtype=dtype, parse_dates=parse_dates, usecols=usecols
             )
         elif filetype == "parquet":
@@ -332,7 +334,7 @@ def read_table(
                 dtype = {key: dtype[key] for key in usecols if key in dtype}
                 if parse_dates:
                     parse_dates = {key: parse_dates[key] for key in usecols if key in parse_dates}
-            df = dd.read_parquet(path, dtype=dtype, parse_dates=parse_dates, columns=usecols)
+            df = pd.read_parquet(path, dtype=dtype, parse_dates=parse_dates, columns=usecols)
         else:
             raise TypeError("Only support CSV and Parquet file!")
     else:
@@ -444,7 +446,7 @@ def df_to_dict(df: pd.DataFrame, key: str, value: str) -> dict:
     -------
         dict: a dictionary
     """
-    if isinstance(df, dd.DataFrame):
+    if isinstance(df, pd.DataFrame):
         return pd.Series(df[value].compute().values, index=df[key].compute()).to_dict()
     else:
         return pd.Series(df[value].values, index=df[key]).to_dict()
