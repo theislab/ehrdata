@@ -9,10 +9,12 @@ description = "A Python package for EHR data"
 readme = "README.md"
 license = { file = "LICENSE" }
 maintainers = [
-  { name = "Eljas Roellin, Lukas Heumos, Xinyue Zhang", email = "eljas.roellin@helmholtz-munich.de" },
+  { name = "Eljas Roellin", email = "eljas.roellin@helmholtz-munich.de" },
 ]
 authors = [
-  { name = "Eljas Roellin, Lukas Heumos, Xinyue Zhang" },
+  { name = "Eljas Roellin" },
+  { name = "Lukas Heumos" },
+  { name = "Xinyue Zhang" },
 ]
 requires-python = ">=3.10"
 classifiers = [
