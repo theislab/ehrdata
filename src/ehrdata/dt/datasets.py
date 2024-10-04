@@ -43,8 +43,10 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
 
     Parameters
     ----------
-        backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
-        data_path: Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+    backend_handle
+        A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+    data_path
+        Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
 
     Returns
     -------
@@ -89,8 +91,10 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
 
     Parameters
     ----------
-        backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
-        data_path: Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+    backend_handle
+        A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+    data_path
+        Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
 
     Returns
     -------
@@ -115,8 +119,10 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
 
     Parameters
     ----------
-        backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
-        data_path: Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+    backend_handle
+        A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+    data_path
+        Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
 
     Returns
     -------
@@ -136,7 +142,7 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
     raise NotImplementedError()
 
 
-def mimic_2(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the MIMIC2 dataset"""
-    # TODO: replace mimic_2 as is in ehrapy with its dict-of-table return time - map variables to OMOP?
+    # TODO: replace mimic_ii as is in ehrapy with its dict-of-table return time - map variables to OMOP?
     raise NotImplementedError()

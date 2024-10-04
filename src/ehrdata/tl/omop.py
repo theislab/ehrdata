@@ -18,13 +18,17 @@ def get_concept_name(
 
     Parameters
     ----------
-        adata: Anndata object or adata.uns
-        concept_id: concept_id or list of concept_id
-        raise_error: If True, raise error if concept_id not found. Defaults to False.
+    adata
+        Anndata object or adata.uns
+    concept_id
+        concept_id or list of concept_id
+    raise_error
+        If True, raise error if concept_id not found. Defaults to False.
 
     Returns
     -------
-    concept_name: concept name or list of concept names
+    concept_name
+        concept name or list of concept names
     """
     if isinstance(concept_id, numbers.Integral):
         concept_id = [concept_id]
