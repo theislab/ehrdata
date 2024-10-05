@@ -24,18 +24,6 @@
     io.omop.extract_note
 ```
 
-## Datasets
-
-```{eval-rst}
-.. module:: ehrdata.dt
-.. currentmodule:: ehrdata
-
-.. autosummary::
-    :toctree: generated
-
-    dt.mimic_iv_omop
-```
-
 ## Preprocessing
 
 ```{eval-rst}
