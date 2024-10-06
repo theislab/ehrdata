@@ -1,5 +1,41 @@
 # API
 
+## Input-Output
+
+```{eval-rst}
+.. module:: ehrdata.io
+.. currentmodule:: ehrdata
+
+.. autosummary::
+    :toctree: generated
+
+    io.omop.load
+    io.omop.extract_tables
+    io.omop.extract_person
+    io.omop.extract_observation_period
+    io.omop.extract_measurement
+    io.omop.time_interval_table
+    io.omop.extract_observation
+    io.omop.extract_procedure_occurrence
+    io.omop.extract_specimen
+    io.omop.extract_device_exposure
+    io.omop.extract_drug_exposure
+    io.omop.extract_condition_occurrence
+    io.omop.extract_note
+```
+
+## Datasets
+
+```{eval-rst}
+.. module:: ehrdata.dt
+.. currentmodule:: ehrdata
+
+.. autosummary::
+    :toctree: generated
+
+    dt.mimic_iv_omop
+```
+
 ## Preprocessing
 
 ```{eval-rst}
