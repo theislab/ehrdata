@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 from anndata import AnnData
 
@@ -65,8 +64,8 @@ class EHRData:
 
         if r is not None:
             self.layers[R_LAYER_KEY] = r
-        else:
-            self.layers[R_LAYER_KEY] = np.empty((self._adata.shape[0], 0, 0))
+        # else:
+        #     self.layers[R_LAYER_KEY] = np.zeros((self._adata.shape[0], self._adata.shape[1], 0))
 
         if t is not None:
             if isinstance(t, pd.DataFrame):
@@ -189,7 +188,10 @@ class EHRData:
     @property
     def r(self):
         """3-Dimensional tensor, aligned with obs along first axis, var along second axis, and allowing a 3rd axis."""
-        return self._adata.layers[R_LAYER_KEY]
+        if R_LAYER_KEY not in self._adata.layers.keys():
+            return None
+        else:
+            return self._adata.layers[R_LAYER_KEY]
 
     @r.setter
     def r(self, input):

@@ -7,7 +7,7 @@ from ehrdata.core.constants import R_LAYER_KEY
 
 def test_ehrdata_init_empty():
     edata = EHRData()
-    assert len(edata.r.shape) == 3
+    assert edata.r is None
 
 
 def test_ehrdata_init_standard():
