@@ -1,12 +1,11 @@
 import shutil
 from pathlib import Path
-
 import duckdb
 import pytest
 
 from ehrdata.dt import gibleed_omop, mimic_iv_omop, synthea27nj_omop
 
-TEST_DATA_DIR = Path("ehrapy_data")
+TEST_DATA_DIR = Path(__file__).parent / "ehrapy_data"
 
 
 @pytest.fixture(scope="function")
@@ -18,41 +17,44 @@ def duckdb_connection():
 
 
 def test_mimic_iv_omop(duckdb_connection):
-    """Test loading the GIBleed dataset."""
+    """Test loading the MIMIC-IV dataset."""
     test_path = TEST_DATA_DIR / "mimic-iv-demo-data-in-the-omop-common-data-model-0.9"
+    print(f"Testing MIMIC-IV OMOP with path: {test_path.resolve()}")
     mimic_iv_omop(backend_handle=duckdb_connection, data_path=test_path)
 
     # Verify that tables are created in DuckDB
-    tables = duckdb_connection.execute("SHOW TABLES;").fetchall()
+    tables = duckdb_connection.execute("SHOW TABLES").fetchall()
     assert len(tables) > 0, f"No tables were loaded into DuckDB for MIMIC-IV dataset. {list(test_path.iterdir())}"
 
 
 def test_gibleed_omop(duckdb_connection):
     """Test loading the GIBleed dataset."""
     test_path = TEST_DATA_DIR / "GIBleed_dataset"
+    print(f"Testing GIBleed OMOP with path: {test_path.resolve()}")
     gibleed_omop(backend_handle=duckdb_connection, data_path=test_path)
 
     # Verify that tables are created in DuckDB
-    tables = duckdb_connection.execute("SHOW TABLES;").fetchall()
+    tables = duckdb_connection.execute("SHOW TABLES").fetchall()
     assert len(tables) > 0, f"No tables were loaded into DuckDB for GIBleed dataset. {list(test_path.iterdir())}"
 
 
 def test_synthea27nj_omop(duckdb_connection):
     """Test loading the Synthe27Nj dataset."""
     test_path = TEST_DATA_DIR / "Synthea27Nj"
+    print(f"Testing Synthea27Nj OMOP with path: {test_path.resolve()}")
     synthea27nj_omop(backend_handle=duckdb_connection, data_path=test_path)
 
     # Verify that tables are created in DuckDB
-    tables = duckdb_connection.execute("SHOW TABLES;").fetchall()
+    tables = duckdb_connection.execute("SHOW TABLES").fetchall()
     assert len(tables) > 0, f"No tables were loaded into DuckDB for Synthea27Nj dataset. {list(test_path.iterdir())}"
 
 
-# @pytest.fixture(scope="session", autouse=True)
-# def cleanup_test_data():
-#     """Fixture to clean up test data directory after tests."""
-#     yield
-#     if TEST_DATA_DIR.exists():
-#         shutil.rmtree(TEST_DATA_DIR)
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_data():
+    """Fixture to clean up test data directory after tests."""
+    yield
+    if TEST_DATA_DIR.exists():
+        shutil.rmtree(TEST_DATA_DIR)
 
 
 if __name__ == "__main__":
