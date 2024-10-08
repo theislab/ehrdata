@@ -1,8 +1,9 @@
+import shutil
 from pathlib import Path
 
 import duckdb
 import pytest
-import shutil
+
 from ehrdata.dt import gibleed_omop, mimic_iv_omop, synthea27nj_omop
 
 TEST_DATA_DIR = Path(__file__).parent / "ehrapy_data"
