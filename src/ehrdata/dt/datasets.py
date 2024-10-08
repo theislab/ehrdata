@@ -80,8 +80,10 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
         else:
             print(f"Failed to download the file. Status code: {response.status_code}")
             return
-        
-    extracted_folder = next((folder for folder in data_path.iterdir() if folder.is_dir() and '_csv' in folder.name), data_path)
+
+    extracted_folder = next(
+        (folder for folder in data_path.iterdir() if folder.is_dir() and "_csv" in folder.name), data_path
+    )
     return _set_up_duckdb(extracted_folder, backend_handle)
 
 
@@ -110,27 +112,25 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
         >>> ed.dt.gibleed_omop(backend_handle=con)
         >>> con.execute("SHOW TABLES;").fetchall()
     """
-
     if data_path is None:
         data_path = Path("ehrapy_data/GIBleed_dataset")
-    
+
     if data_path.exists():
         print(f"Path to data exists, load tables from there: {data_path}")
     else:
         print("Downloading data...")
         URL = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/GiBleed/GiBleed_5.3.zip"
         response = requests.get(URL)
-    
+
         if response.status_code == 200:
             # extract_path = data_path / "gibleed_data_csv"
             # extract_path.mkdir(parents=True, exist_ok=True)
-            
+
             # Use zipfile and io to open the ZIP file in memory
             with zipfile.ZipFile(io.BytesIO(response.content)) as z:
                 # Extract all contents of the ZIP file into the correct subdirectory
                 z.extractall(data_path)  # Extracting to 'extract_path'
                 print(f"Download successful. ZIP file downloaded and extracted successfully to {data_path}.")
-        
 
         else:
             print(f"Failed to download the file. Status code: {response.status_code}")
@@ -168,24 +168,24 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
     """
     if data_path is None:
         data_path = Path("ehrapy_data/Synthea27Nj")
-    
+
     if data_path.exists():
         print(f"Path to data exists, load tables from there: {data_path}")
     else:
         print("Downloading data...")
         URL = "https://raw.githubusercontent.com/darwin-eu/EunomiaDatasets/refs/heads/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip"
         response = requests.get(URL)
-    
+
         if response.status_code == 200:
             extract_path = data_path / "synthea27nj_omop_csv"
             extract_path.mkdir(parents=True, exist_ok=True)
-            
+
             # Use zipfile and io to open the ZIP file in memory
             with zipfile.ZipFile(io.BytesIO(response.content)) as z:
                 # Extract all contents of the ZIP file into the correct subdirectory
                 z.extractall(extract_path)  # Extracting to 'extract_path'
                 print(f"Download successful. ZIP file downloaded and extracted successfully to {extract_path}.")
-        
+
         else:
             print(f"Failed to download the file. Status code: {response.status_code}")
             return
