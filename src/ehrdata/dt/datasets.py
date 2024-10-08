@@ -88,9 +88,9 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
 
 
 def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-    """Loads the GIBleed dataset.
+    """Loads the GIBleed dataset in the OMOP Common Data model.
 
-    More details: https://github.com/OHDSI/EunomiaDatasets.
+    More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/GiBleed.
 
     Parameters
     ----------
@@ -138,13 +138,12 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
     extracted_folder = next(data_path.iterdir(), data_path)
     print(extracted_folder)
     return _set_up_duckdb(extracted_folder, backend_handle)
-    # # TODO:
-    # # https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/GiBleed
-    # raise NotImplementedError()
 
 
 def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-    """Loads the Synthe27Nj dataset.
+    """Loads the Synthea27NJ dataset in the OMOP Common Data model.
+
+    More details: https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/Synthea27Nj.
 
     Parameters
     ----------
@@ -192,9 +191,6 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
 
     extracted_folder = next(data_path.iterdir(), data_path)
     return _set_up_duckdb(extracted_folder, backend_handle)
-    # TODO
-    # https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/Synthea27Nj
-    raise NotImplementedError()
 
 
 def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
