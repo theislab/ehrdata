@@ -1,10 +1,13 @@
 import shutil
 from pathlib import Path
+
 import duckdb
 import pytest
-from ehrdata.dt import gibleed_omop, synthea27nj_omop, mimic_iv_omop
+
+from ehrdata.dt import gibleed_omop, synthea27nj_omop
 
 TEST_DATA_DIR = Path(__file__).parent / "ehrapy_data"
+
 
 @pytest.fixture(scope="function")
 def duckdb_connection():
@@ -12,7 +15,6 @@ def duckdb_connection():
     con = duckdb.connect()
     yield con
     con.close()
-
 
 
 def test_gibleed_omop(duckdb_connection, tmp_path):
