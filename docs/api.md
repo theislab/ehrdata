@@ -1,5 +1,17 @@
 # API
 
+## EHRData
+
+```{eval-rst}
+.. module:: ehrdata
+.. currentmodule:: ehrdata
+
+.. autosummary::
+    :toctree: generated
+
+    EHRData
+```
+
 ## Input-Output
 
 ```{eval-rst}
