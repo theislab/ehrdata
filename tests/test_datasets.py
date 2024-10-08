@@ -45,12 +45,12 @@ def test_synthea27nj_omop(duckdb_connection):
     assert len(tables) > 0, f"No tables were loaded into DuckDB for Synthea27Nj dataset. {list(test_path.iterdir())}"
 
 
-@pytest.fixture(scope="session", autouse=True)
-def cleanup_test_data():
-    """Fixture to clean up test data directory after tests."""
-    yield
-    if TEST_DATA_DIR.exists():
-        shutil.rmtree(TEST_DATA_DIR)
+# @pytest.fixture(scope="session", autouse=True)
+# def cleanup_test_data():
+#     """Fixture to clean up test data directory after tests."""
+#     yield
+#     if TEST_DATA_DIR.exists():
+#         shutil.rmtree(TEST_DATA_DIR)
 
 
 if __name__ == "__main__":
