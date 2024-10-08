@@ -3,7 +3,6 @@ from __future__ import annotations
 import pandas as pd
 from anndata import AnnData
 
-# from mudata import MuData
 from ehrdata.core.constants import R_LAYER_KEY
 
 
@@ -14,10 +13,10 @@ class EHRData:
         self,
         adata=None,
         X=None,
-        r=None,  # NEW
+        r=None,
         obs=None,
         var=None,
-        t=None,  # NEW
+        t=None,
         uns=None,
         obsm=None,
         varm=None,
@@ -33,7 +32,7 @@ class EHRData:
         varp=None,
         oidx=None,
         vidx=None,
-        tidx=None,  # NEW. TODO. Not sure how to use this best
+        tidx=None,
     ):
         """EHRData object."""
         if adata is None:
@@ -191,28 +190,6 @@ class EHRData:
     def shape(self):
         """Shape of the data matrix without r's third dimension."""
         return self._adata.shape
-
-    # the holy grail of this whole effort
-    # @property
-    # def TS(self):
-    #     return self._adata.layers[TS_LAYERS_KEY]
-
-    # @TS.setter
-    # def TS(self, time_tensor):
-    #     self._adata.layers[TS_LAYERS_KEY] = time_tensor #.transpose(2,1,0)
-
-    # use of mudata allows to use layers
-    # @property
-    # def ts_layers(self):...
-
-    # @ts_layers.setter
-    # def ts_layers(self, key, time_tensor):...
-
-    # def __repr__(self):
-    #     return f"EHRData object with n_obs x n_var = {self._mudata.n_obs} x {self._adata.n_vars}, and a timeseries of {len(self.time)} steps.\n \
-    #         shape of .X: {self._adata.shape} \n \
-    #         shape of .TS: ({self.TS.shape if self.TS is not None else (0,0,0)}) \n" #+ \
-    #         # f"{self.print_2d_cube(self.X.shape[0], self.X.shape[1])}" \
 
     def __getitem__(self, index):
         oidx, vidx, tidx = self._unpack_index(index)
