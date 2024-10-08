@@ -172,7 +172,7 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
         print(f"Path to data exists, load tables from there: {data_path}")
     else:
         print("Downloading data...")
-        URL = "https://raw.githubusercontent.com/darwin-eu/EunomiaDatasets/refs/heads/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip"
+        URL = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip"
         response = requests.get(URL)
 
         if response.status_code == 200:
