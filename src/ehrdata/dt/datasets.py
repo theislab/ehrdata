@@ -81,9 +81,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
             print(f"Failed to download the file. Status code: {response.status_code}")
             return
 
-    extracted_folder = next(
-        (folder for folder in data_path.iterdir() if folder.is_dir() and "_csv" in folder.name), data_path
-    )
+    extracted_folder = next((folder for folder in data_path.iterdir() if folder.is_dir() and "_csv" in folder.name and "__MACOSX" not in folder.name), data_path)
     return _set_up_duckdb(extracted_folder, backend_handle)
 
 
@@ -134,9 +132,9 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
 
         else:
             print(f"Failed to download the file. Status code: {response.status_code}")
-            return
+            
     extracted_folder = next(data_path.iterdir(), data_path)
-    print(extracted_folder)
+    # extracted_folder = next((folder for folder in data_path.iterdir() if folder.is_dir() and "_csv" in folder.name and "__MACOSX" not in folder.name), data_path)
     return _set_up_duckdb(extracted_folder, backend_handle)
 
 
@@ -189,7 +187,7 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
             print(f"Failed to download the file. Status code: {response.status_code}")
             return
 
-    extracted_folder = next(data_path.iterdir(), data_path)
+    extracted_folder = next((folder for folder in data_path.iterdir() if folder.is_dir() and "_csv" in folder.name and "__MACOSX" not in folder.name), data_path)
     return _set_up_duckdb(extracted_folder, backend_handle)
 
 
