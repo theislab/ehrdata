@@ -4,7 +4,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from ehrdata.dt import gibleed_omop, synthea27nj_omop, mimic_iv_omop
+from ehrdata.dt import gibleed_omop, mimic_iv_omop, synthea27nj_omop
+
 TEST_DATA_DIR = Path("ehrapy_data")
 
 
@@ -14,6 +15,7 @@ def duckdb_connection():
     con = duckdb.connect()
     yield con
     con.close()
+
 
 def test_mimic_iv_omop(duckdb_connection):
     """Test loading the GIBleed dataset."""
