@@ -4,7 +4,6 @@ from pathlib import Path
 import duckdb
 import pytest
 
-# Assuming the dataset loading functions are in the ehrdata.dt module
 from ehrdata.dt import gibleed_omop, synthea27nj_omop
 
 TEST_DATA_DIR = Path("ehrapy_data")
