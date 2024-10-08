@@ -6,7 +6,8 @@ from ehrdata.core.constants import R_LAYER_KEY
 
 
 def test_ehrdata_init_empty():
-    EHRData()
+    edata = EHRData()
+    assert edata.r is None
 
 
 def test_ehrdata_init_standard():
@@ -75,3 +76,8 @@ def test_ehrdata_slice_3D():
     assert adata_sliced.shape[1] == 1
     assert adata_sliced.layers[R_LAYER_KEY].shape == (2, 1, 1)
     assert adata_sliced.t.shape == (1, 0)
+
+
+def test_copy():
+    edata = EHRData()
+    edata.copy()
