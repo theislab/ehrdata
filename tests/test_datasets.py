@@ -4,9 +4,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from ehrdata.dt import gibleed_omop, synthea27nj_omop
-
-TEST_DATA_DIR = Path(__file__).parent / "ehrapy_data"
+from ehrdata.dt import gibleed_omop, synthea27nj_omop, mimic_iv_omop
+TEST_DATA_DIR = Path("ehrapy_data")
 
 
 @pytest.fixture(scope="function")
@@ -16,10 +15,19 @@ def duckdb_connection():
     yield con
     con.close()
 
-
-def test_gibleed_omop(duckdb_connection, tmp_path):
+def test_mimic_iv_omop(duckdb_connection):
     """Test loading the GIBleed dataset."""
-    test_path = tmp_path / "gibleed_omop_test"
+    test_path = TEST_DATA_DIR / "mimic-iv-demo-data-in-the-omop-common-data-model-0.9"
+    mimic_iv_omop(backend_handle=duckdb_connection, data_path=test_path)
+
+    # Verify that tables are created in DuckDB
+    tables = duckdb_connection.execute("SHOW TABLES;").fetchall()
+    assert len(tables) > 0, f"No tables were loaded into DuckDB for MIMIC-IV dataset. {list(test_path.iterdir())}"
+
+
+def test_gibleed_omop(duckdb_connection):
+    """Test loading the GIBleed dataset."""
+    test_path = TEST_DATA_DIR / "GIBleed_dataset"
     gibleed_omop(backend_handle=duckdb_connection, data_path=test_path)
 
     # Verify that tables are created in DuckDB
@@ -27,9 +35,9 @@ def test_gibleed_omop(duckdb_connection, tmp_path):
     assert len(tables) > 0, f"No tables were loaded into DuckDB for GIBleed dataset. {list(test_path.iterdir())}"
 
 
-def test_synthea27nj_omop(duckdb_connection, tmp_path):
+def test_synthea27nj_omop(duckdb_connection):
     """Test loading the Synthe27Nj dataset."""
-    test_path = tmp_path / "synthea27nj_test"
+    test_path = TEST_DATA_DIR / "Synthea27Nj"
     synthea27nj_omop(backend_handle=duckdb_connection, data_path=test_path)
 
     # Verify that tables are created in DuckDB
