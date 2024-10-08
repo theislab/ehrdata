@@ -1,13 +1,10 @@
 import shutil
 from pathlib import Path
-
 import duckdb
 import pytest
+from ehrdata.dt import gibleed_omop, synthea27nj_omop, mimic_iv_omop
 
-from ehrdata.dt import gibleed_omop, synthea27nj_omop
-
-TEST_DATA_DIR = Path("ehrapy_data")
-
+TEST_DATA_DIR = Path(__file__).parent / "ehrapy_data"
 
 @pytest.fixture(scope="function")
 def duckdb_connection():
@@ -17,24 +14,25 @@ def duckdb_connection():
     con.close()
 
 
-def test_gibleed_omop(duckdb_connection):
+
+def test_gibleed_omop(duckdb_connection, tmp_path):
     """Test loading the GIBleed dataset."""
-    test_path = TEST_DATA_DIR / "gibleed_omop_test"
+    test_path = tmp_path / "gibleed_omop_test"
     gibleed_omop(backend_handle=duckdb_connection, data_path=test_path)
 
     # Verify that tables are created in DuckDB
     tables = duckdb_connection.execute("SHOW TABLES;").fetchall()
-    assert len(tables) > 0, "No tables were loaded into DuckDB for GIBleed dataset."
+    assert len(tables) > 0, f"No tables were loaded into DuckDB for GIBleed dataset. {list(test_path.iterdir())}"
 
 
-def test_synthea27nj_omop(duckdb_connection):
+def test_synthea27nj_omop(duckdb_connection, tmp_path):
     """Test loading the Synthe27Nj dataset."""
-    test_path = TEST_DATA_DIR / "synthea27nj_test"
+    test_path = tmp_path / "synthea27nj_test"
     synthea27nj_omop(backend_handle=duckdb_connection, data_path=test_path)
 
     # Verify that tables are created in DuckDB
     tables = duckdb_connection.execute("SHOW TABLES;").fetchall()
-    assert len(tables) > 0, "No tables were loaded into DuckDB for Synthea27Nj dataset."
+    assert len(tables) > 0, f"No tables were loaded into DuckDB for Synthea27Nj dataset. {list(test_path.iterdir())}"
 
 
 @pytest.fixture(scope="session", autouse=True)
