@@ -1,8 +1,8 @@
-import pytest
-import duckdb
-import os
-from pathlib import Path
 import shutil
+from pathlib import Path
+
+import duckdb
+import pytest
 
 # Assuming the dataset loading functions are in the ehrdata.dt module
 from ehrdata.dt import gibleed_omop, synthea27nj_omop
@@ -43,7 +43,7 @@ def cleanup_test_data():
     """Fixture to clean up test data directory after tests."""
     yield
     if TEST_DATA_DIR.exists():
-        shutil.rmtree(TEST_DATA_DIR) 
+        shutil.rmtree(TEST_DATA_DIR)
 
 
 if __name__ == "__main__":
