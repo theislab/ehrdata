@@ -34,6 +34,9 @@
     :toctree: generated
 
     dt.mimic_iv_omop
+    dt.gibleed_omop
+    dt.synthea27nj_omop
+    dt.mimic_ii
 ```
 
 ## Preprocessing

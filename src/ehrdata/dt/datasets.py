@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import io
 import os
 import zipfile
@@ -86,65 +84,65 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
     return _set_up_duckdb(data_path + "/1_omop_data_csv", backend_handle)
 
 
-# def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-#     """Loads the GIBleed dataset.
+def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+    """Loads the GIBleed dataset.
 
-#     More details: https://github.com/OHDSI/EunomiaDatasets.
+    More details: https://github.com/OHDSI/EunomiaDatasets.
 
-#     Parameters
-#     ----------
-#     backend_handle
-#         A handle to the backend which shall be used. Only duckdb connection supported at the moment.
-#     data_path
-#         Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+    Parameters
+    ----------
+    backend_handle
+        A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+    data_path
+        Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
 
-#     Returns
-#     -------
-#     Returns nothing, but adds the tables to the backend via the handle.
+    Returns
+    -------
+    Returns nothing, but adds the tables to the backend via the handle.
 
-#     Examples
-#     --------
-#         >>> import ehrapy as ep
-#         >>> import ehrdata as ed
-#         >>> import duckdb
-#         >>> con = duckdb.connect()
-#         >>> ed.dt.gibleed_omop(backend_handle=con)
-#         >>> con.execute("SHOW TABLES;").fetchall()
-#     """
-#     # TODO:
-#     # https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/GiBleed
-#     raise NotImplementedError()
-
-
-# def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-#     """Loads the Synthe27Nj dataset.
-
-#     Parameters
-#     ----------
-#     backend_handle
-#         A handle to the backend which shall be used. Only duckdb connection supported at the moment.
-#     data_path
-#         Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
-
-#     Returns
-#     -------
-#     Returns nothing, but adds the tables to the backend via the handle.
-
-#     Examples
-#     --------
-#         >>> import ehrapy as ep
-#         >>> import ehrdata as ed
-#         >>> import duckdb
-#         >>> con = duckdb.connect()
-#         >>> ed.dt.synthea27nj_omop(backend_handle=con)
-#         >>> con.execute("SHOW TABLES;").fetchall()
-#     """
-#     # TODO
-#     # https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/Synthea27Nj
-#     raise NotImplementedError()
+    Examples
+    --------
+        >>> import ehrapy as ep
+        >>> import ehrdata as ed
+        >>> import duckdb
+        >>> con = duckdb.connect()
+        >>> ed.dt.gibleed_omop(backend_handle=con)
+        >>> con.execute("SHOW TABLES;").fetchall()
+    """
+    # TODO:
+    # https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/GiBleed
+    raise NotImplementedError()
 
 
-# def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-#     """Loads the MIMIC2 dataset"""
-#     # TODO: replace mimic_ii as is in ehrapy with its dict-of-table return time - map variables to OMOP?
-#     raise NotImplementedError()
+def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+    """Loads the Synthe27Nj dataset.
+
+    Parameters
+    ----------
+    backend_handle
+        A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+    data_path
+        Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+
+    Returns
+    -------
+    Returns nothing, but adds the tables to the backend via the handle.
+
+    Examples
+    --------
+        >>> import ehrapy as ep
+        >>> import ehrdata as ed
+        >>> import duckdb
+        >>> con = duckdb.connect()
+        >>> ed.dt.synthea27nj_omop(backend_handle=con)
+        >>> con.execute("SHOW TABLES;").fetchall()
+    """
+    # TODO
+    # https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/Synthea27Nj
+    raise NotImplementedError()
+
+
+def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+    """Loads the MIMIC2 dataset"""
+    # TODO: replace mimic_ii as is in ehrapy with its dict-of-table return time - map variables to OMOP?
+    raise NotImplementedError()
