@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 from anndata import AnnData
 
@@ -64,6 +65,8 @@ class EHRData:
 
         if r is not None:
             self.layers[R_LAYER_KEY] = r
+        else:
+            self.layers[R_LAYER_KEY] = np.empty((self._adata.shape[0], 0, 0))
 
         if t is not None:
             if isinstance(t, pd.DataFrame):
@@ -73,6 +76,8 @@ class EHRData:
 
         else:
             if R_LAYER_KEY not in self.layers.keys():
+                self.t = pd.DataFrame(pd.RangeIndex(1))
+            elif len(self.layers[R_LAYER_KEY].shape) <= 2:
                 self.t = pd.DataFrame(pd.RangeIndex(1))
             else:
                 self.t = pd.DataFrame(index=pd.RangeIndex(self.layers[R_LAYER_KEY].shape[2]))
@@ -144,6 +149,24 @@ class EHRData:
         self._adata.varp = input
 
     @property
+    def var_names(self):
+        """Field from AnnData."""
+        return self._adata.var_names
+
+    @var_names.setter
+    def var_names(self, input):
+        self._adata.var_names = input
+
+    @property
+    def obs_names(self):
+        """Field from AnnData."""
+        return self._adata.obs_names
+
+    @obs_names.setter
+    def obs_names(self, input):
+        self._adata.obs_names = input
+
+    @property
     def uns(self):
         """Field from AnnData."""
         return self._adata.uns
@@ -212,3 +235,7 @@ class EHRData:
             return index[0], slice(None)
         else:
             raise IndexError("invalid number of indices")
+
+    def copy(self):
+        """Returns a copy of the EHRData object."""
+        return EHRData(adata=self._adata.copy(), t=self._t.copy())

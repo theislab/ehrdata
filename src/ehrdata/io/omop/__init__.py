@@ -7,9 +7,11 @@ from .omop import (
     extract_observation,
     extract_observation_period,
     extract_person,
+    extract_person_observation_period,
     extract_procedure_occurrence,
     extract_specimen,
-    extract_tables,
+    get_time_interval_table,
     load,
-    time_interval_table,
+    setup_obs,
+    setup_variables,
 )
