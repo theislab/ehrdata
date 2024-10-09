@@ -10,7 +10,8 @@ from pathlib import Path
 # import dask.dataframe as dd
 import numpy as np
 import pandas as pd
-from rich import print as rprint
+
+# from rich import print as rprint
 
 
 def get_table_catalog_dict():
@@ -423,7 +424,7 @@ def map_concept_id(adata_dict: dict, concept_id: str | list[int], verbose: bool 
         if len(concept_id_mapped_not_found) > 0:
             # warnings.warn(f"Couldn't find a map for concept {id} in concept_relationship table!")
             if verbose:
-                rprint(f"Couldn't find a map for concept {concept_id_mapped_not_found} in concept_relationship table!")
+                print(f"Couldn't find a map for concept {concept_id_mapped_not_found} in concept_relationship table!")
     else:
         concept_id_1 = concept_id
         concept_id_2 = concept_id
@@ -509,7 +510,7 @@ def get_feature_info(
         )  # usecols=vocabularies_tables_columns["concept"],
         # concept_dict = df_to_dict(df=df_concept, key="concept_name", value="concept_id")
     else:
-        rprint("concept table is not found in the OMOP CDM v5.4!")
+        print("concept table is not found in the OMOP CDM v5.4!")
         raise ValueError
     fetures_not_shown_in_concept_table = []
 
@@ -529,7 +530,7 @@ def get_feature_info(
                     fetures_not_shown_in_concept_table.append(feature)
                     feature_name = feature_id_1
                 else:
-                    rprint(f"Feature ID - [red]{feature_id_1}[/] could not be found in concept table")
+                    print(f"Feature ID - [red]{feature_id_1}[/] could not be found in concept table")
                     raise ValueError
             match_1_ratio = 100
 
@@ -553,7 +554,7 @@ def get_feature_info(
 
                 if match_1_ratio != 100:
                     if exact_match:
-                        rprint(
+                        print(
                             f"Unable to find an exact match for [blue]{feature}[/] in the concept table.\nSimilar ones: 1) [blue]{match_1_name}[/] with match ratio [red]{match_1_ratio}[/] 2) [blue]{match_2_name}[/] with match ratio [red]{match_2_ratio}[/]"
                         )
                         raise ValueError
@@ -561,7 +562,7 @@ def get_feature_info(
                     if match_2_ratio == 100:
                         match_1_id = df_concept[df_concept["concept_name"] == match_1_name]["concept_id"].values[0]
                         match_2_id = df_concept[df_concept["concept_name"] == match_2_name]["concept_id"].values[0]
-                        rprint(
+                        print(
                             f"Found multiple exact matches for [blue]{feature}[/] in the concept table.\n1) concept id: [blue]{match_1_id}[/] 2) concept id: [blue]{match_2_id}[/]. Please specify concept_id directly."
                         )
                         raise ValueError
@@ -569,7 +570,7 @@ def get_feature_info(
             # Very rare: if only find 1 match
             else:
                 if exact_match and match_1_ratio != 1:
-                    rprint(
+                    print(
                         f"Unable to find an exact match for [red]{feature}[/] in the concept table. Similiar one: [blue]{match_1_name}[/] with match ratio [red]{match_1_ratio}[/]"
                     )
                     raise ValueError
@@ -579,7 +580,7 @@ def get_feature_info(
             feature_id_1, feature_id_2 = map_concept_id(adata_dict=adata_dict, concept_id=feature_id, verbose=False)
 
         else:
-            rprint(
+            print(
                 "Please input either [red]feature name (string)[/] or [red]feature id (integer)[/] that you want to extarct"
             )
             raise TypeError
@@ -600,7 +601,7 @@ def get_feature_info(
         # concept_code_list.append(df_concept.loc[df_concept["concept_id"] == feature_id, "concept_code"].reset_index(drop=True).compute()[0])
 
         if verbose:
-            rprint(
+            print(
                 f"Detected: feature [green]{feature_name}[/], feature ID [green]{feature_id}[/] in concept table, match ratio = [green]{match_1_ratio}."
             )
 
