@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 # -- Path setup --------------------------------------------------------------
+from contextlib import suppress
 import sys
 from datetime import datetime
 from importlib.metadata import metadata
@@ -147,5 +148,5 @@ def setup(app: Sphinx) -> None:
     """Setup lamindb for CI."""
     import lamindb as ln
 
-    if ln.connect("anonymous/lamindb") is not None:
+    with suppress(RuntimeError):
         ln.setup.init(storage="/tmp/lamindb")
