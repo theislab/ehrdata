@@ -4,7 +4,6 @@
 
 ```{eval-rst}
 .. module:: ehrdata
-.. currentmodule:: ehrdata
 
 .. autosummary::
     :toctree: generated
