@@ -49,6 +49,7 @@ optional-dependencies.doc = [
   "sphinx-tabs",
   "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
+  "ehrapy[lamin]"
 ]
 optional-dependencies.ehrapy = [
   "ehrapy",
@@ -57,6 +58,7 @@ optional-dependencies.lamin = [
   "bionty",
   "lamindb",
   "omop",
+  "rich",
 ]
 optional-dependencies.test = [
   "coverage",
@@ -75,7 +77,7 @@ installer = "uv"
 features = [ "dev" ]
 
 [tool.hatch.envs.docs]
-extra-features = [ "doc" ]
+features = [ "doc" ]
 scripts.build = "sphinx-build -M html docs docs/_build {args}"
 scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 scripts.clean = "git clean -fdX -- {args:docs}"
