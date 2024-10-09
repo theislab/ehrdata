@@ -84,5 +84,4 @@
 
     pl.basic_plot
     pl.BasicClass
-    pl.vitessce.gen_config
 ```
