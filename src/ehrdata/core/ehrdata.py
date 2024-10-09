@@ -188,10 +188,7 @@ class EHRData:
     @property
     def r(self):
         """3-Dimensional tensor, aligned with obs along first axis, var along second axis, and allowing a 3rd axis."""
-        if R_LAYER_KEY not in self._adata.layers.keys():
-            return None
-        else:
-            return self._adata.layers[R_LAYER_KEY]
+        return self._adata.layers.get(R_LAYER_KEY)
 
     @r.setter
     def r(self, input):
