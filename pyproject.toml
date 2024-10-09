@@ -7,7 +7,7 @@ name = "ehrdata"
 version = "0.0.1"
 description = "A Python package for EHR data"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
 maintainers = [
   { name = "Eljas Roellin", email = "eljas.roellin@helmholtz-munich.de" },
 ]
@@ -36,7 +36,7 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
-  "ehrapy[lamin]",
+  "ehrdata[lamin]",
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
