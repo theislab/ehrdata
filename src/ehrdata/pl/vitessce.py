@@ -71,7 +71,7 @@ def gen_config(
     )
 
     vc = VitessceConfig(schema_version="1.0.15", name=name)
-    dataset = vc.add_dataset(name="Dummy EHRData").add_object(wrapper)
+    dataset = vc.add_dataset(name=name).add_object(wrapper)
 
     views = (
         (
