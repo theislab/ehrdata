@@ -93,9 +93,9 @@ source_suffix = {
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
-    "anndata": ("https://anndata.readthedocs.io/en/stable/", None),
-    "scanpy": ("https://scanpy.readthedocs.io/en/stable/", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
+    "anndata": ("https://anndata.readthedocs.io/en/stable", None),
+    "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
+    "numpy": ("https://numpy.org/doc/stable", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -124,8 +124,9 @@ html_theme_options = {
 
 pygments_style = "default"
 
+# If building the documentation fails because of a missing link that is outside your control,
+# you can add an exception to this list:
 nitpick_ignore = [
-    # If building the documentation fails because of a missing link that is outside your control,
-    # you can add an exception to this list.
-    #     ("py:class", "igraph.Graph"),
+    # https://github.com/duckdb/duckdb-web/issues/3806
+    ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
 ]

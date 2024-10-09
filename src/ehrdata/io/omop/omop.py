@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -16,6 +16,138 @@ def _check_sanity_of_folder(folder_path: str | Path):
 
 def _check_sanity_of_database(backend_handle: duckdb.DuckDB):
     pass
+
+
+def setup_obs(
+    backend_handle: Literal[str, duckdb, Path],
+    observation_table: Literal["person", "observation_period", "person_observation_period", "condition_occurrence"],
+):
+    """Setup the observation table.
+
+    This function sets up the observation table for the EHRData project.
+    For this, a table from the OMOP CDM which represents to observed unit should be selected.
+    A unit can be a person, an observation period, the join of these two tables, or a condition occurrence.
+
+    Parameters
+    ----------
+    backend_handle
+        The backend handle to the database.
+    observation_table
+        The observation table to be used.
+
+    Returns
+    -------
+    An EHRData object with populated .obs field.
+    """
+    from ehrdata import EHRData
+
+    if observation_table == "person":
+        obs = extract_person(backend_handle)
+    elif observation_table == "observation_period":
+        obs = extract_observation_period(backend_handle)
+    elif observation_table == "person_observation_period":
+        obs = extract_person_observation_period(backend_handle)
+    elif observation_table == "condition_occurrence":
+        obs = extract_condition_occurrence(backend_handle)
+    else:
+        raise ValueError("observation_table must be either 'person', 'observation_period', or 'condition_occurrence'.")
+
+    return EHRData(obs=obs)
+
+
+def setup_variables(
+    backend_handle: Literal[str, duckdb, Path],
+    edata,
+    tables: Sequence[
+        Literal[
+            "measurement", "observation", "procedure_occurrence", "specimen", "device_exposure", "drug_exposure", "note"
+        ]
+    ],
+    start_time: Literal["observation_period_start"] | pd.Timestamp | str,
+    interval_length_number: int,
+    interval_length_unit: str,
+    num_intervals: int,
+    concept_ids: Literal["all"] | Sequence = "all",
+    aggregation_strategy: str = "last",
+):
+    """Setup the variables.
+
+    This function sets up the variables for the EHRData project.
+    For this, a selection of tables from the OMOP CDM which represents the variables should be selected.
+    The tables can be measurement, observation, procedure_occurrence, specimen, device_exposure, drug_exposure, or note.
+
+    Parameters
+    ----------
+    backend_handle
+        The backend handle to the database.
+    edata
+        The EHRData object to which the variables should be added.
+    tables
+        The tables to be used.
+    start_time
+        Starting time for values to be included. Can be 'observation_period' start, which takes the 'observation_period_start' value from obs, or a specific Timestamp.
+    interval_length_number
+        Numeric value of the length of one interval.
+    interval_length_unit
+        Unit belonging to the interval length. See the units of `pandas.to_timedelta <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.to_timedelta.html>`_
+    num_intervals
+        Numer of intervals
+
+    Returns
+    -------
+    An EHRData object with populated .var field.
+    """
+    from ehrdata import EHRData
+
+    concept_ids_present_list = []
+    time_interval_tables = []
+    for table in tables:
+        if table == "measurement":
+            concept_ids_present = (
+                backend_handle.sql("SELECT * FROM measurement").df()["measurement_concept_id"].unique()
+            )
+            extracted_awkward = extract_measurement(backend_handle)
+            time_interval_table = get_time_interval_table(
+                backend_handle,
+                extracted_awkward,
+                edata.obs,
+                start_time="observation_period_start",
+                interval_length_number=interval_length_number,
+                interval_length_unit=interval_length_unit,
+                num_intervals=num_intervals,
+                concept_ids=concept_ids,
+                aggregation_strategy=aggregation_strategy,
+            )
+        # TODO: implement the following
+        # elif table == "observation":
+        #     var = extract_observation(backend_handle)
+        # elif table == "procedure_occurrence":
+        #     var = extract_procedure_occurrence(backend_handle)
+        # elif table == "specimen":
+        #     var = extract_specimen(backend_handle)
+        # elif table == "device_exposure":
+        #     var = extract_device_exposure(backend_handle)
+        # elif table == "drug_exposure":
+        #     var = extract_drug_exposure(backend_handle)
+        # elif table == "note":
+        #     var = extract_note(backend_handle)
+        else:
+            raise ValueError(
+                "tables must be a sequence of 'measurement', 'observation', 'procedure_occurrence', 'specimen', 'device_exposure', 'drug_exposure', or 'note'."
+            )
+        concept_ids_present_list.append(concept_ids_present)
+        time_interval_tables.append(time_interval_table)
+    if len(time_interval_tables) > 1:
+        time_interval_table = np.concatenate([time_interval_table, time_interval_table], axis=1)
+        concept_ids_present = pd.concat(concept_ids_present_list)
+    else:
+        time_interval_table = time_interval_tables[0]
+        concept_ids_present = concept_ids_present_list[0]
+
+    # TODO: copy other fields too. or other way? is is somewhat scverse-y by taking and returing anndata object...
+    edata = EHRData(r=time_interval_table, obs=edata.obs, var=concept_ids_present)
+
+    return edata
 
 
 def load(
@@ -37,29 +169,17 @@ def load(
         raise NotImplementedError(f"Backend {backend_handle} not supported. Choose a valid backend.")
 
 
-def extract_tables():
-    """Extract tables of an OMOP CDM Database."""
-    # TODO for all of this; iterate potential API. should this be functions or object methods?
-    # extract person, measurements, ....
-    # define features
-    # make vars and corresponding .obsm, with specific key
-    # then can get "static" into .X with
-    # ep.ts.aggregate(adata, metric="counts")
-    # or
-    # ep.ts.aggregate(adata, metrics={counts: [Antibiotic treatment, BP measruement], "average": [Heart Rate]})
-    pass
-
-
 def extract_person(duckdb_instance):
     """Extract person table of an OMOP CDM Database."""
     return duckdb_instance.sql("SELECT * FROM person").df()
 
-    # TODO: check if every person has an observation (can happen)
-    # TODO: check if every observation has a person (would be data quality issue)
-    # TODO: figure out how to handle multiple observation periods per person; here the person vs view discussion comes into play
-
 
 def extract_observation_period(duckdb_instance):
+    """Extract person table of an OMOP CDM Database."""
+    return duckdb_instance.sql("SELECT * FROM observation_period").df()
+
+
+def extract_person_observation_period(duckdb_instance):
     """Extract observation table of an OMOP CDM Database."""
     return duckdb_instance.sql(
         "SELECT * \
@@ -116,22 +236,21 @@ def extract_measurement(duckdb_instance=None):
 def _get_interval_table_from_awkward_array(
     # self,#person_feature_measurement: ak.Array,
     person_ts: ak.Array,
-    t: int = 60,
-    start_time: str = "2100-01-01 00:00:00",
-    observation_duration: int = 48,
-    #  person_id: int = 132592,
-    concept_id_index: int = 1,
+    start_time: str,
+    interval_length_number: int,
+    interval_length_unit: str,
+    num_intervals: int,
+    concept_id_index: int,
+    aggregation_strategy: str,
     type: str = "measurement",
     which_value: str = "value_as_number",  # alternative value_as_concept_id
-    strategy: str = "locf",
 ):
-    # TODO: allow units
-    time_seconds = t * (60 * 60 * 24)
+    timedelta = pd.to_timedelta(interval_length_number, interval_length_unit)
 
-    time_intervals = np.arange(0, observation_duration * 60 * 60, step=time_seconds)
+    time_intervals = pd.Series([timedelta] * num_intervals).cumsum()
 
     patient_measurements = pd.to_datetime(np.array(list(person_ts[concept_id_index][1])))
-    start_time_offset = pd.to_datetime(start_time)  # .dt.total_seconds()
+    start_time_offset = pd.to_datetime(start_time)
 
     patient_time_deltas = (patient_measurements - start_time_offset).total_seconds()
 
@@ -139,53 +258,91 @@ def _get_interval_table_from_awkward_array(
 
     index_table[index_table >= len(time_intervals)] = len(time_intervals) - 1
 
-    time_frame = pd.DataFrame(
-        {"time": np.arange(0, observation_duration * 60 * 60, step=time_seconds), "value": np.nan}
-    )
-    time_frame.iloc[index_table, 1] = np.array(list(person_ts[concept_id_index][0]))
+    time_frame = pd.DataFrame({"time": np.arange(0, num_intervals), "value": np.nan})
 
-    if strategy is None:
-        pass
-    elif strategy == "locf":
-        time_frame["value"] = time_frame["value"].ffill()
+    # TODO: currently, if multiple measurements in 1 interval,
+    # indexing like this takes the last value of this interval
+    if aggregation_strategy == "last":
+        time_frame.iloc[index_table, 1] = np.array(list(person_ts[concept_id_index][0]))
     else:
-        raise NotImplementedError(f"strategy {strategy} not implemented!")
+        raise ValueError("currently, only aggregation_strategy='last' is supported")
 
     return time_frame
 
 
-def time_interval_table(
+def get_time_interval_table(
     # self,
+    con,
     ts: ak.Array,
     obs: pd.DataFrame,
     # duckdb_instance,
-    start_time: str = "patient_hospital_entry",
-    observation_duration: int = 48,
-    interval_length: float = 60,
-    concept_ids: str | Iterable = "all",
-    interval_unit="minutes",
-    strategy="locf",
-):
-    """Extract measurement table of an OMOP CDM Database."""
+    start_time: Literal["observation_period_start"]
+    | pd.Timestamp
+    | str,  # observation_period_start, birthdate, specific date as popular options?
+    interval_length_number: int,
+    interval_length_unit: str,
+    num_intervals: str | int = "max_observation_duration",
+    concept_ids: Literal["all"] | Sequence = "all",
+    aggregation_strategy: str = "first",  # what to do if multiple obs. in 1 interval. first, last, mean, median, most_frequent for categories
+    # strategy="locf",
+) -> np.array:
+    """Extract measurement table of an OMOP CDM Database.
+
+    Parameters
+    ----------
+    con
+        Connection to a database where the tables are stored.
+    ts
+        A specific awkwkard array tree structure.
+    obs
+        A dataframe of the observation-type table to be used.
+    start_time
+        Starting time for values to be included. Can be 'observation_period' start, which takes the 'observation_period_start' value from obs, or a specific Timestamp.
+    interval_length_number
+        Numeric value of the length of one interval.
+    interval_length_unit
+        Unit belonging to the interval length. See the units of `pandas.to_timedelta <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.to_timedelta.html>`_
+    num_intervals
+        Numer of intervals
+    concept_ids
+        The features to use, that is the OMOP concept_id in ts to be used.
+    aggregation_strategy
+
+
+    Returns
+    -------
+    A time interval table of shape obs.shape[0] x number of concept_ids x num_intervals
+    """
     if concept_ids == "all":
         concept_id_list = range(len(ts[0]))
     else:
         # TODO: like check if they are around, etc
         concept_id_list = concept_ids
 
+    if num_intervals == "max_observation_duration":
+        num_intervals = np.max(
+            con.execute("SELECT * from observation_period").df()["observation_period_end_date"]
+            - con.execute("SELECT * from observation_period").df()["observation_period_start_date"]
+        ) / pd.to_timedelta(interval_length_number, interval_length_unit)
+        num_intervals = int(np.ceil(num_intervals))
+
     tables = []
     for person, person_ts in zip(obs.iterrows(), ts, strict=False):
-        start_time = person[1]["observation_period_start_date"]
-        # end_time = person[1]["observation_period_end_date"]
+        if start_time == "observation_period_start":
+            person_start_time = person[1]["observation_period_start_date"]
+        else:
+            raise NotImplementedError("start_time currently only supports 'observation_period_start'")
+
         person_table = []
         for feature in concept_id_list:
             feature_table = _get_interval_table_from_awkward_array(
                 person_ts,
-                start_time=start_time,
-                observation_duration=observation_duration,
-                t=interval_length,
+                start_time=person_start_time,
+                interval_length_number=interval_length_number,
+                interval_length_unit=interval_length_unit,
+                num_intervals=num_intervals,
                 concept_id_index=feature,
-                strategy=strategy,
+                aggregation_strategy=aggregation_strategy,
             )
             person_table.append(feature_table["value"])
         tables.append(pd.concat(person_table, axis=1))
@@ -194,7 +351,7 @@ def time_interval_table(
     # df.index = feature_table["time"]
     # self.it = tables
 
-    return tables  # TODO: store in self, np
+    return np.array(tables).transpose(0, 2, 1)  # TODO: store in self, np
 
 
 def extract_observation():

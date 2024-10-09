@@ -1,5 +1,16 @@
 # API
 
+## EHRData
+
+```{eval-rst}
+.. module:: ehrdata
+
+.. autosummary::
+    :toctree: generated
+
+    EHRData
+```
+
 ## Input-Output
 
 ```{eval-rst}
@@ -10,11 +21,9 @@
     :toctree: generated
 
     io.omop.load
-    io.omop.extract_tables
     io.omop.extract_person
     io.omop.extract_observation_period
     io.omop.extract_measurement
-    io.omop.time_interval_table
     io.omop.extract_observation
     io.omop.extract_procedure_occurrence
     io.omop.extract_specimen
