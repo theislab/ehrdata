@@ -4,11 +4,18 @@
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+from __future__ import annotations
+
 # -- Path setup --------------------------------------------------------------
 import sys
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sphinx.application import Sphinx
+
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "extensions"))
@@ -96,6 +103,8 @@ intersphinx_mapping = {
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
     "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
+    "zarr": ("https://zarr.readthedocs.io/en/stable", None),
+    "vitessce": ("https://python-docs.vitessce.io", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -129,4 +138,14 @@ pygments_style = "default"
 nitpick_ignore = [
     # https://github.com/duckdb/duckdb-web/issues/3806
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
+    # zarr doesn’t document its base Store class
+    ("py:class", "zarr._storage.store.Store"),
 ]
+
+
+def setup(app: Sphinx) -> None:
+    """Setup lamindb for CI."""
+    import lamindb as ln
+
+    if ln.connect("anonymous/lamindb") is not None:
+        ln.setup.init(storage="/tmp/lamindb")
