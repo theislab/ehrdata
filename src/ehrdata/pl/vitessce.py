@@ -1,20 +1,37 @@
 from functools import reduce
 from operator import or_, truediv
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from vitessce import AnnDataWrapper, VitessceConfig
 from vitessce import Component as cm
 
+if TYPE_CHECKING:
+    from lamindb import Artifact
+    from zarr.storage import Store
 
-def gen_config(path: Path, name: str = "Dummy EHRData") -> VitessceConfig:
+
+def gen_config(
+    path: Path | None = None,
+    *,
+    store: Path | Store | None = None,
+    url: str | None = None,
+    artifact: Artifact | None = None,
+    name: str | None = None,
+) -> VitessceConfig:
     """Generate a VitessceConfig for EHRData.
 
     Parameters
     ----------
     path
-        Path to the data
+        Path to the data’s Zarr store directory.
+    store
+        The data’s Zarr store or a path to it.
+    url
+        URL pointing to the data’s remote Zarr store.
     name
-        Name of the dataset
+        Name of the dataset.
+        If `None`, derived from `path`.
 
     Returns
     -------
@@ -24,7 +41,11 @@ def gen_config(path: Path, name: str = "Dummy EHRData") -> VitessceConfig:
     feature_type = "variable"
 
     wrapper = AnnDataWrapper(
-        adata_store=path,
+        adata_path=path,
+        adata_url=url,
+        # vitessce is old and doesn’t deal with proper Paths
+        adata_store=str(store) if isinstance(store, Path) else store,
+        adata_artifact=artifact,
         obs_set_paths=["obs/gender_concept_id"],
         obs_set_names=["Gender Concept ID"],
         obs_embedding_paths=["obsm/X_pca"],

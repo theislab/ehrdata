@@ -13,6 +13,7 @@ __pycache__/
 
 # Tests and coverage
 /data/
+ehrapy_data/
 /node_modules/
 
 # docs
