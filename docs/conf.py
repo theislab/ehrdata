@@ -9,7 +9,6 @@ import sys
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
-import ehrdata  # noqa: F401
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "extensions"))
@@ -125,8 +124,9 @@ html_theme_options = {
 
 pygments_style = "default"
 
+# If building the documentation fails because of a missing link that is outside your control,
+# you can add an exception to this list:
 nitpick_ignore = [
-    # If building the documentation fails because of a missing link that is outside your control,
-    # you can add an exception to this list.
-    #     ("py:class", "igraph.Graph"),
+    # https://github.com/duckdb/duckdb-web/issues/3806
+    ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
 ]
