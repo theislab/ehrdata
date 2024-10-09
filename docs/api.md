@@ -4,7 +4,6 @@
 
 ```{eval-rst}
 .. module:: ehrdata
-.. currentmodule:: ehrdata
 
 .. autosummary::
     :toctree: generated
@@ -22,11 +21,9 @@
     :toctree: generated
 
     io.omop.load
-    io.omop.extract_tables
     io.omop.extract_person
     io.omop.extract_observation_period
     io.omop.extract_measurement
-    io.omop.time_interval_table
     io.omop.extract_observation
     io.omop.extract_procedure_occurrence
     io.omop.extract_specimen

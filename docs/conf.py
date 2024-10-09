@@ -124,8 +124,9 @@ html_theme_options = {
 
 pygments_style = "default"
 
+# If building the documentation fails because of a missing link that is outside your control,
+# you can add an exception to this list:
 nitpick_ignore = [
-    # If building the documentation fails because of a missing link that is outside your control,
-    # you can add an exception to this list.
-    #     ("py:class", "igraph.Graph"),
+    # https://github.com/duckdb/duckdb-web/issues/3806
+    ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
 ]
