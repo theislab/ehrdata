@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from functools import reduce
 from operator import or_, truediv
 from pathlib import Path
@@ -40,6 +42,20 @@ def gen_config(
     obs_type = "person"
     feature_type = "variable"
 
+    if name is None:
+        if artifact is not None:
+            name = artifact.description
+        elif path is not None:
+            name = path.stem
+        else:
+            msg = "`name` needs to be specified or derived from `path` or `artifact`."
+            raise ValueError(msg)
+
+    coordination = {
+        "obsType": obs_type,
+        "featureType": feature_type,
+    }
+
     wrapper = AnnDataWrapper(
         adata_path=path,
         adata_url=url,
@@ -51,10 +67,7 @@ def gen_config(
         obs_embedding_paths=["obsm/X_pca"],
         obs_embedding_names=["PCA"],
         obs_feature_matrix_path="X",
-        coordination_values={
-            "obsType": obs_type,
-            "featureType": feature_type,
-        },
+        coordination_values=coordination,
     )
 
     vc = VitessceConfig(schema_version="1.0.15", name=name)
@@ -80,8 +93,8 @@ def gen_config(
 
     vc.link_views(
         [view for row in views for view in row],
-        ["obsType", "featureType"],
-        [obs_type, feature_type],
+        coordination.keys(),
+        coordination.values(),
     )
 
     # (a / b / c) | (d / e / f) | ...
