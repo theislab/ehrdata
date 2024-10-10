@@ -67,6 +67,8 @@ optional-dependencies.test = [
   "pytest",
 ]
 optional-dependencies.vitessce = [
+  # undeclared vitessce.config dependency
+  "ipywidgets",
   # prevent backtracking
   "scikit-image>=0.24",
   # the actual dependency
