@@ -8,7 +8,7 @@ import awkward as ak
 import duckdb
 import numpy as np
 import pandas as pd
-
+from ehrdata import EHRData
 
 def _check_sanity_of_folder(folder_path: str | Path):
     pass
@@ -54,7 +54,6 @@ def setup_obs(
 
     return EHRData(obs=obs)
 
-
 def setup_variables(
     backend_handle: Literal[str, duckdb, Path],
     edata,
@@ -73,8 +72,6 @@ def setup_variables(
     """Setup the variables.
 
     This function sets up the variables for the EHRData project.
-    For this, a selection of tables from the OMOP CDM which represents the variables should be selected.
-    The tables can be measurement, observation, procedure_occurrence, specimen, device_exposure, drug_exposure, or note.
 
     Parameters
     ----------
@@ -85,59 +82,67 @@ def setup_variables(
     tables
         The tables to be used.
     start_time
-        Starting time for values to be included. Can be 'observation_period' start, which takes the 'observation_period_start' value from obs, or a specific Timestamp.
+        Starting time for values to be included.
     interval_length_number
         Numeric value of the length of one interval.
     interval_length_unit
-        Unit belonging to the interval length. See the units of `pandas.to_timedelta <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.to_timedelta.html>`_
+        Unit belonging to the interval length.
     num_intervals
-        Numer of intervals
+        Number of intervals.
+    concept_ids
+        Concept IDs to filter on or 'all'.
+    aggregation_strategy
+        Strategy to use when aggregating data within intervals.
 
     Returns
     -------
     An EHRData object with populated .var field.
     """
-    from ehrdata import EHRData
+    # Mapping of table names to extraction functions and concept ID column names
+    table_info = {
+        "measurement": {"extract_func": extract_measurement, "concept_id_col": "measurement_concept_id"},
+        "observation": {"extract_func": extract_observation, "concept_id_col": "observation_concept_id"},
+        "procedure_occurrence": {"extract_func": extract_procedure_occurrence, "concept_id_col": "procedure_concept_id"},
+        "specimen": {"extract_func": extract_specimen, "concept_id_col": "specimen_concept_id"},
+        "device_exposure": {"extract_func": extract_device_exposure, "concept_id_col": "device_concept_id"},
+        "drug_exposure": {"extract_func": extract_drug_exposure, "concept_id_col": "drug_concept_id"},
+        "note": {"extract_func": extract_note, "concept_id_col": "note_concept_id"},
+    }
 
     concept_ids_present_list = []
     time_interval_tables = []
+
     for table in tables:
-        if table == "measurement":
-            concept_ids_present_df = normalize_column_names(
-                backend_handle.sql("SELECT * FROM measurement").df()
-            )
-            concept_ids_present = concept_ids_present_df["measurement_concept_id"].unique()
-            extracted_awkward = extract_measurement(backend_handle)
-            time_interval_table = get_time_interval_table(
-                backend_handle,
-                extracted_awkward,
-                edata.obs,
-                start_time="observation_period_start",
-                interval_length_number=interval_length_number,
-                interval_length_unit=interval_length_unit,
-                num_intervals=num_intervals,
-                concept_ids=concept_ids,
-                aggregation_strategy=aggregation_strategy,
-            )
-        # TODO: implement the following
-        # elif table == "observation":
-        #     var = extract_observation(backend_handle)
-        # elif table == "procedure_occurrence":
-        #     var = extract_procedure_occurrence(backend_handle)
-        # elif table == "specimen":
-        #     var = extract_specimen(backend_handle)
-        # elif table == "device_exposure":
-        #     var = extract_device_exposure(backend_handle)
-        # elif table == "drug_exposure":
-        #     var = extract_drug_exposure(backend_handle)
-        # elif table == "note":
-        #     var = extract_note(backend_handle)
-        else:
+        if table not in table_info:
             raise ValueError(
                 "tables must be a sequence of 'measurement', 'observation', 'procedure_occurrence', 'specimen', 'device_exposure', 'drug_exposure', or 'note'."
             )
+
+        # Get extract function and concept_id column for the table
+        extract_func = table_info[table]["extract_func"]
+        concept_id_col = table_info[table]["concept_id_col"]
+        concept_ids_present_df = normalize_column_names(backend_handle.sql(f"SELECT * FROM {table}").df())
+        concept_ids_present = concept_ids_present_df[concept_id_col].unique()
+        extracted_awkward = extract_func(backend_handle)
+
+        # Create the time interval table
+        time_interval_table = get_time_interval_table(
+            backend_handle,
+            extracted_awkward,
+            edata.obs,
+            start_time="observation_period_start",
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            concept_ids=concept_ids,
+            aggregation_strategy=aggregation_strategy,
+        )
+
+        # Append 
         concept_ids_present_list.append(concept_ids_present)
         time_interval_tables.append(time_interval_table)
+
+    # Combine time interval tables
     if len(time_interval_tables) > 1:
         time_interval_table = np.concatenate([time_interval_table, time_interval_table], axis=1)
         concept_ids_present = pd.concat(concept_ids_present_list)
@@ -145,11 +150,10 @@ def setup_variables(
         time_interval_table = time_interval_tables[0]
         concept_ids_present = concept_ids_present_list[0]
 
-    # TODO: copy other fields too. or other way? is is somewhat scverse-y by taking and returing anndata object...
+    # Update edata with the new variables
     edata = EHRData(r=time_interval_table, obs=edata.obs, var=concept_ids_present)
 
     return edata
-
 
 def load(
     backend_handle: Literal[str, duckdb, Path],
@@ -189,55 +193,126 @@ def extract_person_observation_period(duckdb_instance):
         "
     ).df())
 
+def extract_table(duckdb_instance, table_name: str, concept_id_col: str, value_col: str, timestamp_col: str):
+    """
+    Generalized extraction function to extract data from an OMOP CDM table.
 
-def extract_measurement(duckdb_instance=None):
-    """Extract measurement table of an OMOP CDM Database."""
-    measurement_table = duckdb_instance.sql("SELECT * FROM measurement").df()
-    measurement_table = normalize_column_names(measurement_table)
-    # get an array n_person x n_features x 2, one for value, one for time
-    person_id_df = (
-        duckdb_instance.sql("SELECT * FROM person").df()
-    )  # TODO: in anndata? w.r.t database? for now this
-    person_id_df = normalize_column_names(person_id_df)
-    person_id = person_id_df["person_id"].unique()
-    # person_id = (
-    #     duckdb_instance.sql("SELECT * FROM person").df()["person_id"].unique()
-    # )  # TODO: in anndata? w.r.t database? for now this
-    features = measurement_table["measurement_concept_id"].unique()
+    Parameters
+    ----------
+    duckdb_instance: duckdb.DuckDB
+        The DuckDB instance for querying the database.
+    table_name: str
+        The name of the table to extract data from (e.g., "measurement", "observation").
+    concept_id_col: str
+        The name of the column that contains the concept IDs (e.g., "measurement_concept_id").
+    value_col: str
+        The name of the column that contains the values (e.g., "value_as_number").
+    timestamp_col: str
+        The name of the column that contains the timestamps (e.g., "measurement_datetime").
+
+    Returns
+    -------
+    ak.Array
+        An Awkward Array with the structure: n_person x n_features x 2 (value, time).
+    """
+    # Load the specified table
+    table_df = duckdb_instance.sql(f"SELECT * FROM {table_name}").df()
+    table_df = normalize_column_names(table_df)
+
+    # Load the person table to get unique person IDs
+    person_id_df = normalize_column_names(duckdb_instance.sql("SELECT * FROM person").df())
+    person_ids = person_id_df["person_id"].unique()
+
+    # Get unique features (concept IDs) for the table
+    features = table_df[concept_id_col].unique()
+
+    # Initialize the collection for all persons
     person_collection = []
 
-    for person in person_id:
+    for person in person_ids:
         person_as_list = []
-        person_measurements = measurement_table[
-            measurement_table["person_id"] == person
-        ]  # or ofc sql in rdbms - lazy, on disk, first step towards huge memory reduction of this prototype if only load this selection
-        # person_measurements = person_measurements.sort_values(by="measurement_date")
-        # person_measurements = person_measurements[["measurement_date", "value_as_number"]]
-        # print(person_measurements)
+        # Get rows for the current person
+        person_data = table_df[table_df["person_id"] == person]
+
+        # For each feature, get values and timestamps
         for feature in features:
-            person_feature = []
+            feature_data = person_data[person_data[concept_id_col] == feature]
 
-            # person_measurements_value = []
-            # person_measurements_timestamp = []
+            # Extract the values and timestamps
+            feature_values = feature_data[value_col]
+            feature_timestamps = feature_data[timestamp_col]
 
-            person_feature_measurements = person_measurements["measurement_concept_id"] == feature
+            # Append values and timestamps for this feature
+            person_as_list.append([feature_values, feature_timestamps])
 
-            person_feature_measurements_value = person_measurements[person_feature_measurements][
-                "value_as_number"
-            ]  # again, rdbms/spark backend big time scalable here
-            person_feature_measurements_timestamp = person_measurements[person_feature_measurements][
-                "measurement_datetime"
-            ]
-
-            person_feature.append(person_feature_measurements_value)
-            person_feature.append(person_feature_measurements_timestamp)
-
-            person_as_list.append(person_feature)
-
+        # Append this person's data to the collection
         person_collection.append(person_as_list)
 
     return ak.Array(person_collection)
 
+
+def extract_measurement(duckdb_instance):
+    return extract_table(
+        duckdb_instance,
+        table_name="measurement",
+        concept_id_col="measurement_concept_id",
+        value_col="value_as_number",
+        timestamp_col="measurement_datetime"
+    )
+
+def extract_observation(duckdb_instance):
+    return extract_table(
+        duckdb_instance,
+        table_name="observation",
+        concept_id_col="observation_concept_id",
+        value_col="value_as_number",
+        timestamp_col="observation_datetime"
+    )
+
+def extract_procedure_occurrence(duckdb_instance):
+    return extract_table(
+        duckdb_instance,
+        table_name="procedure_occurrence",
+        concept_id_col="procedure_concept_id",
+        value_col="procedure_type_concept_id",  # Assuming `procedure_type_concept_id` is a suitable value field
+        timestamp_col="procedure_datetime"
+    )
+
+def extract_specimen(duckdb_instance):
+    return extract_table(
+        duckdb_instance,
+        table_name="specimen",
+        concept_id_col="specimen_concept_id",
+        value_col="unit_concept_id",  # Assuming `unit_concept_id` is a suitable value field
+        timestamp_col="specimen_datetime"
+    )
+
+def extract_device_exposure(duckdb_instance):
+    return extract_table(
+        duckdb_instance,
+        table_name="device_exposure",
+        concept_id_col="device_concept_id",
+        value_col="device_exposure_type_concept_id",  # Assuming this as value
+        timestamp_col="device_exposure_start_datetime"
+    )
+
+def extract_drug_exposure(duckdb_instance):
+    return extract_table(
+        duckdb_instance,
+        table_name="drug_exposure",
+        concept_id_col="drug_concept_id",
+        value_col="dose_unit_concept_id",  # Assuming `dose_unit_concept_id` as value
+        timestamp_col="drug_exposure_start_datetime"
+    )
+
+def extract_note(duckdb_instance):
+    return extract_table(
+        duckdb_instance,
+        table_name="note",
+        concept_id_col="note_concept_id",
+        value_col="note_class_concept_id",  # Assuming `note_class_concept_id` as value
+        timestamp_col="note_datetime"
+    )
 
 def _get_interval_table_from_awkward_array(
     # self,#person_feature_measurement: ak.Array,
@@ -372,11 +447,6 @@ def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize all column names to lowercase."""
     df.columns = map(str.lower, df.columns)  # Convert all column names to lowercase
     return df
-
-def extract_observation():
-    """Extract observation table of an OMOP CDM Database."""
-    pass
-
 
 def extract_procedure_occurrence():
     """Extract procedure_occurrence table of an OMOP CDM Database."""
