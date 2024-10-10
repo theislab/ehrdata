@@ -76,10 +76,10 @@ def gen_config(
         # vitessce is old and doesn’t deal with proper Paths
         adata_store=str(store) if isinstance(store, Path) else store,
         adata_artifact=artifact,
-        obs_set_paths=obs_sets.keys(),
-        obs_set_names=obs_sets.values(),
-        obs_embedding_paths=obs_embeddings.keys(),
-        obs_embedding_names=obs_embeddings.values(),
+        obs_set_paths=list(obs_sets.keys()),
+        obs_set_names=list(obs_sets.values()),
+        obs_embedding_paths=list(obs_embeddings.keys()),
+        obs_embedding_names=list(obs_embeddings.values()),
         obs_feature_matrix_path="X",
         coordination_values=coordination,
     )
@@ -107,8 +107,8 @@ def gen_config(
 
     vc.link_views(
         [view for row in views for view in row],
-        coordination.keys(),
-        coordination.values(),
+        list(coordination.keys()),
+        list(coordination.values()),
     )
 
     # (a / b / c) | (d / e / f) | ...

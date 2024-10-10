@@ -62,7 +62,7 @@ optional-dependencies.lamin = [
 ]
 optional-dependencies.test = [
   "coverage",
-  "ehrdata[vitessce]",
+  "ehrdata[vitessce,lamin]",
   "pytest",
 ]
 optional-dependencies.vitessce = [
