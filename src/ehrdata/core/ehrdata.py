@@ -45,9 +45,15 @@ class EHRData(AnnData):
             raise ValueError("t must be a pandas.DataFrame")
 
     @classmethod
-    def from_adata(cls, adata: AnnData, *, t: pd.DataFrame | None = None) -> EHRData:
+    def from_adata(
+        cls,
+        adata: AnnData,
+        *,
+        r: np.ndarray | None = None,
+        t: pd.DataFrame | None = None,
+    ) -> EHRData:
         """Create an EHRData object from an AnnData object."""
-        instance = cls(shape=adata.shape, t=t)
+        instance = cls(shape=adata.shape)
         if adata.is_view:
             instance._init_as_view(adata, slice(None), slice(None))
         else:
@@ -66,6 +72,8 @@ class EHRData(AnnData):
                 filename=adata.filename,
                 filemode=adata.file._filemode,
             )
+        instance.r = r
+        instance.t = t
         return instance
 
     @property
@@ -82,7 +90,7 @@ class EHRData(AnnData):
 
     @r.deleter
     def r(self) -> None:
-        del self.layers[R_LAYER_KEY]
+        self.layers.pop(R_LAYER_KEY, None)
 
     @property
     def t(self) -> pd.DataFrame | None:
@@ -107,12 +115,9 @@ class EHRData(AnnData):
     def __getitem__(self, index: Index) -> EHRData:
         oidx, vidx, tidx = self._unpack_index(index)
         adata_sliced = super().__getitem__((oidx, vidx))
-        t_sliced = self.t.iloc[tidx]
-
-        ed_2d_sliced = EHRData.from_adata(adata=adata_sliced, t=t_sliced)
-        ed_2d_sliced.r = ed_2d_sliced.r[:, :, tidx]
-
-        return ed_2d_sliced
+        r_sliced = None if self.r is None else adata_sliced.layers[R_LAYER_KEY][:, :, tidx]
+        t_sliced = None if self.t is None else self.t.iloc[tidx]
+        return EHRData.from_adata(adata=adata_sliced, r=r_sliced, t=t_sliced)
 
     def _unpack_index(self, index: Index) -> tuple[Index1D, Index1D, Index1D]:
         if not isinstance(index, tuple):
@@ -128,4 +133,8 @@ class EHRData(AnnData):
 
     def copy(self) -> EHRData:
         """Returns a copy of the EHRData object."""
-        return EHRData.from_adata(super().copy(), t=self.t.copy())
+        return EHRData.from_adata(
+            super().copy(),
+            r=None if self.r is None else self.r.copy(),
+            t=None if self.t is None else self.t.copy(),
+        )
