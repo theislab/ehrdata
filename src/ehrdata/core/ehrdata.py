@@ -40,7 +40,6 @@ class EHRData(AnnData):
         t: pd.DataFrame | None = None,
         **kwargs,
     ):
-        """EHRData object."""
         super().__init__(X=X, **kwargs)
 
         if r is not None:
@@ -67,7 +66,21 @@ class EHRData(AnnData):
         r: np.ndarray | None = None,
         t: pd.DataFrame | None = None,
     ) -> EHRData:
-        """Create an EHRData object from an AnnData object."""
+        """Create an EHRData object from an AnnData object.
+
+        Parameters
+        ----------
+        adata
+            Annotated data object.
+        r
+            3-Dimensional tensor, see :attr:`r`.
+        t
+            Time dataframe for describing third axis, see :attr:`t`.
+
+        Returns
+        -------
+        An EHRData object.
+        """
         instance = cls(shape=adata.shape)
         if adata.is_view:
             instance._init_as_view(adata, slice(None), slice(None))
@@ -128,6 +141,17 @@ class EHRData(AnnData):
             shape of .r: {self.r.shape if self.r is not None else (0,0,0)} \n"
 
     def __getitem__(self, index: Index) -> EHRData:
+        """Slice the EHRData object along 1–3 axes.
+
+        Parameters
+        ----------
+        index
+            1D, 2D, or 3D index.
+
+        Returns
+        -------
+        An EHRData view object.
+        """
         oidx, vidx, tidx = self._unpack_index(index)
         adata_sliced = super().__getitem__((oidx, vidx))
         r_sliced = None if self.r is None else adata_sliced.layers[R_LAYER_KEY][:, :, tidx]

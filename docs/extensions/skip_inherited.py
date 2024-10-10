@@ -20,7 +20,9 @@ def skip_member_handler(
         return None
     if isinstance(obj, property):
         obj = obj.fget
-    if name.startswith("_") and name != "__getitem__":
+    if name == "__getitem__":
+        return False
+    if name.startswith("_"):
         return True
     if not hasattr(obj, "__module__"):
         return None
