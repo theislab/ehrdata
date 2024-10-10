@@ -11,6 +11,7 @@ changelog.md
 contributing.md
 references.md
 
+notebooks/tutorial_omop_visualization
 notebooks/omop_tables_tutorial
 notebooks/tutorial_ehrdata_omop
 notebooks/cohort_definition
