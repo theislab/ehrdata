@@ -67,6 +67,8 @@ optional-dependencies.test = [
   "pytest",
 ]
 optional-dependencies.vitessce = [
+  # undeclared vitessce dependency
+  "hypercorn",
   # undeclared vitessce.config dependency
   "ipywidgets",
   # prevent backtracking
