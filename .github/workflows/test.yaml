@@ -45,6 +45,8 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - uses: hynek/setup-cached-uv@v2
+        with:
+          cache-dependency-path: pyproject.toml
       - name: Install dependencies
         run: uv pip install --system ${{ matrix.pip-flags }} ".[dev,test]"
       - name: Test
