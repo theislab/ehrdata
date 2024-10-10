@@ -8,7 +8,9 @@ import awkward as ak
 import duckdb
 import numpy as np
 import pandas as pd
+
 from ehrdata import EHRData
+
 
 def _check_sanity_of_folder(folder_path: str | Path):
     pass
@@ -54,14 +56,11 @@ def setup_obs(
 
     return EHRData(obs=obs)
 
+
 def setup_variables(
     backend_handle: Literal[str, duckdb, Path],
     edata,
-    tables: Sequence[
-        Literal[
-            "measurement", "observation", "procedure_occurrence", "specimen",  "note"
-        ] 
-    ],
+    tables: Sequence[Literal["measurement", "observation", "procedure_occurrence", "specimen", "note"]],
     start_time: Literal["observation_period_start"] | pd.Timestamp | str,
     interval_length_number: int,
     interval_length_unit: str,
@@ -102,7 +101,10 @@ def setup_variables(
     table_info = {
         "measurement": {"extract_func": extract_measurement, "concept_id_col": "measurement_concept_id"},
         "observation": {"extract_func": extract_observation, "concept_id_col": "observation_concept_id"},
-        "procedure_occurrence": {"extract_func": extract_procedure_occurrence, "concept_id_col": "procedure_concept_id"},
+        "procedure_occurrence": {
+            "extract_func": extract_procedure_occurrence,
+            "concept_id_col": "procedure_concept_id",
+        },
         "specimen": {"extract_func": extract_specimen, "concept_id_col": "specimen_concept_id"},
         # "device_exposure": {"extract_func": extract_device_exposure, "concept_id_col": "device_concept_id"},
         # "drug_exposure": {"extract_func": extract_drug_exposure, "concept_id_col": "drug_concept_id"},
@@ -138,7 +140,7 @@ def setup_variables(
             aggregation_strategy=aggregation_strategy,
         )
 
-        # Append 
+        # Append
         concept_ids_present_list.append(concept_ids_present)
         time_interval_tables.append(time_interval_table)
 
@@ -155,7 +157,9 @@ def setup_variables(
 
     return edata
 
+
 # DEVICE EXPOSURE and DRUG EXPOSURE NEEDS TO BE IMPLEMENTED BECAUSE THEY CONTAIN START DATE
+
 
 def load(
     backend_handle: Literal[str, duckdb, Path],
@@ -188,12 +192,15 @@ def extract_observation_period(duckdb_instance):
 
 def extract_person_observation_period(duckdb_instance):
     """Extract observation table of an OMOP CDM Database."""
-    return normalize_column_names(duckdb_instance.sql(
-        "SELECT * \
+    return normalize_column_names(
+        duckdb_instance.sql(
+            "SELECT * \
         FROM person \
         LEFT JOIN observation_period USING(person_id) \
         "
-    ).df())
+        ).df()
+    )
+
 
 def extract_table(duckdb_instance, table_name: str, concept_id_col: str, value_col: str, timestamp_col: str):
     """
@@ -259,8 +266,9 @@ def extract_measurement(duckdb_instance):
         table_name="measurement",
         concept_id_col="measurement_concept_id",
         value_col="value_as_number",
-        timestamp_col="measurement_datetime"
+        timestamp_col="measurement_datetime",
     )
+
 
 def extract_observation(duckdb_instance):
     return extract_table(
@@ -268,8 +276,9 @@ def extract_observation(duckdb_instance):
         table_name="observation",
         concept_id_col="observation_concept_id",
         value_col="value_as_number",
-        timestamp_col="observation_datetime"
+        timestamp_col="observation_datetime",
     )
+
 
 def extract_procedure_occurrence(duckdb_instance):
     return extract_table(
@@ -277,8 +286,9 @@ def extract_procedure_occurrence(duckdb_instance):
         table_name="procedure_occurrence",
         concept_id_col="procedure_concept_id",
         value_col="procedure_type_concept_id",  # Assuming `procedure_type_concept_id` is a suitable value field
-        timestamp_col="procedure_datetime"
+        timestamp_col="procedure_datetime",
     )
+
 
 def extract_specimen(duckdb_instance):
     return extract_table(
@@ -286,8 +296,9 @@ def extract_specimen(duckdb_instance):
         table_name="specimen",
         concept_id_col="specimen_concept_id",
         value_col="unit_concept_id",  # Assuming `unit_concept_id` is a suitable value field
-        timestamp_col="specimen_datetime"
+        timestamp_col="specimen_datetime",
     )
+
 
 def extract_device_exposure(duckdb_instance):
     # return extract_table(
@@ -300,6 +311,7 @@ def extract_device_exposure(duckdb_instance):
     # NEEDS IMPLEMENTATION
     return None
 
+
 def extract_drug_exposure(duckdb_instance):
     # return extract_table(
     #     duckdb_instance,
@@ -310,14 +322,17 @@ def extract_drug_exposure(duckdb_instance):
     # )
     # NEEDS IMPLEMENTATION
     return None
+
+
 def extract_note(duckdb_instance):
     return extract_table(
         duckdb_instance,
         table_name="note",
         concept_id_col="note_type_concept_id",
         value_col="note_class_concept_id",  # Assuming `note_class_concept_id` as value
-        timestamp_col="note_datetime"
+        timestamp_col="note_datetime",
     )
+
 
 def _get_interval_table_from_awkward_array(
     # self,#person_feature_measurement: ak.Array,
@@ -411,7 +426,7 @@ def get_time_interval_table(
 
         # Calculate the duration of observation periods
         num_intervals = np.max(
-            observation_period_df["observation_period_end_date"] 
+            observation_period_df["observation_period_end_date"]
             - observation_period_df["observation_period_start_date"]
         ) / pd.to_timedelta(interval_length_number, interval_length_unit)
         num_intervals = int(np.ceil(num_intervals))
@@ -448,8 +463,8 @@ def get_time_interval_table(
 
     return np.array(tables).transpose(0, 2, 1)  # TODO: store in self, np
 
+
 def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize all column names to lowercase."""
     df.columns = map(str.lower, df.columns)  # Convert all column names to lowercase
     return df
-
