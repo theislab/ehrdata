@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class EHRData(AnnData):
     """EHRData object."""
 
-    _t: pd.DataFrame
+    _t: pd.DataFrame | None
 
     def __init__(
         self,
@@ -69,22 +69,33 @@ class EHRData(AnnData):
         return instance
 
     @property
-    def r(self) -> np.ndarray:
+    def r(self) -> np.ndarray | None:
         """3-Dimensional tensor, aligned with obs along first axis, var along second axis, and allowing a 3rd axis."""
         return self.layers.get(R_LAYER_KEY)
 
     @r.setter
-    def r(self, input: np.ndarray) -> None:
-        self.layers[R_LAYER_KEY] = input
+    def r(self, input: np.ndarray | None) -> None:
+        if input is None:
+            del self.r
+        else:
+            self.layers[R_LAYER_KEY] = input
+
+    @r.deleter
+    def r(self) -> None:
+        del self.layers[R_LAYER_KEY]
 
     @property
-    def t(self) -> pd.DataFrame:
+    def t(self) -> pd.DataFrame | None:
         """Time dataframe for describing third axis."""
         return self._t
 
     @t.setter
-    def t(self, input: pd.DataFrame) -> None:
+    def t(self, input: pd.DataFrame | None) -> None:
         self._t = input
+
+    @t.deleter
+    def t(self) -> None:
+        del self._t
 
     def __repr__(self) -> str:
         return f"EHRData object with n_obs x n_var = {self.n_obs} x {self.n_vars}, and a timeseries of {len(self.t)} steps.\n \
