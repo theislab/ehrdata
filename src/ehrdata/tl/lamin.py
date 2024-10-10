@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import anndata as ad
 import omop as op
@@ -9,7 +9,8 @@ from lamindb_setup.core.types import UPathStr
 from lnschema_core import Record
 from lnschema_core.types import FieldAttr
 
-from ehrdata import EHRData
+if TYPE_CHECKING:
+    from ehrdata import EHRData
 
 from .lamin_config import DEFAULTS_VALUES
 
