@@ -103,9 +103,10 @@ def setup_variables(
     time_interval_tables = []
     for table in tables:
         if table == "measurement":
-            concept_ids_present = (
-                backend_handle.sql("SELECT * FROM measurement").df()["measurement_concept_id"].unique()
+            concept_ids_present_df = normalize_column_names(
+                backend_handle.sql("SELECT * FROM measurement").df()
             )
+            concept_ids_present = concept_ids_present_df["measurement_concept_id"].unique()
             extracted_awkward = extract_measurement(backend_handle)
             time_interval_table = get_time_interval_table(
                 backend_handle,
@@ -171,32 +172,37 @@ def load(
 
 def extract_person(duckdb_instance):
     """Extract person table of an OMOP CDM Database."""
-    return duckdb_instance.sql("SELECT * FROM person").df()
+    return normalize_column_names(duckdb_instance.sql("SELECT * FROM person").df())
 
 
 def extract_observation_period(duckdb_instance):
     """Extract person table of an OMOP CDM Database."""
-    return duckdb_instance.sql("SELECT * FROM observation_period").df()
+    return normalize_column_names(duckdb_instance.sql("SELECT * FROM observation_period").df())
 
 
 def extract_person_observation_period(duckdb_instance):
     """Extract observation table of an OMOP CDM Database."""
-    return duckdb_instance.sql(
+    return normalize_column_names(duckdb_instance.sql(
         "SELECT * \
         FROM person \
         LEFT JOIN observation_period USING(person_id) \
         "
-    ).df()
+    ).df())
 
 
 def extract_measurement(duckdb_instance=None):
     """Extract measurement table of an OMOP CDM Database."""
     measurement_table = duckdb_instance.sql("SELECT * FROM measurement").df()
-
+    measurement_table = normalize_column_names(measurement_table)
     # get an array n_person x n_features x 2, one for value, one for time
-    person_id = (
-        duckdb_instance.sql("SELECT * FROM person").df()["person_id"].unique()
+    person_id_df = (
+        duckdb_instance.sql("SELECT * FROM person").df()
     )  # TODO: in anndata? w.r.t database? for now this
+    person_id_df = normalize_column_names(person_id_df)
+    person_id = person_id_df["person_id"].unique()
+    # person_id = (
+    #     duckdb_instance.sql("SELECT * FROM person").df()["person_id"].unique()
+    # )  # TODO: in anndata? w.r.t database? for now this
     features = measurement_table["measurement_concept_id"].unique()
     person_collection = []
 
@@ -320,11 +326,20 @@ def get_time_interval_table(
         concept_id_list = concept_ids
 
     if num_intervals == "max_observation_duration":
+        observation_period_df = con.execute("SELECT * from observation_period").df()
+        observation_period_df = normalize_column_names(observation_period_df)
+
+        # Calculate the duration of observation periods
         num_intervals = np.max(
-            con.execute("SELECT * from observation_period").df()["observation_period_end_date"]
-            - con.execute("SELECT * from observation_period").df()["observation_period_start_date"]
+            observation_period_df["observation_period_end_date"] 
+            - observation_period_df["observation_period_start_date"]
         ) / pd.to_timedelta(interval_length_number, interval_length_unit)
         num_intervals = int(np.ceil(num_intervals))
+        # num_intervals = np.max(
+        #     con.execute("SELECT * from observation_period").df()["observation_period_end_date"]
+        #     - con.execute("SELECT * from observation_period").df()["observation_period_start_date"]
+        # ) / pd.to_timedelta(interval_length_number, interval_length_unit)
+        # num_intervals = int(np.ceil(num_intervals))
 
     tables = []
     for person, person_ts in zip(obs.iterrows(), ts, strict=False):
@@ -353,6 +368,10 @@ def get_time_interval_table(
 
     return np.array(tables).transpose(0, 2, 1)  # TODO: store in self, np
 
+def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize all column names to lowercase."""
+    df.columns = map(str.lower, df.columns)  # Convert all column names to lowercase
+    return df
 
 def extract_observation():
     """Extract observation table of an OMOP CDM Database."""
