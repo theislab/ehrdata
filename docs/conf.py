@@ -106,6 +106,7 @@ intersphinx_mapping = {
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
     "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy", None),
     "pandas": ("https://pandas.pydata.org/docs", None),
     "zarr": ("https://zarr.readthedocs.io/en/stable", None),
     "vitessce": ("https://python-docs.vitessce.io", None),
@@ -143,6 +144,8 @@ pygments_style = "default"
 nitpick_ignore = [
     # https://github.com/duckdb/duckdb-web/issues/3806
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
+    # Is documented as a py:attribute instead
+    ("py:class", "numpy.int64"),
 ]
 
 # Redirect broken parameter annotation classes
