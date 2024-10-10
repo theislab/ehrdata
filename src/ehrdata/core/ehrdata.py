@@ -105,7 +105,7 @@ class EHRData(AnnData):
     def __getitem__(self, index: Index) -> EHRData:
         oidx, vidx, tidx = self._unpack_index(index)
         adata_sliced = super().__getitem__((oidx, vidx))
-        t_sliced = self._t.iloc[tidx]
+        t_sliced = self.t.iloc[tidx]
 
         ed_2d_sliced = EHRData.from_adata(adata=adata_sliced, t=t_sliced)
         ed_2d_sliced.r = ed_2d_sliced.r[:, :, tidx]
@@ -126,4 +126,4 @@ class EHRData(AnnData):
 
     def copy(self) -> EHRData:
         """Returns a copy of the EHRData object."""
-        return EHRData.from_adata(super().copy(), t=self._t.copy())
+        return EHRData.from_adata(super().copy(), t=self.t.copy())
