@@ -27,7 +27,7 @@ def gen_config(
     obs_sets: Mapping[str, str] = MappingProxyType({"obs/gender_concept_id": "Gender Concept ID"}),
     obs_embeddings: Mapping[str, str] = MappingProxyType({"obsm/X_pca": "PCA"}),
 ) -> VitessceConfig:
-    """Generate a VitessceConfig for EHRData.
+    r"""Generate a VitessceConfig for EHRData.
 
     Parameters
     ----------
@@ -51,7 +51,8 @@ def gen_config(
 
     Returns
     -------
-    VitessceConfig
+    A :mod:`vitessce` configuration object.
+    Call .\ :meth:`~vitessce.config.VitessceConfig.widget` on it to display it.
     """
     obs_type = "person"
     feature_type = "variable"
