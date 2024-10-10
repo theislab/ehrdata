@@ -9,7 +9,10 @@ from anndata import AnnData
 from ehrdata.core.constants import R_LAYER_KEY
 
 if TYPE_CHECKING:
-    from anndata._core.index import Index, Index1D
+    from anndata._core.index import Index as ADIndex
+    from anndata._core.index import Index1D
+
+    Index = ADIndex | tuple[Index1D, Index1D, Index1D]
 
 
 class EHRData(AnnData):
