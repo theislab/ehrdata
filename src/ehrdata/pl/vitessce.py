@@ -51,7 +51,7 @@ def gen_config(
 
     Returns
     -------
-    A :mod:`vitessce` configuration object.
+    A :doc:`Vitessce <vitessce:index>` configuration object.
     Call .\ :meth:`~vitessce.config.VitessceConfig.widget` on it to display it.
     """
     obs_type = "person"

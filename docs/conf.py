@@ -108,7 +108,7 @@ intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable", None),
     "zarr": ("https://zarr.readthedocs.io/en/stable", None),
     "vitessce": ("https://python-docs.vitessce.io", None),
-    "lamin": ("https://docs.lamin.ai/", None),
+    "lamin": ("https://docs.lamin.ai", None),
 }
 
 # List of patterns, relative to source directory, that match files and
