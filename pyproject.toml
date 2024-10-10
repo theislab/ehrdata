@@ -69,11 +69,8 @@ optional-dependencies.test = [
 # all uncommented dependencies in the following group are
 # undeclared vitessce dependencies
 optional-dependencies.vitessce = [
-  "hypercorn",
-  "ipywidgets",
   "scikit-image>=0.24", # prevent backtracking
-  "starlette",
-  "vitessce[all]",      # the actual dependency
+  "vitessce[all]>=3.4", # the actual dependency
   "zarr<3",             # vitessce does not support zarr>=3
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
