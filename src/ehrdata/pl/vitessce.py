@@ -3,12 +3,15 @@ from __future__ import annotations
 from functools import reduce
 from operator import or_, truediv
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from vitessce import AnnDataWrapper, VitessceConfig
 from vitessce import Component as cm
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from lamindb import Artifact
     from zarr.storage import Store
 
@@ -19,7 +22,10 @@ def gen_config(
     store: Path | Store | None = None,
     url: str | None = None,
     artifact: Artifact | None = None,
+    # arguments not about how the store goes in:
     name: str | None = None,
+    obs_sets: Mapping[str, str] = MappingProxyType({"obs/gender_concept_id": "Gender Concept ID"}),
+    obs_embeddings: Mapping[str, str] = MappingProxyType({"obsm/X_pca": "PCA"}),
 ) -> VitessceConfig:
     """Generate a VitessceConfig for EHRData.
 
@@ -31,9 +37,17 @@ def gen_config(
         The data’s Zarr store or a path to it.
     url
         URL pointing to the data’s remote Zarr store.
+    artifact
+        Lamin artifact representing the data.
     name
         Name of the dataset.
         If `None`, derived from `path`.
+    obs_sets
+        Mapping of observation set paths to names, e.g.
+        `{"obs/some_annotation": "My cool annotation"}`
+    obs_embeddings
+        Mapping of observation embedding paths to names, e.g.
+        `{"obsm/X_pca": "PCA"}`
 
     Returns
     -------
@@ -62,10 +76,10 @@ def gen_config(
         # vitessce is old and doesn’t deal with proper Paths
         adata_store=str(store) if isinstance(store, Path) else store,
         adata_artifact=artifact,
-        obs_set_paths=["obs/gender_concept_id"],
-        obs_set_names=["Gender Concept ID"],
-        obs_embedding_paths=["obsm/X_pca"],
-        obs_embedding_names=["PCA"],
+        obs_set_paths=obs_sets.keys(),
+        obs_set_names=obs_sets.values(),
+        obs_embedding_paths=obs_embeddings.keys(),
+        obs_embedding_names=obs_embeddings.values(),
         obs_feature_matrix_path="X",
         coordination_values=coordination,
     )
