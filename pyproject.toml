@@ -68,6 +68,7 @@ optional-dependencies.test = [
 ]
 optional-dependencies.vitessce = [
   "vitessce[all]",
+  "zarr<3",        # vitessce does not support zarr>=3
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://ehrdata.readthedocs.io/"
