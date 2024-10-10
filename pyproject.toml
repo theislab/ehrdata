@@ -67,8 +67,12 @@ optional-dependencies.test = [
   "pytest",
 ]
 optional-dependencies.vitessce = [
+  # prevent backtracking
+  "scikit-image>=0.24",
+  # the actual dependency
   "vitessce[all]",
-  "zarr<3",        # vitessce does not support zarr>=3
+  # vitessce does not support zarr>=3
+  "zarr<3",
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://ehrdata.readthedocs.io/"
