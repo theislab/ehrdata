@@ -66,13 +66,14 @@ optional-dependencies.test = [
   "ehrdata[vitessce,lamin]",
   "pytest",
 ]
+# all uncommented dependencies in the following group are
+# undeclared vitessce dependencies
 optional-dependencies.vitessce = [
-  # undeclared vitessce dependency
   "hypercorn",
-  # undeclared vitessce.config dependency
   "ipywidgets",
   # prevent backtracking
   "scikit-image>=0.24",
+  "starlette",
   # the actual dependency
   "vitessce[all]",
   # vitessce does not support zarr>=3
