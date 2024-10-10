@@ -67,6 +67,8 @@ extensions = [
     "sphinx.ext.mathjax",
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinxext.opengraph",
+    "scanpydoc.elegant_typehints",
+    "scanpydoc.definition_list_typed_field",
     *[p.stem for p in (HERE / "extensions").glob("*.py")],
 ]
 
@@ -140,9 +142,13 @@ pygments_style = "default"
 nitpick_ignore = [
     # https://github.com/duckdb/duckdb-web/issues/3806
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
-    # zarr doesn’t document its base Store class
-    ("py:class", "zarr._storage.store.Store"),
 ]
+
+# Redirect broken parameter annotation classes
+qualname_overrides = {
+    "zarr._storage.store.Store": "zarr.storage.MemoryStore",
+    "lnschema_core.models.Artifact": "lamindb.Artifact",
+}
 
 
 def setup(app: Sphinx) -> None:
