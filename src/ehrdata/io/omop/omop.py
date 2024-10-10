@@ -59,8 +59,8 @@ def setup_variables(
     edata,
     tables: Sequence[
         Literal[
-            "measurement", "observation", "procedure_occurrence", "specimen", "device_exposure", "drug_exposure", "note"
-        ]
+            "measurement", "observation", "procedure_occurrence", "specimen",  "note"
+        ] 
     ],
     start_time: Literal["observation_period_start"] | pd.Timestamp | str,
     interval_length_number: int,
@@ -104,9 +104,9 @@ def setup_variables(
         "observation": {"extract_func": extract_observation, "concept_id_col": "observation_concept_id"},
         "procedure_occurrence": {"extract_func": extract_procedure_occurrence, "concept_id_col": "procedure_concept_id"},
         "specimen": {"extract_func": extract_specimen, "concept_id_col": "specimen_concept_id"},
-        "device_exposure": {"extract_func": extract_device_exposure, "concept_id_col": "device_concept_id"},
-        "drug_exposure": {"extract_func": extract_drug_exposure, "concept_id_col": "drug_concept_id"},
-        "note": {"extract_func": extract_note, "concept_id_col": "note_concept_id"},
+        # "device_exposure": {"extract_func": extract_device_exposure, "concept_id_col": "device_concept_id"},
+        # "drug_exposure": {"extract_func": extract_drug_exposure, "concept_id_col": "drug_concept_id"},
+        "note": {"extract_func": extract_note, "concept_id_col": "note_type_concept_id"},
     }
 
     concept_ids_present_list = []
@@ -115,7 +115,7 @@ def setup_variables(
     for table in tables:
         if table not in table_info:
             raise ValueError(
-                "tables must be a sequence of 'measurement', 'observation', 'procedure_occurrence', 'specimen', 'device_exposure', 'drug_exposure', or 'note'."
+                "tables must be a sequence of 'measurement', 'observation', 'procedure_occurrence', 'specimen', or 'note'."
             )
 
         # Get extract function and concept_id column for the table
@@ -154,6 +154,8 @@ def setup_variables(
     edata = EHRData(r=time_interval_table, obs=edata.obs, var=concept_ids_present)
 
     return edata
+
+# DEVICE EXPOSURE and DRUG EXPOSURE NEEDS TO BE IMPLEMENTED BECAUSE THEY CONTAIN START DATE
 
 def load(
     backend_handle: Literal[str, duckdb, Path],
@@ -288,28 +290,31 @@ def extract_specimen(duckdb_instance):
     )
 
 def extract_device_exposure(duckdb_instance):
-    return extract_table(
-        duckdb_instance,
-        table_name="device_exposure",
-        concept_id_col="device_concept_id",
-        value_col="device_exposure_type_concept_id",  # Assuming this as value
-        timestamp_col="device_exposure_start_datetime"
-    )
+    # return extract_table(
+    #     duckdb_instance,
+    #     table_name="device_exposure",
+    #     concept_id_col="device_concept_id",
+    #     value_col="device_type_concept_id",  # Assuming this as value
+    #     timestamp_col="device_exposure_start_date"
+    # )
+    # NEEDS IMPLEMENTATION
+    return None
 
 def extract_drug_exposure(duckdb_instance):
-    return extract_table(
-        duckdb_instance,
-        table_name="drug_exposure",
-        concept_id_col="drug_concept_id",
-        value_col="dose_unit_concept_id",  # Assuming `dose_unit_concept_id` as value
-        timestamp_col="drug_exposure_start_datetime"
-    )
-
+    # return extract_table(
+    #     duckdb_instance,
+    #     table_name="drug_exposure",
+    #     concept_id_col="drug_concept_id",
+    #     value_col="dose_unit_concept_id",  # Assuming `dose_unit_concept_id` as value
+    #     timestamp_col="drug_exposure_start_datetime"
+    # )
+    # NEEDS IMPLEMENTATION
+    return None
 def extract_note(duckdb_instance):
     return extract_table(
         duckdb_instance,
         table_name="note",
-        concept_id_col="note_concept_id",
+        concept_id_col="note_type_concept_id",
         value_col="note_class_concept_id",  # Assuming `note_class_concept_id` as value
         timestamp_col="note_datetime"
     )
@@ -448,31 +453,3 @@ def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = map(str.lower, df.columns)  # Convert all column names to lowercase
     return df
 
-def extract_procedure_occurrence():
-    """Extract procedure_occurrence table of an OMOP CDM Database."""
-    pass
-
-
-def extract_specimen():
-    """Extract specimen table of an OMOP CDM Database."""
-    pass
-
-
-def extract_device_exposure():
-    """Extract device_exposure table of an OMOP CDM Database."""
-    pass
-
-
-def extract_drug_exposure():
-    """Extract drug_exposure table of an OMOP CDM Database."""
-    pass
-
-
-def extract_condition_occurrence():
-    """Extract condition_occurrence table of an OMOP CDM Database."""
-    pass
-
-
-def extract_note():
-    """Extract note table of an OMOP CDM Database."""
-    pass
