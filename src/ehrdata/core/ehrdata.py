@@ -20,7 +20,7 @@ class EHRData(AnnData):
     def __init__(
         self,
         X=None,
-        r=None,
+        r: np.ndarray | None = None,
         *,
         t: pd.DataFrame | None = None,
         **kwargs,
@@ -29,23 +29,20 @@ class EHRData(AnnData):
         super().__init__(X=X, **kwargs)
 
         if r is not None:
+            if (r2 := self.layers.get(R_LAYER_KEY)) is not None and r2 is not r:
+                msg = "`r` is both specified and already present in `adata.layers`."
+                raise ValueError(msg)
             self.layers[R_LAYER_KEY] = r
         # else:
         #     self.layers[R_LAYER_KEY] = np.zeros((self._adata.shape[0], self._adata.shape[1], 0))
 
-        if t is not None:
-            if isinstance(t, pd.DataFrame):
-                self.t = t
-            else:
-                raise ValueError("t must be a pandas.DataFrame")
-
+        if t is None:
+            l = 1 if r is None or len(r.shape) <= 2 else r.shape[2]
+            self.t = pd.DataFrame(index=pd.RangeIndex(l))
+        elif isinstance(t, pd.DataFrame):
+            self.t = t
         else:
-            if R_LAYER_KEY not in self.layers.keys():
-                self.t = pd.DataFrame(pd.RangeIndex(1))
-            elif len(self.layers[R_LAYER_KEY].shape) <= 2:
-                self.t = pd.DataFrame(pd.RangeIndex(1))
-            else:
-                self.t = pd.DataFrame(index=pd.RangeIndex(self.layers[R_LAYER_KEY].shape[2]))
+            raise ValueError("t must be a pandas.DataFrame")
 
     @classmethod
     def from_adata(cls, adata: AnnData, *, t: pd.DataFrame | None = None) -> EHRData:
