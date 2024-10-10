@@ -16,7 +16,19 @@ if TYPE_CHECKING:
 
 
 class EHRData(AnnData):
-    """EHRData object."""
+    """EHRData object.
+
+    Inherits `__init__` parameters, methods, and properties from :class:`~anndata.AnnData`.
+
+    Parameters
+    ----------
+    X
+        See :attr:`~anndata.AnnData.X`.
+    r
+        3-Dimensional tensor. See :attr:`r`.
+    t
+        Time dataframe for describing third axis. See :attr:`t`.
+    """
 
     _t: pd.DataFrame | None
 
