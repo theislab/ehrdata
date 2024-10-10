@@ -71,13 +71,10 @@ optional-dependencies.test = [
 optional-dependencies.vitessce = [
   "hypercorn",
   "ipywidgets",
-  # prevent backtracking
-  "scikit-image>=0.24",
+  "scikit-image>=0.24", # prevent backtracking
   "starlette",
-  # the actual dependency
-  "vitessce[all]",
-  # vitessce does not support zarr>=3
-  "zarr<3",
+  "vitessce[all]",      # the actual dependency
+  "zarr<3",             # vitessce does not support zarr>=3
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://ehrdata.readthedocs.io/"
