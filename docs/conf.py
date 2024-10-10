@@ -4,11 +4,19 @@
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+from __future__ import annotations
+
 # -- Path setup --------------------------------------------------------------
+from contextlib import suppress
 import sys
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sphinx.application import Sphinx
+
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "extensions"))
@@ -59,6 +67,8 @@ extensions = [
     "sphinx.ext.mathjax",
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinxext.opengraph",
+    "scanpydoc.elegant_typehints",
+    "scanpydoc.definition_list_typed_field",
     *[p.stem for p in (HERE / "extensions").glob("*.py")],
 ]
 
@@ -96,6 +106,9 @@ intersphinx_mapping = {
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
     "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
+    "zarr": ("https://zarr.readthedocs.io/en/stable", None),
+    "vitessce": ("https://python-docs.vitessce.io", None),
+    "lamin": ("https://docs.lamin.ai", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -130,3 +143,17 @@ nitpick_ignore = [
     # https://github.com/duckdb/duckdb-web/issues/3806
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
 ]
+
+# Redirect broken parameter annotation classes
+qualname_overrides = {
+    "zarr._storage.store.Store": "zarr.storage.MemoryStore",
+    "lnschema_core.models.Artifact": "lamindb.Artifact",
+}
+
+
+def setup(app: Sphinx) -> None:
+    """Setup lamindb for CI."""
+    import lamindb as ln
+
+    with suppress(RuntimeError):
+        ln.setup.init(storage="/tmp/lamindb")
