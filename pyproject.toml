@@ -36,11 +36,12 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
-  "ehrdata[lamin]",
+  "ehrdata[lamin,vitessce]",
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
   "pandas",
+  "scanpydoc",
   # Until pybtex >0.23.0 releases: https://bitbucket.org/pybtex-devs/pybtex/issues/169/
   "setuptools",
   "sphinx>=4",
@@ -62,10 +63,12 @@ optional-dependencies.lamin = [
 ]
 optional-dependencies.test = [
   "coverage",
+  "ehrdata[vitessce,lamin]",
   "pytest",
 ]
 optional-dependencies.vitessce = [
-  "vitessce[all]",
+  "vitessce[all]>=3.4", # the actual dependency
+  "zarr<3",             # vitessce does not support zarr>=3
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://ehrdata.readthedocs.io/"
