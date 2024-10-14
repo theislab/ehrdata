@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -30,11 +31,11 @@ def skip_member_handler(
     return None
 
 
-# def setup(app: Sphinx) -> None:
-#     """Setup lamindb for CI."""
-#     import lamindb as ln
+def setup(app: Sphinx) -> None:
+    """Setup lamindb for CI."""
+    import lamindb as ln
 
-#     with suppress(RuntimeError):
-#         ln.setup.init(storage="/tmp/lamindb")
+    with suppress(RuntimeError):
+        ln.setup.init(storage="/tmp/lamindb")
 
-#     app.connect("autodoc-skip-member", skip_member_handler)
+    app.connect("autodoc-skip-member", skip_member_handler)
