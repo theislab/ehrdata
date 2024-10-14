@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 # -- Path setup --------------------------------------------------------------
-from contextlib import suppress
 import sys
 from datetime import datetime
 from importlib.metadata import metadata
@@ -15,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from sphinx.application import Sphinx
+    pass
 
 
 HERE = Path(__file__).parent
@@ -155,9 +154,9 @@ qualname_overrides = {
 }
 
 
-def setup(app: Sphinx) -> None:
-    """Setup lamindb for CI."""
-    import lamindb as ln
+# def setup(app: Sphinx) -> None:
+#     """Setup lamindb for CI."""
+#     import lamindb as ln
 
-    with suppress(RuntimeError):
-        ln.setup.init(storage="/tmp/lamindb")
+#     with suppress(RuntimeError):
+#         ln.setup.init(storage="/tmp/lamindb")
