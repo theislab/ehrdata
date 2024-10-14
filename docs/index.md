@@ -13,7 +13,6 @@ references.md
 
 notebooks/tutorial_omop_visualization
 notebooks/omop_tables_tutorial
-notebooks/tutorial_ehrdata_omop
 notebooks/cohort_definition
 notebooks/study_design_example_omop_cdm
 notebooks/indwelling_arterial_catheters
