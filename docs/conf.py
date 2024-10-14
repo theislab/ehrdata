@@ -145,6 +145,8 @@ nitpick_ignore = [
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
     # Is documented as a py:attribute instead
     ("py:class", "numpy.int64"),
+    # For now not in public facing API
+    ("py:class", "awkward.highlevel.Array"),
 ]
 
 # Redirect broken parameter annotation classes
