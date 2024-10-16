@@ -154,11 +154,3 @@ qualname_overrides = {
     "zarr._storage.store.Store": "zarr.storage.MemoryStore",
     "lnschema_core.models.Artifact": "lamindb.Artifact",
 }
-
-
-# def setup(app: Sphinx) -> None:
-#     """Setup lamindb for CI."""
-#     import lamindb as ln
-
-#     with suppress(RuntimeError):
-#         ln.setup.init(storage="/tmp/lamindb")
