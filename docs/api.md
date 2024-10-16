@@ -20,6 +20,9 @@
 .. autosummary::
     :toctree: generated
 
+    io.omop.setup_obs
+    io.omop.setup_variables
+    io.omop.get_time_interval_table
     io.omop.load
     io.omop.extract_person
     io.omop.extract_observation_period

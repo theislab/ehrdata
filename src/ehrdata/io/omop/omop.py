@@ -285,7 +285,7 @@ def get_time_interval_table(
     concept_ids: Literal["all"] | Sequence = "all",
     aggregation_strategy: str = "first",  # what to do if multiple obs. in 1 interval. first, last, mean, median, most_frequent for categories
     # strategy="locf",
-) -> np.array:
+) -> np.ndarray:
     """Extract measurement table of an OMOP CDM Database.
 
     Parameters
