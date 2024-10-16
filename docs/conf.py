@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 # -- Path setup --------------------------------------------------------------
-from contextlib import suppress
 import sys
 from datetime import datetime
 from importlib.metadata import metadata
@@ -15,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from sphinx.application import Sphinx
+    pass
 
 
 HERE = Path(__file__).parent
@@ -146,6 +145,8 @@ nitpick_ignore = [
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
     # Is documented as a py:attribute instead
     ("py:class", "numpy.int64"),
+    # For now not in public facing API
+    ("py:class", "awkward.highlevel.Array"),
 ]
 
 # Redirect broken parameter annotation classes
@@ -153,11 +154,3 @@ qualname_overrides = {
     "zarr._storage.store.Store": "zarr.storage.MemoryStore",
     "lnschema_core.models.Artifact": "lamindb.Artifact",
 }
-
-
-def setup(app: Sphinx) -> None:
-    """Setup lamindb for CI."""
-    import lamindb as ln
-
-    with suppress(RuntimeError):
-        ln.setup.init(storage="/tmp/lamindb")
