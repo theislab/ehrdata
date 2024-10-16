@@ -9,8 +9,6 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from ehrdata import EHRData
-
 
 def _check_sanity_of_folder(folder_path: str | Path):
     pass
@@ -20,15 +18,22 @@ def _check_sanity_of_database(backend_handle: duckdb.DuckDB):
     pass
 
 
+VALID_OBSERVATION_TABLES_SINGLE = ["person", "observation_period", "visit_occurrence"]
+VALID_OBSERVATION_TABLES_JOIN = ["person_observation_period", "person_visit_occurrence"]
+VALID_VARIABLE_TABLES = ["measurement", "observation", "specimen", "note", "death"]
+
+
 def setup_obs(
     backend_handle: Literal[str, duckdb, Path],
-    observation_table: Literal["person", "observation_period", "person_observation_period", "condition_occurrence"],
+    observation_table: Literal[
+        "person", "observation_period", "person_observation_period", "visit_occurrence", "person_visit_occurrence"
+    ],
 ):
     """Setup the observation table.
 
-    This function sets up the observation table for the EHRData project.
-    For this, a table from the OMOP CDM which represents to observed unit should be selected.
-    A unit can be a person, an observation period, the join of these two tables, or a condition occurrence.
+    This function sets up the observation table for the EHRData object.
+    For this, a table from the OMOP CDM which represents the "observed unit" via its id should be selected.
+    A unit can be a person, an observation period, a visit occurrence, or a left join on person_id of a person with one of the other tables.
 
     Parameters
     ----------
@@ -43,23 +48,26 @@ def setup_obs(
     """
     from ehrdata import EHRData
 
-    if observation_table == "person":
-        obs = extract_person(backend_handle)
-    elif observation_table == "observation_period":
-        obs = extract_observation_period(backend_handle)
-    elif observation_table == "person_observation_period":
-        obs = extract_person_observation_period(backend_handle)
-    elif observation_table == "condition_occurrence":
-        obs = extract_condition_occurrence(backend_handle)
-    else:
-        raise ValueError("observation_table must be either 'person', 'observation_period', or 'condition_occurrence'.")
+    if observation_table not in VALID_OBSERVATION_TABLES_SINGLE + VALID_OBSERVATION_TABLES_JOIN:
+        raise ValueError(
+            "observation_table must be either 'person', 'observation_period', 'person_observation_period', 'visit_occurrence', or 'person_visit_occurrence'."
+        )
+
+    if observation_table in VALID_OBSERVATION_TABLES_SINGLE:
+        obs = get_table(backend_handle, observation_table)
+
+    elif observation_table in VALID_OBSERVATION_TABLES_JOIN:
+        if observation_table == "person_observation_period":
+            obs = _get_table_left_join(backend_handle, "person", "observation_period")
+        elif observation_table == "person_visit_occurrence":
+            obs = _get_table_left_join(backend_handle, "person", "visit_occurrence")
 
     return EHRData(obs=obs)
 
 
 def setup_variables(
-    backend_handle: Literal[str, duckdb, Path],
     edata,
+    backend_handle: Literal[str, duckdb, Path],
     tables: Sequence[Literal["measurement", "observation", "procedure_occurrence", "specimen", "note"]],
     start_time: Literal["observation_period_start"] | pd.Timestamp | str,
     interval_length_number: int,
@@ -70,7 +78,7 @@ def setup_variables(
 ):
     """Setup the variables.
 
-    This function sets up the variables for the EHRData project.
+    This function sets up the variables for the EHRData object.
 
     Parameters
     ----------
@@ -95,42 +103,29 @@ def setup_variables(
 
     Returns
     -------
-    An EHRData object with populated .var field.
+    An EHRData object with populated .r and .var field.
     """
-    # Mapping of table names to extraction functions and concept ID column names
-    table_info = {
-        "measurement": {"extract_func": extract_measurement, "concept_id_col": "measurement_concept_id"},
-        "observation": {"extract_func": extract_observation, "concept_id_col": "observation_concept_id"},
-        "procedure_occurrence": {
-            "extract_func": extract_procedure_occurrence,
-            "concept_id_col": "procedure_concept_id",
-        },
-        "specimen": {"extract_func": extract_specimen, "concept_id_col": "specimen_concept_id"},
-        # "device_exposure": {"extract_func": extract_device_exposure, "concept_id_col": "device_concept_id"},
-        # "drug_exposure": {"extract_func": extract_drug_exposure, "concept_id_col": "drug_concept_id"},
-        "note": {"extract_func": extract_note, "concept_id_col": "note_type_concept_id"},
-    }
+    from ehrdata import EHRData
 
     concept_ids_present_list = []
     time_interval_tables = []
 
     for table in tables:
-        if table not in table_info:
-            raise ValueError(
-                "tables must be a sequence of 'measurement', 'observation', 'procedure_occurrence', 'specimen', or 'note'."
-            )
+        if table not in VALID_VARIABLE_TABLES:
+            raise ValueError(f"tables must be a sequence of from [{VALID_VARIABLE_TABLES}].")
 
-        # Get extract function and concept_id column for the table
-        extract_func = table_info[table]["extract_func"]
-        concept_id_col = table_info[table]["concept_id_col"]
-        concept_ids_present_df = normalize_column_names(backend_handle.sql(f"SELECT * FROM {table}").df())
-        concept_ids_present = concept_ids_present_df[concept_id_col].unique()
-        extracted_awkward = extract_func(backend_handle)
+        id_column = f"{table}_type_concept_id" if table in ["note", "death"] else f"{table}_concept_id"
+
+        concept_ids_present = _lowercase_column_names(
+            backend_handle.sql(f"SELECT DISTINCT {id_column} FROM {table}").df()
+        )
+
+        personxfeature_pairs_of_value_timestamp = _extract_personxfeature_pairs_of_value_timestamp(backend_handle)
 
         # Create the time interval table
         time_interval_table = get_time_interval_table(
             backend_handle,
-            extracted_awkward,
+            personxfeature_pairs_of_value_timestamp,
             edata.obs,
             start_time="observation_period_start",
             interval_length_number=interval_length_number,
@@ -166,10 +161,6 @@ def load(
     # folder_path: str,
     # delimiter: str = ",",
     # make_filename_lowercase: bool = True,
-    # use_dask: bool = False,
-    # level: Literal["stay_level", "patient_level"] = "stay_level",
-    # load_tables: str | list[str] | tuple[str] | Literal["auto"] | None = None,
-    # remove_empty_column: bool = True,
 ) -> None:
     """Initialize a connection to the OMOP CDM Database."""
     if isinstance(backend_handle, str) or isinstance(backend_handle, Path):
@@ -180,29 +171,26 @@ def load(
         raise NotImplementedError(f"Backend {backend_handle} not supported. Choose a valid backend.")
 
 
-def extract_person(duckdb_instance):
-    """Extract person table of an OMOP CDM Database."""
-    return normalize_column_names(duckdb_instance.sql("SELECT * FROM person").df())
+def get_table(duckdb_instance, table_name: str) -> pd.DataFrame:
+    """Extract a table of an OMOP CDM Database."""
+    return _lowercase_column_names(duckdb_instance.sql(f"SELECT * FROM {table_name}").df())
 
 
-def extract_observation_period(duckdb_instance):
-    """Extract person table of an OMOP CDM Database."""
-    return normalize_column_names(duckdb_instance.sql("SELECT * FROM observation_period").df())
-
-
-def extract_person_observation_period(duckdb_instance):
-    """Extract observation table of an OMOP CDM Database."""
-    return normalize_column_names(
+def _get_table_left_join(duckdb_instance, table1: str, table2: str) -> pd.DataFrame:
+    """Extract a table of an OMOP CDM Database."""
+    return _lowercase_column_names(
         duckdb_instance.sql(
-            "SELECT * \
-        FROM person \
-        LEFT JOIN observation_period USING(person_id) \
+            f"SELECT * \
+        FROM {table1} \
+        LEFT JOIN {table2} USING(person_id) \
         "
         ).df()
     )
 
 
-def extract_table(duckdb_instance, table_name: str, concept_id_col: str, value_col: str, timestamp_col: str):
+def _extract_personxfeature_pairs_of_value_timestamp(
+    duckdb_instance, table_name: str, concept_id_col: str, value_col: str, timestamp_col: str
+):
     """
     Generalized extraction function to extract data from an OMOP CDM table.
 
@@ -226,10 +214,10 @@ def extract_table(duckdb_instance, table_name: str, concept_id_col: str, value_c
     """
     # Load the specified table
     table_df = duckdb_instance.sql(f"SELECT * FROM {table_name}").df()
-    table_df = normalize_column_names(table_df)
+    table_df = _lowercase_column_names(table_df)
 
     # Load the person table to get unique person IDs
-    person_id_df = normalize_column_names(duckdb_instance.sql("SELECT * FROM person").df())
+    person_id_df = _lowercase_column_names(duckdb_instance.sql("SELECT * FROM person").df())
     person_ids = person_id_df["person_id"].unique()
 
     # Get unique features (concept IDs) for the table
@@ -261,7 +249,8 @@ def extract_table(duckdb_instance, table_name: str, concept_id_col: str, value_c
 
 
 def extract_measurement(duckdb_instance):
-    return extract_table(
+    """Extract a table of an OMOP CDM Database."""
+    return get_table(
         duckdb_instance,
         table_name="measurement",
         concept_id_col="measurement_concept_id",
@@ -271,7 +260,8 @@ def extract_measurement(duckdb_instance):
 
 
 def extract_observation(duckdb_instance):
-    return extract_table(
+    """Extract a table of an OMOP CDM Database."""
+    return get_table(
         duckdb_instance,
         table_name="observation",
         concept_id_col="observation_concept_id",
@@ -281,7 +271,8 @@ def extract_observation(duckdb_instance):
 
 
 def extract_procedure_occurrence(duckdb_instance):
-    return extract_table(
+    """Extract a table of an OMOP CDM Database."""
+    return get_table(
         duckdb_instance,
         table_name="procedure_occurrence",
         concept_id_col="procedure_concept_id",
@@ -291,7 +282,8 @@ def extract_procedure_occurrence(duckdb_instance):
 
 
 def extract_specimen(duckdb_instance):
-    return extract_table(
+    """Extract a table of an OMOP CDM Database."""
+    return get_table(
         duckdb_instance,
         table_name="specimen",
         concept_id_col="specimen_concept_id",
@@ -301,7 +293,8 @@ def extract_specimen(duckdb_instance):
 
 
 def extract_device_exposure(duckdb_instance):
-    # return extract_table(
+    """Extract a table of an OMOP CDM Database."""
+    # return get_table(
     #     duckdb_instance,
     #     table_name="device_exposure",
     #     concept_id_col="device_concept_id",
@@ -313,7 +306,8 @@ def extract_device_exposure(duckdb_instance):
 
 
 def extract_drug_exposure(duckdb_instance):
-    # return extract_table(
+    """Extract a table of an OMOP CDM Database."""
+    # return get_table(
     #     duckdb_instance,
     #     table_name="drug_exposure",
     #     concept_id_col="drug_concept_id",
@@ -325,7 +319,8 @@ def extract_drug_exposure(duckdb_instance):
 
 
 def extract_note(duckdb_instance):
-    return extract_table(
+    """Extract a table of an OMOP CDM Database."""
+    return get_table(
         duckdb_instance,
         table_name="note",
         concept_id_col="note_type_concept_id",
@@ -386,7 +381,7 @@ def get_time_interval_table(
     concept_ids: Literal["all"] | Sequence = "all",
     aggregation_strategy: str = "first",  # what to do if multiple obs. in 1 interval. first, last, mean, median, most_frequent for categories
     # strategy="locf",
-) -> np.array:
+) -> np.ndarray:
     """Extract measurement table of an OMOP CDM Database.
 
     Parameters
@@ -422,7 +417,7 @@ def get_time_interval_table(
 
     if num_intervals == "max_observation_duration":
         observation_period_df = con.execute("SELECT * from observation_period").df()
-        observation_period_df = normalize_column_names(observation_period_df)
+        observation_period_df = _lowercase_column_names(observation_period_df)
 
         # Calculate the duration of observation periods
         num_intervals = np.max(
@@ -464,7 +459,17 @@ def get_time_interval_table(
     return np.array(tables).transpose(0, 2, 1)  # TODO: store in self, np
 
 
-def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
+def _lowercase_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize all column names to lowercase."""
     df.columns = map(str.lower, df.columns)  # Convert all column names to lowercase
     return df
+
+
+def extract_condition_occurrence():
+    """Extract a table of an OMOP CDM Database."""
+    pass
+
+
+def extract_observation_period():
+    """Extract a table of an OMOP CDM Database."""
+    pass
