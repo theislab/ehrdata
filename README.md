@@ -15,7 +15,7 @@ in particular, the [API documentation][].
 
 ## Disclaimer
 
-ehrdata is under heavy construction, and its API not stable. If you find it potentially interesting for your work, reach out to us via the [scverse zulip platform](https://scverse.zulipchat.com/)! We will be able to stabilize things you need.
+ehrdata is under heavy construction, and its API not stable. If you find it potentially interesting for your work, reach out to us via the [scverse zulip platform](https://scverse.zulipchat.com/)! We can help you using it and will be able to stabilize things you need.
 
 If you have inputs on features, please do not hesitate to open an issue on our [issue tracker][]!
 
