@@ -13,6 +13,12 @@ A Python package for EHR data
 Please refer to the [documentation][],
 in particular, the [API documentation][].
 
+## Disclaimer
+
+ehrdata is under heavy construction, and its API not stable. If you find it potentially interesting for your work, reach out to us via the [scverse zulip platform](https://scverse.zulipchat.com/)! We will be able to stabilize things you need.
+
+If you have inputs on features, please do not hesitate to open an issue on our [issue tracker][]!
+
 ## Installation
 
 You need to have Python 3.10 or newer installed on your system.
