@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
@@ -8,6 +9,9 @@ import awkward as ak
 import duckdb
 import numpy as np
 import pandas as pd
+from duckdb import DuckDBPyConnection
+
+from ehrdata.utils._omop_utils import get_omop_table_names
 
 
 def _check_sanity_of_folder(folder_path: str | Path):
@@ -18,22 +22,46 @@ def _check_sanity_of_database(backend_handle: duckdb.DuckDB):
     pass
 
 
-VALID_OBSERVATION_TABLES_SINGLE = ["person", "observation_period", "visit_occurrence"]
-VALID_OBSERVATION_TABLES_JOIN = ["person_observation_period", "person_visit_occurrence"]
+VALID_OBSERVATION_TABLES_SINGLE = ["person"]
+VALID_OBSERVATION_TABLES_JOIN = ["person_cohort", "person_observation_period", "person_visit_occurrence"]
 VALID_VARIABLE_TABLES = ["measurement", "observation", "specimen", "note", "death"]
+
+
+def register_omop_to_db_connection(
+    path: Path,
+    backend_handle: DuckDBPyConnection,
+    source: Literal["csv"] = "csv",
+) -> None:
+    """Register the OMOP CDM tables to the database."""
+    missing_tables = []
+    for table in get_omop_table_names():
+        # if path exists lowercse, uppercase, capitalized:
+        table_path = f"{path}/{table}.csv"
+        if os.path.exists(table_path):
+            if table == "measurement":
+                backend_handle.register(
+                    table, backend_handle.read_csv(f"{path}/{table}.csv", dtype={"measurement_source_value": str})
+                )
+            else:
+                backend_handle.register(table, backend_handle.read_csv(f"{path}/{table}.csv"))
+        else:
+            missing_tables.append([table])
+    print("missing tables: ", missing_tables)
+
+    return None
 
 
 def setup_obs(
     backend_handle: Literal[str, duckdb, Path],
-    observation_table: Literal[
-        "person", "observation_period", "person_observation_period", "visit_occurrence", "person_visit_occurrence"
-    ],
+    observation_table: Literal["person", "person_cohort", "person_observation_period", "person_visit_occurrence"],
 ):
     """Setup the observation table.
 
     This function sets up the observation table for the EHRData object.
-    For this, a table from the OMOP CDM which represents the "observed unit" via its id should be selected.
-    A unit can be a person, an observation period, a visit occurrence, or a left join on person_id of a person with one of the other tables.
+    For this, a table from the OMOP CDM which represents the "observed unit" via an id should be selected.
+    A unit can be a person, or the data of a person together with either the information from cohort, observation_period, or visit_occurrence.
+    Notice a single person can have multiple of the latter, and as such can appear multiple times.
+    For person_cohort, the subject_id of the cohort is considered to be the person_id for a join.
 
     Parameters
     ----------
@@ -50,14 +78,16 @@ def setup_obs(
 
     if observation_table not in VALID_OBSERVATION_TABLES_SINGLE + VALID_OBSERVATION_TABLES_JOIN:
         raise ValueError(
-            "observation_table must be either 'person', 'observation_period', 'person_observation_period', 'visit_occurrence', or 'person_visit_occurrence'."
+            f"observation_table must be one of {[VALID_OBSERVATION_TABLES_SINGLE]+[VALID_OBSERVATION_TABLES_JOIN]}."
         )
 
     if observation_table in VALID_OBSERVATION_TABLES_SINGLE:
         obs = get_table(backend_handle, observation_table)
 
     elif observation_table in VALID_OBSERVATION_TABLES_JOIN:
-        if observation_table == "person_observation_period":
+        if observation_table == "person_cohort":
+            obs = _get_table_left_join(backend_handle, "person", "cohort", right_key="subject_id")
+        elif observation_table == "person_observation_period":
             obs = _get_table_left_join(backend_handle, "person", "observation_period")
         elif observation_table == "person_visit_occurrence":
             obs = _get_table_left_join(backend_handle, "person", "visit_occurrence")
@@ -176,13 +206,15 @@ def get_table(duckdb_instance, table_name: str) -> pd.DataFrame:
     return _lowercase_column_names(duckdb_instance.sql(f"SELECT * FROM {table_name}").df())
 
 
-def _get_table_left_join(duckdb_instance, table1: str, table2: str) -> pd.DataFrame:
+def _get_table_left_join(
+    duckdb_instance, table1: str, table2: str, left_key: str = "person_id", right_key: str = "person_id"
+) -> pd.DataFrame:
     """Extract a table of an OMOP CDM Database."""
     return _lowercase_column_names(
         duckdb_instance.sql(
             f"SELECT * \
-        FROM {table1} \
-        LEFT JOIN {table2} USING(person_id) \
+        FROM {table1} as t1 \
+        LEFT JOIN {table2} as t2 ON t1.{left_key} = t2.{right_key} \
         "
         ).df()
     )
