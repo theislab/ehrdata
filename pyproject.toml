@@ -29,6 +29,7 @@ dependencies = [
   "duckdb",
   # for debug logging (referenced from the issue template)
   "session-info",
+  "xarray",
 ]
 optional-dependencies.dev = [
   "pre-commit",
