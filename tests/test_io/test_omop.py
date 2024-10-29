@@ -4,23 +4,23 @@ import pytest
 
 import ehrdata as ed
 
-# def test_register_omop_to_db_connection():
-#     register_omop_to_db_connection(path="tests/data/toy_omop/vanilla", backend_handle=duckdb.connect(), source="csv")
 
-
-# TODO: add test for death argument
 @pytest.mark.parametrize(
-    "observation_table, expected_length, expected_obs_num_columns",
+    "observation_table, death_table, expected_length, expected_obs_num_columns",
     [
-        ("person", 4, 18),
-        ("person_cohort", 3, 22),
-        ("person_observation_period", 3, 23),
-        ("person_visit_occurrence", 3, 35),
+        ("person", False, 4, 18),
+        ("person", True, 4, 24),
+        ("person_cohort", False, 3, 22),
+        ("person_cohort", True, 3, 28),
+        ("person_observation_period", False, 3, 23),
+        ("person_observation_period", True, 3, 29),
+        ("person_visit_occurrence", False, 3, 35),
+        ("person_visit_occurrence", True, 3, 41),
     ],
 )
-def test_setup_obs(omop_connection_vanilla, observation_table, expected_length, expected_obs_num_columns):
+def test_setup_obs(omop_connection_vanilla, observation_table, death_table, expected_length, expected_obs_num_columns):
     con = omop_connection_vanilla
-    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table)
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table, death_table=death_table)
     assert isinstance(edata, ed.EHRData)
 
     # 4 persons, only 3 are in cohort, or have observation period, or visit occurrence
@@ -44,32 +44,32 @@ def test_setup_obs_invalid_observation_table_argument(omop_connection_vanilla):
         ed.io.omop.setup_obs(backend_handle=con, observation_table="perso")
 
 
-def test_setup_variables_measurement_startdate_fixed(omop_connection_vanilla):
+@pytest.mark.parametrize(
+    "observation_table",
+    ["person_cohort", "person_observation_period", "person_visit_occurrence"],
+)
+@pytest.mark.parametrize(
+    "data_tables",
+    [["measurement"], ["observation"]],
+)
+@pytest.mark.parametrize(
+    "data_field_to_keep",
+    [["value_as_number"], ["value_as_concept_id"]],
+)
+def test_setup_variables(omop_connection_vanilla, observation_table, data_tables, data_field_to_keep):
     con = omop_connection_vanilla
-    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person")
-    ed.io.omop.setup_variables(
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table)
+    edata = ed.io.omop.setup_variables(
         edata,
         backend_handle=con,
-        tables=["measurement"],
-        start_time="2100-01-01",
+        data_tables=data_tables,
+        data_field_to_keep=data_field_to_keep,
         interval_length_number=1,
         interval_length_unit="day",
-        num_intervals=31,
+        num_intervals=30,
     )
-    # check precise expected table
-    assert edata.vars.shape[1] == 8
 
-
-def test_setup_var_measurement_startdate_observation_period():
-    # check precise expected table
-    pass
-
-
-def test_setup_var_observation_startdate_fixed():
-    # check precise expected table
-    pass
-
-
-def test_setup_var_observation_startdate_observation_period():
-    # check precise expected table
-    pass
+    assert isinstance(edata, ed.EHRData)
+    assert edata.n_obs == 3
+    assert edata.n_vars == 2
+    assert edata.r.shape[2] == 30

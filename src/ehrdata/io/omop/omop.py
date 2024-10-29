@@ -129,7 +129,7 @@ def setup_variables(
     edata
         The EHRData object to which the variables should be added.
     data_tables
-        The tables to be used.
+        The tables to be used. For now, only one can be used.
     data_field_to_keep
         The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".
         If multiple tables are used, this can be a dictionary with the table name as key and the column name as value, e.g. {"measurement": "value_as_number", "observation": "value_as_concept_id"}.
@@ -150,78 +150,33 @@ def setup_variables(
     -------
     An EHRData object with populated .r and .var field.
     """
-    time_interval_tables = []
+    from ehrdata import EHRData
 
     time_defining_table = edata.uns.get("omop_io_observation_table", None)
     if time_defining_table is None:
         raise ValueError("The observation table must be set up first, use the `setup_obs` function.")
 
-    for data_table in data_tables:
-        ds = (
-            time_interval_table_query_long_format(
-                backend_handle=backend_handle,
-                time_defining_table=time_defining_table,
-                data_table=data_table,
-                data_field_to_keep=data_field_to_keep,
-                interval_length_number=interval_length_number,
-                interval_length_unit=interval_length_unit,
-                num_intervals=num_intervals,
-                aggregation_strategy=aggregation_strategy,
-            )
-            .set_index(["person_id", "data_table_concept_id", "interval_step"])
-            .to_xarray()
+    ds = (
+        time_interval_table_query_long_format(
+            backend_handle=backend_handle,
+            time_defining_table=time_defining_table,
+            data_table=data_tables[0],
+            data_field_to_keep=data_field_to_keep,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            aggregation_strategy=aggregation_strategy,
         )
-        # TODO: interval_start to var
-        # TODO: concept_ids to var
-        # TODO: concept_names to var
-        # TODO: for measurement, observation: store unit_concept_id and unit_name in var
-        time_interval_tables.append(ds)
+        .set_index(["person_id", "data_table_concept_id", "interval_step"])
+        .to_xarray()
+    )
 
-    return ds
-    # for table in tables:
-    #     if table not in VALID_VARIABLE_TABLES:
-    #         raise ValueError(f"tables must be a sequence of from [{VALID_VARIABLE_TABLES}].")
+    var = ds["data_table_concept_id"].to_dataframe()
+    t = ds["interval_step"].to_dataframe()
 
-    #     id_column = f"{table}_type_concept_id" if table in ["note", "death"] else f"{table}_concept_id"
+    edata = EHRData(r=ds[data_field_to_keep[0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
 
-    #     concept_ids_present = _lowercase_column_names(
-    #         backend_handle.sql(f"SELECT DISTINCT {id_column} FROM {table}").df()
-    #     )
-
-    #     personxfeature_pairs_of_value_timestamp = _extract_personxfeature_pairs_of_value_timestamp(backend_handle)
-
-    #     # Create the time interval table
-    #     time_interval_table = get_time_interval_table(
-    #         backend_handle,
-    #         personxfeature_pairs_of_value_timestamp,
-    #         edata.obs,
-    #         start_time="observation_period_start",
-    #         interval_length_number=interval_length_number,
-    #         interval_length_unit=interval_length_unit,
-    #         num_intervals=num_intervals,
-    #         concept_ids=concept_ids,
-    #         aggregation_strategy=aggregation_strategy,
-    #     )
-
-    #     # Append
-    #     concept_ids_present_list.append(concept_ids_present)
-    #     time_interval_tables.append(time_interval_table)
-
-    # Combine time interval tables
-    # if len(time_interval_tables) > 1:
-    #     time_interval_table = np.concatenate([time_interval_table, time_interval_table], axis=1)
-    #     concept_ids_present = pd.concat(concept_ids_present_list)
-    # else:
-    #     time_interval_table = time_interval_tables[0]
-    #     concept_ids_present = concept_ids_present_list[0]
-
-    # # Update edata with the new variables
-    # edata = EHRData(r=time_interval_table, obs=edata.obs, var=concept_ids_present)
-
-    # return edata
-
-
-# DEVICE EXPOSURE and DRUG EXPOSURE NEEDS TO BE IMPLEMENTED BECAUSE THEY CONTAIN START DATE
+    return edata
 
 
 def load(
@@ -256,66 +211,6 @@ def _get_table_join(
         "
         ).df()
     )
-
-
-def _extract_personxfeature_pairs_of_value_timestamp(
-    duckdb_instance, table_name: str, concept_id_col: str, value_col: str, timestamp_col: str
-):
-    """
-    Generalized extraction function to extract data from an OMOP CDM table.
-
-    Parameters
-    ----------
-    duckdb_instance: duckdb.DuckDB
-        The DuckDB instance for querying the database.
-    table_name: str
-        The name of the table to extract data from (e.g., "measurement", "observation").
-    concept_id_col: str
-        The name of the column that contains the concept IDs (e.g., "measurement_concept_id").
-    value_col: str
-        The name of the column that contains the values (e.g., "value_as_number").
-    timestamp_col: str
-        The name of the column that contains the timestamps (e.g., "measurement_datetime").
-
-    Returns
-    -------
-    ak.Array
-        An Awkward Array with the structure: n_person x n_features x 2 (value, time).
-    """
-    # Load the specified table
-    table_df = duckdb_instance.sql(f"SELECT * FROM {table_name}").df()
-    table_df = _lowercase_column_names(table_df)
-
-    # Load the person table to get unique person IDs
-    person_id_df = _lowercase_column_names(duckdb_instance.sql("SELECT * FROM person").df())
-    person_ids = person_id_df["person_id"].unique()
-
-    # Get unique features (concept IDs) for the table
-    features = table_df[concept_id_col].unique()
-
-    # Initialize the collection for all persons
-    person_collection = []
-
-    for person in person_ids:
-        person_as_list = []
-        # Get rows for the current person
-        person_data = table_df[table_df["person_id"] == person]
-
-        # For each feature, get values and timestamps
-        for feature in features:
-            feature_data = person_data[person_data[concept_id_col] == feature]
-
-            # Extract the values and timestamps
-            feature_values = feature_data[value_col]
-            feature_timestamps = feature_data[timestamp_col]
-
-            # Append values and timestamps for this feature
-            person_as_list.append([feature_values, feature_timestamps])
-
-        # Append this person's data to the collection
-        person_collection.append(person_as_list)
-
-    return ak.Array(person_collection)
 
 
 def extract_measurement(duckdb_instance):
