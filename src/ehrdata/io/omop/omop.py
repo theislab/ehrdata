@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from duckdb import DuckDBPyConnection
 
+from ehrdata.io.omop._queries import time_interval_table_query_long_format
 from ehrdata.utils._omop_utils import get_omop_table_names
 
 
@@ -24,7 +25,7 @@ def _check_sanity_of_database(backend_handle: duckdb.DuckDB):
 
 VALID_OBSERVATION_TABLES_SINGLE = ["person"]
 VALID_OBSERVATION_TABLES_JOIN = ["person_cohort", "person_observation_period", "person_visit_occurrence"]
-VALID_VARIABLE_TABLES = ["measurement", "observation", "specimen", "note", "death"]
+VALID_VARIABLE_TABLES = ["measurement", "observation", "specimen"]
 
 
 def register_omop_to_db_connection(
@@ -54,6 +55,7 @@ def register_omop_to_db_connection(
 def setup_obs(
     backend_handle: Literal[str, duckdb, Path],
     observation_table: Literal["person", "person_cohort", "person_observation_period", "person_visit_occurrence"],
+    death_table: bool = False,
 ):
     """Setup the observation table.
 
@@ -69,16 +71,21 @@ def setup_obs(
         The backend handle to the database.
     observation_table
         The observation table to be used.
+    death_table
+        Whether to include the death table. The observation_table created will be left joined with the death table as the right table.
 
     Returns
     -------
     An EHRData object with populated .obs field.
     """
+    if not isinstance(backend_handle, duckdb.duckdb.DuckDBPyConnection):
+        raise ValueError("backend_handle must be a DuckDB connection.")
+
     from ehrdata import EHRData
 
     if observation_table not in VALID_OBSERVATION_TABLES_SINGLE + VALID_OBSERVATION_TABLES_JOIN:
         raise ValueError(
-            f"observation_table must be one of {[VALID_OBSERVATION_TABLES_SINGLE]+[VALID_OBSERVATION_TABLES_JOIN]}."
+            f"observation_table must be one of {VALID_OBSERVATION_TABLES_SINGLE+VALID_OBSERVATION_TABLES_JOIN}."
         )
 
     if observation_table in VALID_OBSERVATION_TABLES_SINGLE:
@@ -86,20 +93,25 @@ def setup_obs(
 
     elif observation_table in VALID_OBSERVATION_TABLES_JOIN:
         if observation_table == "person_cohort":
-            obs = _get_table_left_join(backend_handle, "person", "cohort", right_key="subject_id")
+            obs = _get_table_join(backend_handle, "person", "cohort", right_key="subject_id")
         elif observation_table == "person_observation_period":
-            obs = _get_table_left_join(backend_handle, "person", "observation_period")
+            obs = _get_table_join(backend_handle, "person", "observation_period")
         elif observation_table == "person_visit_occurrence":
-            obs = _get_table_left_join(backend_handle, "person", "visit_occurrence")
+            obs = _get_table_join(backend_handle, "person", "visit_occurrence")
 
-    return EHRData(obs=obs)
+    if death_table:
+        death = get_table(backend_handle, "death")
+        obs = obs.merge(death, how="left", on="person_id")
+
+    return EHRData(obs=obs, uns={"omop_io_observation_table": observation_table.split("person_")[-1]})
 
 
 def setup_variables(
     edata,
-    backend_handle: Literal[str, duckdb, Path],
-    tables: Sequence[Literal["measurement", "observation", "procedure_occurrence", "specimen", "note"]],
-    start_time: Literal["observation_period_start"] | pd.Timestamp | str,
+    *,
+    backend_handle: duckdb.duckdb.DuckDBPyConnection,
+    data_tables: Sequence[Literal["measurement", "observation", "specimen"]],
+    data_field_to_keep: str | dict[str, str],
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
@@ -116,8 +128,11 @@ def setup_variables(
         The backend handle to the database.
     edata
         The EHRData object to which the variables should be added.
-    tables
+    data_tables
         The tables to be used.
+    data_field_to_keep
+        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".
+        If multiple tables are used, this can be a dictionary with the table name as key and the column name as value, e.g. {"measurement": "value_as_number", "observation": "value_as_concept_id"}.
     start_time
         Starting time for values to be included.
     interval_length_number
@@ -127,60 +142,83 @@ def setup_variables(
     num_intervals
         Number of intervals.
     concept_ids
-        Concept IDs to filter on or 'all'.
+        Concept IDs to use from this data table. If not specified, 'all' are used.
     aggregation_strategy
-        Strategy to use when aggregating data within intervals.
+        Strategy to use when aggregating multiple data points within one interval.
 
     Returns
     -------
     An EHRData object with populated .r and .var field.
     """
-    from ehrdata import EHRData
-
-    concept_ids_present_list = []
     time_interval_tables = []
 
-    for table in tables:
-        if table not in VALID_VARIABLE_TABLES:
-            raise ValueError(f"tables must be a sequence of from [{VALID_VARIABLE_TABLES}].")
+    time_defining_table = edata.uns.get("omop_io_observation_table", None)
+    if time_defining_table is None:
+        raise ValueError("The observation table must be set up first, use the `setup_obs` function.")
 
-        id_column = f"{table}_type_concept_id" if table in ["note", "death"] else f"{table}_concept_id"
-
-        concept_ids_present = _lowercase_column_names(
-            backend_handle.sql(f"SELECT DISTINCT {id_column} FROM {table}").df()
+    for data_table in data_tables:
+        ds = (
+            time_interval_table_query_long_format(
+                backend_handle=backend_handle,
+                time_defining_table=time_defining_table,
+                data_table=data_table,
+                data_field_to_keep=data_field_to_keep,
+                interval_length_number=interval_length_number,
+                interval_length_unit=interval_length_unit,
+                num_intervals=num_intervals,
+                aggregation_strategy=aggregation_strategy,
+            )
+            .set_index(["person_id", "data_table_concept_id", "interval_step"])
+            .to_xarray()
         )
+        # TODO: interval_start to var
+        # TODO: concept_ids to var
+        # TODO: concept_names to var
+        # TODO: for measurement, observation: store unit_concept_id and unit_name in var
+        time_interval_tables.append(ds)
 
-        personxfeature_pairs_of_value_timestamp = _extract_personxfeature_pairs_of_value_timestamp(backend_handle)
+    return ds
+    # for table in tables:
+    #     if table not in VALID_VARIABLE_TABLES:
+    #         raise ValueError(f"tables must be a sequence of from [{VALID_VARIABLE_TABLES}].")
 
-        # Create the time interval table
-        time_interval_table = get_time_interval_table(
-            backend_handle,
-            personxfeature_pairs_of_value_timestamp,
-            edata.obs,
-            start_time="observation_period_start",
-            interval_length_number=interval_length_number,
-            interval_length_unit=interval_length_unit,
-            num_intervals=num_intervals,
-            concept_ids=concept_ids,
-            aggregation_strategy=aggregation_strategy,
-        )
+    #     id_column = f"{table}_type_concept_id" if table in ["note", "death"] else f"{table}_concept_id"
 
-        # Append
-        concept_ids_present_list.append(concept_ids_present)
-        time_interval_tables.append(time_interval_table)
+    #     concept_ids_present = _lowercase_column_names(
+    #         backend_handle.sql(f"SELECT DISTINCT {id_column} FROM {table}").df()
+    #     )
+
+    #     personxfeature_pairs_of_value_timestamp = _extract_personxfeature_pairs_of_value_timestamp(backend_handle)
+
+    #     # Create the time interval table
+    #     time_interval_table = get_time_interval_table(
+    #         backend_handle,
+    #         personxfeature_pairs_of_value_timestamp,
+    #         edata.obs,
+    #         start_time="observation_period_start",
+    #         interval_length_number=interval_length_number,
+    #         interval_length_unit=interval_length_unit,
+    #         num_intervals=num_intervals,
+    #         concept_ids=concept_ids,
+    #         aggregation_strategy=aggregation_strategy,
+    #     )
+
+    #     # Append
+    #     concept_ids_present_list.append(concept_ids_present)
+    #     time_interval_tables.append(time_interval_table)
 
     # Combine time interval tables
-    if len(time_interval_tables) > 1:
-        time_interval_table = np.concatenate([time_interval_table, time_interval_table], axis=1)
-        concept_ids_present = pd.concat(concept_ids_present_list)
-    else:
-        time_interval_table = time_interval_tables[0]
-        concept_ids_present = concept_ids_present_list[0]
+    # if len(time_interval_tables) > 1:
+    #     time_interval_table = np.concatenate([time_interval_table, time_interval_table], axis=1)
+    #     concept_ids_present = pd.concat(concept_ids_present_list)
+    # else:
+    #     time_interval_table = time_interval_tables[0]
+    #     concept_ids_present = concept_ids_present_list[0]
 
-    # Update edata with the new variables
-    edata = EHRData(r=time_interval_table, obs=edata.obs, var=concept_ids_present)
+    # # Update edata with the new variables
+    # edata = EHRData(r=time_interval_table, obs=edata.obs, var=concept_ids_present)
 
-    return edata
+    # return edata
 
 
 # DEVICE EXPOSURE and DRUG EXPOSURE NEEDS TO BE IMPLEMENTED BECAUSE THEY CONTAIN START DATE
@@ -206,7 +244,7 @@ def get_table(duckdb_instance, table_name: str) -> pd.DataFrame:
     return _lowercase_column_names(duckdb_instance.sql(f"SELECT * FROM {table_name}").df())
 
 
-def _get_table_left_join(
+def _get_table_join(
     duckdb_instance, table1: str, table2: str, left_key: str = "person_id", right_key: str = "person_id"
 ) -> pd.DataFrame:
     """Extract a table of an OMOP CDM Database."""
@@ -214,7 +252,7 @@ def _get_table_left_join(
         duckdb_instance.sql(
             f"SELECT * \
         FROM {table1} as t1 \
-        LEFT JOIN {table2} as t2 ON t1.{left_key} = t2.{right_key} \
+        JOIN {table2} as t2 ON t1.{left_key} = t2.{right_key} \
         "
         ).df()
     )
