@@ -9,10 +9,16 @@ import awkward as ak
 import duckdb
 import numpy as np
 import pandas as pd
-from duckdb import DuckDBPyConnection
 
-from ehrdata.io.omop._queries import time_interval_table_query_long_format
+from ehrdata.io.omop._queries import (
+    AGGREGATION_STRATEGY_KEY,
+    time_interval_table_query_long_format,
+)
 from ehrdata.utils._omop_utils import get_omop_table_names
+
+VALID_OBSERVATION_TABLES_SINGLE = ["person"]
+VALID_OBSERVATION_TABLES_JOIN = ["person_cohort", "person_observation_period", "person_visit_occurrence"]
+VALID_VARIABLE_TABLES = ["measurement", "observation", "specimen"]
 
 
 def _check_sanity_of_folder(folder_path: str | Path):
@@ -23,14 +29,152 @@ def _check_sanity_of_database(backend_handle: duckdb.DuckDB):
     pass
 
 
-VALID_OBSERVATION_TABLES_SINGLE = ["person"]
-VALID_OBSERVATION_TABLES_JOIN = ["person_cohort", "person_observation_period", "person_visit_occurrence"]
-VALID_VARIABLE_TABLES = ["measurement", "observation", "specimen"]
+def _check_valid_backend_handle(backend_handle) -> None:
+    if not isinstance(backend_handle, duckdb.duckdb.DuckDBPyConnection):
+        raise TypeError("Expected backend_handle to be of type DuckDBPyConnection.")
+
+
+def _check_valid_observation_table(observation_table) -> None:
+    if not isinstance(observation_table, str):
+        raise TypeError("Expected observation_table to be a string.")
+    if observation_table not in VALID_OBSERVATION_TABLES_SINGLE + VALID_OBSERVATION_TABLES_JOIN:
+        raise ValueError(
+            f"observation_table must be one of {VALID_OBSERVATION_TABLES_SINGLE+VALID_OBSERVATION_TABLES_JOIN}."
+        )
+
+
+def _check_valid_death_table(death_table) -> None:
+    if not isinstance(death_table, bool):
+        raise TypeError("Expected death_table to be a boolean.")
+
+
+def _check_valid_edata(edata) -> None:
+    from ehrdata import EHRData
+
+    if not isinstance(edata, EHRData):
+        raise TypeError("Expected edata to be of type EHRData.")
+
+
+def _check_valid_data_tables(data_tables) -> Sequence:
+    if isinstance(data_tables, str):
+        data_tables = [data_tables]
+    if not isinstance(data_tables, Sequence):
+        raise TypeError("Expected data_tables to be a string or Sequence.")
+    if not all(table in VALID_VARIABLE_TABLES for table in data_tables):
+        raise ValueError(f"data_tables must be a subset of {VALID_VARIABLE_TABLES}.")
+    return data_tables
+
+
+def _check_valid_data_field_to_keep(data_field_to_keep) -> Sequence:
+    if isinstance(data_field_to_keep, str):
+        data_field_to_keep = [data_field_to_keep]
+    if not isinstance(data_field_to_keep, Sequence) and not isinstance(data_field_to_keep, dict):
+        raise TypeError("Expected data_field_to_keep to be a string, Sequence, or dictionary.")
+    return data_field_to_keep
+
+
+def _check_valid_interval_length_number(interval_length_number) -> None:
+    if not isinstance(interval_length_number, int):
+        raise TypeError("Expected interval_length_number to be an integer.")
+
+
+def _check_valid_interval_length_unit(interval_length_unit) -> None:
+    # TODO: maybe check if it is a valid unit from pandas.to_timedelta
+    if not isinstance(interval_length_unit, str):
+        raise TypeError("Expected interval_length_unit to be a string.")
+
+
+def _check_valid_num_intervals(num_intervals) -> None:
+    if not isinstance(num_intervals, int):
+        raise TypeError("Expected num_intervals to be an integer.")
+
+
+def _check_valid_concept_ids(concept_ids) -> None:
+    if concept_ids != "all" and not isinstance(concept_ids, Sequence):
+        raise TypeError("concept_ids must be a sequence of integers or 'all'.")
+
+
+def _check_valid_aggregation_strategy(aggregation_strategy) -> None:
+    if aggregation_strategy not in AGGREGATION_STRATEGY_KEY.keys():
+        raise TypeError(f"aggregation_strategy must be one of {AGGREGATION_STRATEGY_KEY.keys()}.")
+
+
+def _collect_units_per_feature(ds, unit_key="unit_concept_id") -> dict:
+    feature_units = {}
+    for i in range(ds[unit_key].shape[1]):
+        single_feature_units = ds[unit_key].isel({ds[unit_key].dims[1]: i})
+        single_feature_units_flat = np.array(single_feature_units).flatten()
+        single_feature_units_unique = pd.unique(single_feature_units_flat[~pd.isna(single_feature_units_flat)])
+        feature_units[i] = single_feature_units_unique
+    return feature_units
+
+
+def _check_one_unit_per_feature(ds, unit_key="unit_concept_id") -> None:
+    feature_units = _collect_units_per_feature(ds, unit_key=unit_key)
+    num_units = np.array([len(units) for _, units in feature_units.items()])
+
+    # print(f"no units for features: {np.argwhere(num_units == 0)}")
+    print(f"multiple units for features: {np.argwhere(num_units > 1)}")
+
+
+def _create_feature_unit_concept_id_report(backend_handle, ds) -> pd.DataFrame:
+    feature_units_concept = _collect_units_per_feature(ds, unit_key="unit_concept_id")
+
+    feature_units_long_format = []
+    for feature, units in feature_units_concept.items():
+        if len(units) == 0:
+            feature_units_long_format.append({"concept_id": feature, "no_units": True, "multiple_units": False})
+        elif len(units) > 1:
+            for unit in units:
+                feature_units_long_format.append(
+                    {
+                        "concept_id": feature,
+                        "unit_concept_id": unit,
+                        "no_units": False,
+                        "multiple_units": True,
+                    }
+                )
+        else:
+            feature_units_long_format.append(
+                {
+                    "concept_id": feature,
+                    "unit_concept_id": units[0],
+                    "no_units": False,
+                    "multiple_units": False,
+                }
+            )
+
+    df = pd.DataFrame(
+        feature_units_long_format, columns=["concept_id", "unit_concept_id", "no_units", "multiple_units"]
+    )
+    df["unit_concept_id"] = df["unit_concept_id"].astype("Int64")
+
+    return df
+
+
+def _create_enriched_var_table(backend_handle, ds, unit_report) -> pd.DataFrame:
+    feature_concept_id_table = ds["data_table_concept_id"].to_dataframe()
+
+    feature_concept_id_unit_table = pd.merge(
+        feature_concept_id_table, unit_report, how="left", left_index=True, right_on="concept_id"
+    )
+
+    concepts = backend_handle.sql("SELECT * FROM concept").df()
+
+    feature_concept_id_unit_info_table = pd.merge(
+        feature_concept_id_unit_table,
+        concepts,
+        how="left",
+        left_on="unit_concept_id",
+        right_on="concept_id",
+    )
+
+    return feature_concept_id_unit_info_table
 
 
 def register_omop_to_db_connection(
     path: Path,
-    backend_handle: DuckDBPyConnection,
+    backend_handle: duckdb.duckdb.DuckDBPyConnection,
     source: Literal["csv"] = "csv",
 ) -> None:
     """Register the OMOP CDM tables to the database."""
@@ -78,15 +222,11 @@ def setup_obs(
     -------
     An EHRData object with populated .obs field.
     """
-    if not isinstance(backend_handle, duckdb.duckdb.DuckDBPyConnection):
-        raise ValueError("backend_handle must be a DuckDB connection.")
+    _check_valid_backend_handle(backend_handle)
+    _check_valid_observation_table(observation_table)
+    _check_valid_death_table(death_table)
 
     from ehrdata import EHRData
-
-    if observation_table not in VALID_OBSERVATION_TABLES_SINGLE + VALID_OBSERVATION_TABLES_JOIN:
-        raise ValueError(
-            f"observation_table must be one of {VALID_OBSERVATION_TABLES_SINGLE+VALID_OBSERVATION_TABLES_JOIN}."
-        )
 
     if observation_table in VALID_OBSERVATION_TABLES_SINGLE:
         obs = get_table(backend_handle, observation_table)
@@ -110,8 +250,9 @@ def setup_variables(
     edata,
     *,
     backend_handle: duckdb.duckdb.DuckDBPyConnection,
-    data_tables: Sequence[Literal["measurement", "observation", "specimen"]],
-    data_field_to_keep: str | dict[str, str],
+    data_tables: Sequence[Literal["measurement", "observation", "specimen"]]
+    | Literal["measurement", "observation", "specimen"],
+    data_field_to_keep: str | Sequence[str] | dict[str, str],
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
@@ -152,9 +293,30 @@ def setup_variables(
     """
     from ehrdata import EHRData
 
+    _check_valid_edata(edata)
+    _check_valid_backend_handle(backend_handle)
+    data_tables = _check_valid_data_tables(data_tables)
+    data_field_to_keep = _check_valid_data_field_to_keep(data_field_to_keep)
+    _check_valid_interval_length_number(interval_length_number)
+    _check_valid_interval_length_unit(interval_length_unit)
+    _check_valid_num_intervals(num_intervals)
+    _check_valid_concept_ids(concept_ids)
+    _check_valid_aggregation_strategy(aggregation_strategy)
+
     time_defining_table = edata.uns.get("omop_io_observation_table", None)
     if time_defining_table is None:
         raise ValueError("The observation table must be set up first, use the `setup_obs` function.")
+
+    if data_tables[0] in ["measurement", "observation"]:
+        # also keep unit_concept_id and unit_source_value;
+        if isinstance(data_field_to_keep, list):
+            data_field_to_keep = list(data_field_to_keep) + ["unit_concept_id", "unit_source_value"]
+        elif isinstance(data_field_to_keep, dict):
+            data_field_to_keep = {
+                k: v + ["unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()
+            }
+        else:
+            raise ValueError
 
     ds = (
         time_interval_table_query_long_format(
@@ -171,12 +333,26 @@ def setup_variables(
         .to_xarray()
     )
 
-    var = ds["data_table_concept_id"].to_dataframe()
+    _check_one_unit_per_feature(ds)
+    # TODO ignore? go with more vanilla omop style. _check_one_unit_per_feature(ds, unit_key="unit_source_value")
+
+    unit_report = _create_feature_unit_concept_id_report(backend_handle, ds)
+    # TODO: generate nice multiple-unit report
+    # TODO: add unit to var
+    # TODO: add unit name to var
+    # TODO: add feature name to var
+
+    # TODO: test all of the above 5
+
+    # var = _create_var_table(backend_handle, unit_report)
+
+    var = _create_enriched_var_table(backend_handle, ds, unit_report)
+
     t = ds["interval_step"].to_dataframe()
 
     edata = EHRData(r=ds[data_field_to_keep[0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
 
-    return edata
+    return edata, unit_report
 
 
 def load(

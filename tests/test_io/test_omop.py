@@ -4,6 +4,17 @@ import pytest
 
 import ehrdata as ed
 
+# constants for toy_omop/vanilla
+VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY = {
+    "person_cohort": 3,
+    "person_observation_period": 3,
+    "person_visit_occurrence": 3,
+}
+VANILLA_NUM_CONCEPTS = {
+    "measurement": 2,
+    "observation": 2,
+}
+
 
 @pytest.mark.parametrize(
     "observation_table, death_table, expected_length, expected_obs_num_columns",
@@ -28,12 +39,30 @@ def test_setup_obs(omop_connection_vanilla, observation_table, death_table, expe
     assert edata.obs.shape[1] == expected_obs_num_columns
 
 
-def test_setup_obs_invalid_backend_handle_argument():
-    with pytest.raises(ValueError, match="backend_handle must be a DuckDB connection."):
-        ed.io.omop.setup_obs(backend_handle="not_a_con", observation_table="person")
+@pytest.mark.parametrize(
+    "backend_handle, observation_table, death_table, expected_error",
+    [
+        ("wrong_type", "person", False, "Expected backend_handle to be of type DuckDBPyConnection."),
+        (None, 123, False, "Expected observation_table to be a string."),
+        (None, "person", "wrong_type", "Expected death_table to be a boolean."),
+    ],
+)
+def test_setup_obs_illegal_argument_types(
+    omop_connection_vanilla,
+    backend_handle,
+    observation_table,
+    death_table,
+    expected_error,
+):
+    with pytest.raises(TypeError, match=expected_error):
+        ed.io.omop.setup_obs(
+            backend_handle=backend_handle or omop_connection_vanilla,
+            observation_table=observation_table,
+            death_table=death_table,
+        )
 
 
-def test_setup_obs_invalid_observation_table_argument(omop_connection_vanilla):
+def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
     con = omop_connection_vanilla
     with pytest.raises(
         ValueError,
@@ -57,6 +86,7 @@ def test_setup_obs_invalid_observation_table_argument(omop_connection_vanilla):
     [["value_as_number"], ["value_as_concept_id"]],
 )
 def test_setup_variables(omop_connection_vanilla, observation_table, data_tables, data_field_to_keep):
+    num_intervals = 4
     con = omop_connection_vanilla
     edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table)
     edata = ed.io.omop.setup_variables(
@@ -66,10 +96,109 @@ def test_setup_variables(omop_connection_vanilla, observation_table, data_tables
         data_field_to_keep=data_field_to_keep,
         interval_length_number=1,
         interval_length_unit="day",
-        num_intervals=30,
+        num_intervals=num_intervals,
     )
 
     assert isinstance(edata, ed.EHRData)
-    assert edata.n_obs == 3
-    assert edata.n_vars == 2
-    assert edata.r.shape[2] == 30
+    assert edata.n_obs == VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY[observation_table]
+    assert edata.n_vars == VANILLA_NUM_CONCEPTS[data_tables[0]]
+    assert edata.r.shape[2] == num_intervals
+
+
+@pytest.mark.parametrize(
+    "edata, backend_handle, data_tables, data_field_to_keep, interval_length_number, interval_length_unit, num_intervals, expected_error",
+    [
+        (
+            "wrong_type",
+            None,
+            ["measurement"],
+            ["value_as_number"],
+            1,
+            "day",
+            4,
+            "Expected edata to be of type EHRData.",
+        ),
+        (
+            None,
+            "wrong_type",
+            ["measurement"],
+            ["value_as_number"],
+            1,
+            "day",
+            4,
+            "Expected backend_handle to be of type DuckDBPyConnection.",
+        ),
+        (
+            None,
+            None,
+            123,
+            ["value_as_number"],
+            1,
+            "day",
+            4,
+            "Expected data_tables to be a string or Sequence.",
+        ),
+        (
+            None,
+            None,
+            ["measurement"],
+            123,
+            1,
+            "day",
+            4,
+            "Expected data_field_to_keep to be a string, Sequence, or dictionary.",
+        ),
+        (
+            None,
+            None,
+            ["measurement"],
+            ["value_as_number"],
+            "wrong_type",
+            "day",
+            4,
+            "Expected interval_length_number to be an integer.",
+        ),
+        (
+            None,
+            None,
+            ["measurement"],
+            ["value_as_number"],
+            1,
+            123,
+            4,
+            "Expected interval_length_unit to be a string.",
+        ),
+        (
+            None,
+            None,
+            ["measurement"],
+            ["value_as_number"],
+            1,
+            "day",
+            "wrong_type",
+            "Expected num_intervals to be an integer.",
+        ),
+    ],
+)
+def test_setup_variables_illegal_argument_types(
+    omop_connection_vanilla,
+    edata,
+    backend_handle,
+    data_tables,
+    data_field_to_keep,
+    interval_length_number,
+    interval_length_unit,
+    num_intervals,
+    expected_error,
+):
+    con = omop_connection_vanilla
+    with pytest.raises(TypeError, match=expected_error):
+        ed.io.omop.setup_variables(
+            edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
+            backend_handle=backend_handle or con,
+            data_tables=data_tables,
+            data_field_to_keep=data_field_to_keep,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+        )
