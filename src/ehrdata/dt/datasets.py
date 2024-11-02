@@ -17,23 +17,36 @@ def _get_table_list() -> list:
     return flat_table_list
 
 
-def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection) -> None:
+def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
     tables = _get_table_list()
 
+    used_tables = []
     missing_tables = []
-    for table in tables:
-        # if path exists lowercse, uppercase, capitalized:
-        table_path = f"{path}/{table}.csv"
-        if os.path.exists(table_path):
-            if table == "measurement":
-                backend_handle.register(
-                    table, backend_handle.read_csv(f"{path}/{table}.csv", dtype={"measurement_source_value": str})
-                )
+    unused_files = []
+    for file_name in os.listdir(path):
+        file_name_trunk = file_name.split(".")[0].lower()
+
+        if file_name_trunk in tables or file_name_trunk.replace(prefix, "") in tables:
+            used_tables.append(file_name_trunk.replace(prefix, ""))
+
+            if file_name_trunk == "measurement":
+                dtype = {"measurement_source_value": str}
             else:
-                backend_handle.register(table, backend_handle.read_csv(f"{path}/{table}.csv"))
+                dtype = None
+
+            backend_handle.register(
+                file_name_trunk.replace(prefix, ""),
+                backend_handle.read_csv(f"{path}/{file_name_trunk}.csv", dtype=dtype),
+            )
         else:
-            missing_tables.append([table])
+            unused_files.append(file_name)
+
+    for table in tables:
+        if table not in used_tables:
+            missing_tables.append(table)
+
     print("missing tables: ", missing_tables)
+    print("unused files: ", unused_files)
 
 
 def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
@@ -80,14 +93,14 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
         else:
             print(f"Failed to download the file. Status code: {response.status_code}")
             return
-
-    return _set_up_duckdb(data_path + "/1_omop_data_csv", backend_handle)
+    # TODO: capitalization, and lowercase, and containing the name
+    return _set_up_duckdb(data_path + "/1_omop_data_csv", backend_handle, prefix="2b_")
 
 
 def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-    """Loads the GIBleed dataset.
+    """Loads the GIBleed dataset in the OMOP Common Data model.
 
-    More details: https://github.com/OHDSI/EunomiaDatasets.
+    More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/GiBleed.
 
     Parameters
     ----------
@@ -109,13 +122,38 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
         >>> ed.dt.gibleed_omop(backend_handle=con)
         >>> con.execute("SHOW TABLES;").fetchall()
     """
-    # TODO:
-    # https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/GiBleed
-    raise NotImplementedError()
+    if data_path is None:
+        data_path = Path("ehrapy_data/GIBleed_dataset")
+
+    if data_path.exists():
+        print(f"Path to data exists, load tables from there: {data_path}")
+    else:
+        print("Downloading data...")
+        URL = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/GiBleed/GiBleed_5.3.zip"
+        response = requests.get(URL)
+
+        if response.status_code == 200:
+            # extract_path = data_path / "gibleed_data_csv"
+            # extract_path.mkdir(parents=True, exist_ok=True)
+
+            # Use zipfile and io to open the ZIP file in memory
+            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                # Extract all contents of the ZIP file into the correct subdirectory
+                z.extractall(data_path)  # Extracting to 'extract_path'
+                print(f"Download successful. ZIP file downloaded and extracted successfully to {data_path}.")
+
+        else:
+            print(f"Failed to download the file. Status code: {response.status_code}")
+
+    # extracted_folder = next(data_path.iterdir(), data_path)
+    # extracted_folder = next((folder for folder in data_path.iterdir() if folder.is_dir() and "_csv" in folder.name and "__MACOSX" not in folder.name), data_path)
+    return _set_up_duckdb(data_path / "GiBleed_5.3", backend_handle)
 
 
 def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-    """Loads the Synthe27Nj dataset.
+    """Loads the Synthea27NJ dataset in the OMOP Common Data model.
+
+    More details: https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/Synthea27Nj.
 
     Parameters
     ----------
@@ -137,9 +175,39 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
         >>> ed.dt.synthea27nj_omop(backend_handle=con)
         >>> con.execute("SHOW TABLES;").fetchall()
     """
-    # TODO
-    # https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/Synthea27Nj
-    raise NotImplementedError()
+    if data_path is None:
+        data_path = Path("ehrapy_data/Synthea27Nj")
+
+    if data_path.exists():
+        print(f"Path to data exists, load tables from there: {data_path}")
+    else:
+        print("Downloading data...")
+        URL = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip"
+        response = requests.get(URL)
+
+        if response.status_code == 200:
+            extract_path = data_path / "synthea27nj_omop_csv"
+            extract_path.mkdir(parents=True, exist_ok=True)
+
+            # Use zipfile and io to open the ZIP file in memory
+            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                # Extract all contents of the ZIP file into the correct subdirectory
+                z.extractall(extract_path)  # Extracting to 'extract_path'
+                print(f"Download successful. ZIP file downloaded and extracted successfully to {extract_path}.")
+
+        else:
+            print(f"Failed to download the file. Status code: {response.status_code}")
+            return
+
+    extracted_folder = next(
+        (
+            folder
+            for folder in data_path.iterdir()
+            if folder.is_dir() and "_csv" in folder.name and "__MACOSX" not in folder.name
+        ),
+        data_path,
+    )
+    return _set_up_duckdb(extracted_folder, backend_handle)
 
 
 def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:

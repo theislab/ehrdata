@@ -6,6 +6,7 @@ import numbers
 import os
 import warnings
 from pathlib import Path
+from typing import Literal
 
 # import dask.dataframe as dd
 import numpy as np
@@ -13,8 +14,13 @@ import pandas as pd
 from rich import print as rprint
 
 
-def get_table_catalog_dict():
-    """Get the table catalog dictionary of the OMOP CDM v5.4.
+def get_table_catalog_dict(version: Literal["5.4"] = "5.4"):
+    """Get the table catalog dictionary of the OMOP CDM.
+
+    Parameters
+    ----------
+    version
+        The version of the OMOP CDM. Currently, only 5.4 is supported.
 
     Returns
     -------
@@ -61,7 +67,30 @@ def get_table_catalog_dict():
         "source_to_concept_map",
         "drug_strength",
     ]
+
     return table_catalog_dict
+
+
+def get_omop_table_names(version: Literal["5.4"] = "5.4"):
+    """Get the table names of the OMOP CDM.
+
+    Args
+    ----
+        version: str, the version of the OMOP CDM. Currently, only 5.4 is supported.
+
+    Returns
+    -------
+        List of table names
+    """
+    if version != "5.4":
+        raise ValueError("Only support OMOP CDM v5.4!")
+
+    table_catalog_dict = get_table_catalog_dict(version=version)
+    tables = []
+    for _, value_list in table_catalog_dict.items():
+        for value in value_list:
+            tables.append(value)
+    return tables
 
 
 def get_dtype_mapping():
