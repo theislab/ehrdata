@@ -271,4 +271,6 @@ def test_setup_variables_illegal_argument_types(
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
+            enrich_var_with_feature_info=enrich_var_with_feature_info,
+            enrich_var_with_unit_info=enrich_var_with_unit_info,
         )
