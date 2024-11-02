@@ -68,8 +68,8 @@ def _check_valid_data_tables(data_tables) -> Sequence:
 def _check_valid_data_field_to_keep(data_field_to_keep) -> Sequence:
     if isinstance(data_field_to_keep, str):
         data_field_to_keep = [data_field_to_keep]
-    if not isinstance(data_field_to_keep, Sequence) and not isinstance(data_field_to_keep, dict):
-        raise TypeError("Expected data_field_to_keep to be a string, Sequence, or dictionary.")
+    if not isinstance(data_field_to_keep, Sequence):
+        raise TypeError("Expected data_field_to_keep to be a string or Sequence.")
     return data_field_to_keep
 
 
@@ -99,13 +99,23 @@ def _check_valid_aggregation_strategy(aggregation_strategy) -> None:
         raise TypeError(f"aggregation_strategy must be one of {AGGREGATION_STRATEGY_KEY.keys()}.")
 
 
+def _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info) -> None:
+    if not isinstance(enrich_var_with_feature_info, bool):
+        raise TypeError("Expected enrich_var_with_feature_info to be a boolean.")
+
+
+def _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info) -> None:
+    if not isinstance(enrich_var_with_unit_info, bool):
+        raise TypeError("Expected enrich_var_with_unit_info to be a boolean.")
+
+
 def _collect_units_per_feature(ds, unit_key="unit_concept_id") -> dict:
     feature_units = {}
     for i in range(ds[unit_key].shape[1]):
         single_feature_units = ds[unit_key].isel({ds[unit_key].dims[1]: i})
         single_feature_units_flat = np.array(single_feature_units).flatten()
         single_feature_units_unique = pd.unique(single_feature_units_flat[~pd.isna(single_feature_units_flat)])
-        feature_units[i] = single_feature_units_unique
+        feature_units[ds["data_table_concept_id"][i].item()] = single_feature_units_unique
     return feature_units
 
 
@@ -152,8 +162,8 @@ def _create_feature_unit_concept_id_report(backend_handle, ds) -> pd.DataFrame:
     return df
 
 
-def _create_enriched_var_table(backend_handle, ds, unit_report) -> pd.DataFrame:
-    feature_concept_id_table = ds["data_table_concept_id"].to_dataframe()
+def _create_enriched_var_with_unit_info(backend_handle, ds, var, unit_report) -> pd.DataFrame:
+    feature_concept_id_table = var  # ds["data_table_concept_id"].to_dataframe()
 
     feature_concept_id_unit_table = pd.merge(
         feature_concept_id_table, unit_report, how="left", left_index=True, right_on="concept_id"
@@ -252,16 +262,20 @@ def setup_variables(
     backend_handle: duckdb.duckdb.DuckDBPyConnection,
     data_tables: Sequence[Literal["measurement", "observation", "specimen"]]
     | Literal["measurement", "observation", "specimen"],
-    data_field_to_keep: str | Sequence[str] | dict[str, str],
+    data_field_to_keep: str | Sequence[str],
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
     concept_ids: Literal["all"] | Sequence = "all",
     aggregation_strategy: str = "last",
+    enrich_var_with_feature_info: bool = False,
+    enrich_var_with_unit_info: bool = False,
 ):
     """Setup the variables.
 
     This function sets up the variables for the EHRData object.
+    It will fail if there is more than one unit_concept_id per feature.
+    Writes a unit report of the features to edata.uns["unit_report_<data_tables>"].
 
     Parameters
     ----------
@@ -270,10 +284,9 @@ def setup_variables(
     edata
         The EHRData object to which the variables should be added.
     data_tables
-        The tables to be used. For now, only one can be used.
+        The table to be used. Only a single table can be used.
     data_field_to_keep
         The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".
-        If multiple tables are used, this can be a dictionary with the table name as key and the column name as value, e.g. {"measurement": "value_as_number", "observation": "value_as_concept_id"}.
     start_time
         Starting time for values to be included.
     interval_length_number
@@ -286,6 +299,10 @@ def setup_variables(
         Concept IDs to use from this data table. If not specified, 'all' are used.
     aggregation_strategy
         Strategy to use when aggregating multiple data points within one interval.
+    enrich_var_with_feature_info
+        Whether to enrich the var table with feature information. If a concept_id is not found in the concept table, the feature information will be NaN.
+    enrich_var_with_unit_info
+        Whether to enrich the var table with unit information. Raises an Error if a) multiple units per feature are found for at least one feature. If a concept_id is not found in the concept table, the feature information will be NaN.
 
     Returns
     -------
@@ -302,6 +319,8 @@ def setup_variables(
     _check_valid_num_intervals(num_intervals)
     _check_valid_concept_ids(concept_ids)
     _check_valid_aggregation_strategy(aggregation_strategy)
+    _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
+    _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info)
 
     time_defining_table = edata.uns.get("omop_io_observation_table", None)
     if time_defining_table is None:
@@ -311,10 +330,11 @@ def setup_variables(
         # also keep unit_concept_id and unit_source_value;
         if isinstance(data_field_to_keep, list):
             data_field_to_keep = list(data_field_to_keep) + ["unit_concept_id", "unit_source_value"]
-        elif isinstance(data_field_to_keep, dict):
-            data_field_to_keep = {
-                k: v + ["unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()
-            }
+        # TODO: use in future version when more than one data table can be used
+        # elif isinstance(data_field_to_keep, dict):
+        #     data_field_to_keep = {
+        #         k: v + ["unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()
+        #     }
         else:
             raise ValueError
 
@@ -337,22 +357,40 @@ def setup_variables(
     # TODO ignore? go with more vanilla omop style. _check_one_unit_per_feature(ds, unit_key="unit_source_value")
 
     unit_report = _create_feature_unit_concept_id_report(backend_handle, ds)
-    # TODO: generate nice multiple-unit report
-    # TODO: add unit to var
-    # TODO: add unit name to var
-    # TODO: add feature name to var
 
-    # TODO: test all of the above 5
+    var = ds["data_table_concept_id"].to_dataframe()
+    concepts = backend_handle.sql("SELECT * FROM concept").df()
 
-    # var = _create_var_table(backend_handle, unit_report)
+    if enrich_var_with_feature_info:
+        var = pd.merge(var, concepts, how="left", left_index=True, right_on="concept_id")
 
-    var = _create_enriched_var_table(backend_handle, ds, unit_report)
+    if enrich_var_with_unit_info:
+        if unit_report["multiple_units"].sum() > 0:
+            raise ValueError("Multiple units per feature found. Enrichment with feature information not possible.")
+        else:
+            var = pd.merge(
+                var,
+                unit_report,
+                how="left",
+                left_index=True,
+                right_on="unit_concept_id",
+                suffixes=("", "_unit"),
+            )
+            var = pd.merge(
+                var,
+                concepts,
+                how="left",
+                left_on="unit_concept_id",
+                right_on="concept_id",
+                suffixes=("", "_unit"),
+            )
 
     t = ds["interval_step"].to_dataframe()
 
     edata = EHRData(r=ds[data_field_to_keep[0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
+    edata.uns[f"unit_report_{data_tables[0]}"] = unit_report
 
-    return edata, unit_report
+    return edata
 
 
 def load(
