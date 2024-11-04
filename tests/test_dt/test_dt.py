@@ -35,3 +35,7 @@ def test_synthea27nj_omop(duckdb_connection):
     assert len(duckdb_connection.execute("SHOW TABLES").df()) == 37
     # sanity check of one table
     assert duckdb_connection.execute("SELECT * FROM person").df().shape == (28, 18)
+
+
+def test_physionet_2012():
+    pass
