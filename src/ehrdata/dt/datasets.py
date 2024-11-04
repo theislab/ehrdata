@@ -68,8 +68,10 @@ def _setup_eunomia_datasets(
             # Use zipfile and io to open the ZIP file in memory
             with zipfile.ZipFile(io.BytesIO(response.content)) as z:
                 # Extract all contents of the ZIP file
-                z.extractall("ehrapy_data")  # Specify the folder where files will be extracted
-                print(f"Download successful. ZIP file downloaded and extracted successfully to {data_path}.")
+                z.extractall(data_path)  # Specify the folder where files will be extracted
+                print(
+                    f"Download successful. ZIP file downloaded and extracted successfully to {data_path/dataset_postfix}."
+                )
         else:
             print(f"Failed to download the file. Status code: {response.status_code}")
             return
@@ -112,7 +114,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
         backend_handle,
         data_path,
         URL="https://physionet.org/static/published-projects/mimic-iv-demo-omop/mimic-iv-demo-data-in-the-omop-common-data-model-0.9.zip",
-        dataset_postfix="1_omop_data_csv",
+        dataset_postfix="mimic-iv-demo-data-in-the-omop-common-data-model-0.9/1_omop_data_csv",
         dataset_prefix="2b_",
     )
 
