@@ -75,7 +75,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
         >>> con.execute("SHOW TABLES;").fetchall()
     """
     if data_path is None:
-        data_path = "ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9"
+        data_path = Path("ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9")
 
     if os.path.exists(data_path):
         print(f"Path to data exists, load tables from there: {data_path}")
@@ -85,7 +85,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
         response = requests.get(URL)
 
         if response.status_code == 200:
-            # Step 2: Use zipfile and io to open the ZIP file in memory
+            # Use zipfile and io to open the ZIP file in memory
             with zipfile.ZipFile(io.BytesIO(response.content)) as z:
                 # Extract all contents of the ZIP file
                 z.extractall("ehrapy_data")  # Specify the folder where files will be extracted
@@ -93,8 +93,8 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
         else:
             print(f"Failed to download the file. Status code: {response.status_code}")
             return
-    # TODO: capitalization, and lowercase, and containing the name
-    return _set_up_duckdb(data_path + "/1_omop_data_csv", backend_handle, prefix="2b_")
+
+    return _set_up_duckdb(data_path / "1_omop_data_csv", backend_handle, prefix="2b_")
 
 
 def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
@@ -133,9 +133,6 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
         response = requests.get(URL)
 
         if response.status_code == 200:
-            # extract_path = data_path / "gibleed_data_csv"
-            # extract_path.mkdir(parents=True, exist_ok=True)
-
             # Use zipfile and io to open the ZIP file in memory
             with zipfile.ZipFile(io.BytesIO(response.content)) as z:
                 # Extract all contents of the ZIP file into the correct subdirectory
@@ -144,16 +141,15 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
 
         else:
             print(f"Failed to download the file. Status code: {response.status_code}")
+            return
 
-    # extracted_folder = next(data_path.iterdir(), data_path)
-    # extracted_folder = next((folder for folder in data_path.iterdir() if folder.is_dir() and "_csv" in folder.name and "__MACOSX" not in folder.name), data_path)
     return _set_up_duckdb(data_path / "GiBleed_5.3", backend_handle)
 
 
 def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the Synthea27NJ dataset in the OMOP Common Data model.
 
-    More details: https://github.com/darwin-eu/EunomiaDatasets/tree/main/datasets/Synthea27Nj.
+    More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/Synthea27Nj.
 
     Parameters
     ----------
@@ -214,3 +210,6 @@ def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) 
     """Loads the MIMIC2 dataset"""
     # TODO: replace mimic_ii as is in ehrapy with its dict-of-table return time - map variables to OMOP?
     raise NotImplementedError()
+
+
+# TODO: physionet2012, physionet2019
