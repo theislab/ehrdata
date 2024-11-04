@@ -18,6 +18,7 @@ def _get_table_list() -> list:
 
 
 def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
+    """Create tables in the backend from the CSV files in the path from datasets in the OMOP Common Data model."""
     tables = _get_table_list()
 
     used_tables = []
@@ -49,10 +50,40 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
     print("unused files: ", unused_files)
 
 
+def _setup_eunomia_datasets(
+    backend_handle: DuckDBPyConnection,
+    data_path: Path | None = None,
+    URL: str = None,
+    dataset_postfix: str = "",
+    dataset_prefix: str = "",
+) -> None:
+    """Loads the Eunomia datasets in the OMOP Common Data model."""
+    if os.path.exists(data_path):
+        print(f"Path to data exists, load tables from there: {data_path}")
+    else:
+        print("Downloading data...")
+        response = requests.get(URL)
+
+        if response.status_code == 200:
+            # Use zipfile and io to open the ZIP file in memory
+            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                # Extract all contents of the ZIP file
+                z.extractall("ehrapy_data")  # Specify the folder where files will be extracted
+                print(f"Download successful. ZIP file downloaded and extracted successfully to {data_path}.")
+        else:
+            print(f"Failed to download the file. Status code: {response.status_code}")
+            return
+
+    return _set_up_duckdb(data_path / dataset_postfix, backend_handle, prefix=dataset_prefix)
+
+
 def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the MIMIC-IV demo data in the OMOP Common Data model.
 
-    More details: https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel.
+    This function loads the MIMIC-IV demo dataset from its `physionet repository <https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel>_` .
+    See also this link for more details.
+
+    DOI https://doi.org/10.13026/2d25-8g07.
 
     Parameters
     ----------
@@ -77,29 +108,19 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
     if data_path is None:
         data_path = Path("ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9")
 
-    if os.path.exists(data_path):
-        print(f"Path to data exists, load tables from there: {data_path}")
-    else:
-        print("Downloading data...")
-        URL = "https://physionet.org/static/published-projects/mimic-iv-demo-omop/mimic-iv-demo-data-in-the-omop-common-data-model-0.9.zip"
-        response = requests.get(URL)
-
-        if response.status_code == 200:
-            # Use zipfile and io to open the ZIP file in memory
-            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                # Extract all contents of the ZIP file
-                z.extractall("ehrapy_data")  # Specify the folder where files will be extracted
-                print(f"Download successful. ZIP file downloaded and extracted successfully to {data_path}.")
-        else:
-            print(f"Failed to download the file. Status code: {response.status_code}")
-            return
-
-    return _set_up_duckdb(data_path / "1_omop_data_csv", backend_handle, prefix="2b_")
+    return _setup_eunomia_datasets(
+        backend_handle,
+        data_path,
+        URL="https://physionet.org/static/published-projects/mimic-iv-demo-omop/mimic-iv-demo-data-in-the-omop-common-data-model-0.9.zip",
+        dataset_postfix="1_omop_data_csv",
+        dataset_prefix="2b_",
+    )
 
 
 def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the GIBleed dataset in the OMOP Common Data model.
 
+    This function loads the GIBleed dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>_`.
     More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/GiBleed.
 
     Parameters
@@ -125,30 +146,18 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
     if data_path is None:
         data_path = Path("ehrapy_data/GIBleed_dataset")
 
-    if data_path.exists():
-        print(f"Path to data exists, load tables from there: {data_path}")
-    else:
-        print("Downloading data...")
-        URL = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/GiBleed/GiBleed_5.3.zip"
-        response = requests.get(URL)
-
-        if response.status_code == 200:
-            # Use zipfile and io to open the ZIP file in memory
-            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                # Extract all contents of the ZIP file into the correct subdirectory
-                z.extractall(data_path)  # Extracting to 'extract_path'
-                print(f"Download successful. ZIP file downloaded and extracted successfully to {data_path}.")
-
-        else:
-            print(f"Failed to download the file. Status code: {response.status_code}")
-            return
-
-    return _set_up_duckdb(data_path / "GiBleed_5.3", backend_handle)
+    return _setup_eunomia_datasets(
+        backend_handle,
+        data_path,
+        URL="https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/GiBleed/GiBleed_5.3.zip",
+        dataset_postfix="GiBleed_5.3",
+    )
 
 
 def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the Synthea27NJ dataset in the OMOP Common Data model.
 
+    This function loads the Synthea27NJ dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>_`.
     More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/Synthea27Nj.
 
     Parameters
@@ -174,25 +183,11 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
     if data_path is None:
         data_path = Path("ehrapy_data/Synthea27Nj")
 
-    if data_path.exists():
-        print(f"Path to data exists, load tables from there: {data_path}")
-    else:
-        print("Downloading data...")
-        URL = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip"
-        response = requests.get(URL)
-
-        if response.status_code == 200:
-            # Use zipfile and io to open the ZIP file in memory
-            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                # Extract all contents of the ZIP file into the correct subdirectory
-                z.extractall(data_path)  # Extracting to 'extract_path'
-                print(f"Download successful. ZIP file downloaded and extracted successfully to {data_path}.")
-
-        else:
-            print(f"Failed to download the file. Status code: {response.status_code}")
-            return
-
-    return _set_up_duckdb(data_path, backend_handle)
+    return _setup_eunomia_datasets(
+        backend_handle,
+        data_path,
+        URL="https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip",
+    )
 
 
 def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
