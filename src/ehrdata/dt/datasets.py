@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-import io
 import os
-import zipfile
+import shutil
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import requests
 from duckdb.duckdb import DuckDBPyConnection
+
+from ehrdata.dt.dataloader import download
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
 from ehrdata.utils._omop_utils import get_table_catalog_dict
+
+DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
 
 def _get_table_list() -> list:
@@ -45,7 +47,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
                 file_name_trunk.replace(prefix, ""),
                 backend_handle.read_csv(f"{path}/{file_name}", dtype=dtype),
             )
-        else:
+        elif file_name_trunk != DOWNLOAD_VERIFICATION_TAG:
             unused_files.append(file_name)
 
     for table in tables:
@@ -59,30 +61,26 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
 def _setup_eunomia_datasets(
     backend_handle: DuckDBPyConnection,
     data_path: Path | None = None,
-    URL: str = None,
-    dataset_postfix: str = "",
+    data_url: str = None,
+    nested_omop_table_path: str = "",
     dataset_prefix: str = "",
 ) -> None:
     """Loads the Eunomia datasets in the OMOP Common Data model."""
-    if os.path.exists(data_path):
-        print(f"Path to data exists, load tables from there: {data_path}")
-    else:
-        print("Downloading data...")
-        response = requests.get(URL)
+    download(
+        data_url,
+        archive_format="zip",
+        output_file_name=DOWNLOAD_VERIFICATION_TAG,
+        output_path=data_path,
+    )
 
-        if response.status_code == 200:
-            # Use zipfile and io to open the ZIP file in memory
-            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                # Extract all contents of the ZIP file
-                z.extractall(data_path)  # Specify the folder where files will be extracted
-                print(
-                    f"Download successful. ZIP file downloaded and extracted successfully to {data_path/dataset_postfix}."
-                )
-        else:
-            print(f"Failed to download the file. Status code: {response.status_code}")
-            return
+    for file_path in (data_path / DOWNLOAD_VERIFICATION_TAG / nested_omop_table_path).glob("*.csv"):
+        shutil.move(file_path, data_path)
 
-    return _set_up_duckdb(data_path / dataset_postfix, backend_handle, prefix=dataset_prefix)
+    _set_up_duckdb(
+        data_path,
+        backend_handle,
+        prefix=dataset_prefix,
+    )
 
 
 def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
@@ -102,7 +100,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
 
     Returns
     -------
-    Returns nothing, but adds the tables to the backend via the handle.
+    Returns nothing, adds the tables to the backend via the handle.
 
     Examples
     --------
@@ -113,20 +111,21 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
         >>> ed.dt.mimic_iv_omop(backend_handle=con)
         >>> con.execute("SHOW TABLES;").fetchall()
     """
+    data_url = "https://physionet.org/static/published-projects/mimic-iv-demo-omop/mimic-iv-demo-data-in-the-omop-common-data-model-0.9.zip"
     if data_path is None:
         data_path = Path("ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9")
 
-    return _setup_eunomia_datasets(
-        backend_handle,
-        data_path,
-        URL="https://physionet.org/static/published-projects/mimic-iv-demo-omop/mimic-iv-demo-data-in-the-omop-common-data-model-0.9.zip",
-        dataset_postfix="mimic-iv-demo-data-in-the-omop-common-data-model-0.9/1_omop_data_csv",
+    _setup_eunomia_datasets(
+        backend_handle=backend_handle,
+        data_path=data_path,
+        data_url=data_url,
+        nested_omop_table_path="1_omop_data_csv",
         dataset_prefix="2b_",
     )
 
 
 def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-    """Loads the GIBleed dataset in the OMOP Common Data model.
+    """Loads the GiBleed dataset in the OMOP Common Data model.
 
     This function loads the GIBleed dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>_`.
     More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/GiBleed.
@@ -140,7 +139,7 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
 
     Returns
     -------
-    Returns nothing, but adds the tables to the backend via the handle.
+    Returns nothing, adds the tables to the backend via the handle.
 
     Examples
     --------
@@ -151,21 +150,22 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
         >>> ed.dt.gibleed_omop(backend_handle=con)
         >>> con.execute("SHOW TABLES;").fetchall()
     """
-    if data_path is None:
-        data_path = Path("ehrapy_data/GIBleed_dataset")
+    data_url = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/GiBleed/GiBleed_5.3.zip"
 
-    return _setup_eunomia_datasets(
-        backend_handle,
-        data_path,
-        URL="https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/GiBleed/GiBleed_5.3.zip",
-        dataset_postfix="GiBleed_5.3",
+    if data_path is None:
+        data_path = Path("ehrapy_data/GiBleed")
+
+    _setup_eunomia_datasets(
+        backend_handle=backend_handle,
+        data_path=data_path,
+        data_url=data_url,
     )
 
 
 def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-    """Loads the Synthea27NJ dataset in the OMOP Common Data model.
+    """Loads the Synthea27Nj dataset in the OMOP Common Data model.
 
-    This function loads the Synthea27NJ dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>_`.
+    This function loads the Synthea27Nj dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>_`.
     More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/Synthea27Nj.
 
     Parameters
@@ -177,7 +177,7 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
 
     Returns
     -------
-    Returns nothing, but adds the tables to the backend via the handle.
+    Returns nothing, adds the tables to the backend via the handle.
 
     Examples
     --------
@@ -188,13 +188,15 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
         >>> ed.dt.synthea27nj_omop(backend_handle=con)
         >>> con.execute("SHOW TABLES;").fetchall()
     """
+    data_url = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip"
+
     if data_path is None:
         data_path = Path("ehrapy_data/Synthea27Nj")
 
-    return _setup_eunomia_datasets(
-        backend_handle,
-        data_path,
-        URL="https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip",
+    _setup_eunomia_datasets(
+        backend_handle=backend_handle,
+        data_path=data_path,
+        data_url=data_url,
     )
 
 
