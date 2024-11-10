@@ -26,5 +26,11 @@ def test_mimic_iv_omop():
 
 
 def test_physionet2012():
-    ed.dt.physionet2012()
+    edata = ed.dt.physionet2012()
+    assert edata.shape == (12000, 38)
+
+    assert edata.r.shape == (12000, 38, 48)
+    assert edata.obs.shape == (12000, 6)
+    assert edata.var.shape == (38, 1)
+
     # assert len(con.execute("SHOW TABLES").df()) == 10

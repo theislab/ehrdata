@@ -231,7 +231,7 @@ def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) 
 def physionet2012(
     data_path: Path | None = None,
     interval_length_number: int = 1,
-    interval_length_unit: str = "day",
+    interval_length_unit: str = "h",
     num_intervals: int = 48,
     aggregation_strategy: str = "last",
     drop_samples: Sequence[str] = [
@@ -369,7 +369,11 @@ def physionet2012(
     df_long = person_long_across_set_df[~person_long_across_set_df["Parameter"].isin(static_features)]
 
     # intervals
-    interval_df = _generate_timedeltas(1, "h", 48)
+    interval_df = _generate_timedeltas(
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=48,
+    )
 
     # TODO: with duckdb? below gives issue of multiindex not unique; think same patient had same feature 2x in same interval.
     df_long_time_seconds = np.array(pd.to_timedelta(df_long["Time"] + ":00").dt.total_seconds())
