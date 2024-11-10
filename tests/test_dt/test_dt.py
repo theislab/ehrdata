@@ -23,3 +23,8 @@ def test_mimic_iv_omop():
 #     ed.dt.synthea27nj_omop(backend_handle=con)
 #     assert len(con.execute("SHOW TABLES").df()) == 37
 #     con.close()
+
+
+def test_physionet2012():
+    ed.dt.physionet2012()
+    # assert len(con.execute("SHOW TABLES").df()) == 10
