@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import shutil
-from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -11,7 +10,7 @@ from duckdb.duckdb import DuckDBPyConnection
 from ehrdata.dt.dataloader import download
 
 if TYPE_CHECKING:
-    from ehrdata import EHRData
+    pass
 from ehrdata.utils._omop_utils import get_table_catalog_dict
 
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
@@ -198,76 +197,6 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
         data_path=data_path,
         data_url=data_url,
     )
-
-
-def physionet2012(
-    data_path: Path | None = None,
-    interval_length_number: int = 1,
-    interval_length_unit: str = "day",
-    num_intervals: int = 48,
-    aggregation_strategy: str = "last",
-    drop_samples: Sequence[str] = [
-        147514,
-        142731,
-        145611,
-        140501,
-        155655,
-        143656,
-        156254,
-        150309,
-        140936,
-        141264,
-        150649,
-        142998,
-    ],
-) -> EHRData:
-    """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>_`.
-
-    If interval_length_number is 1, interval_length_unit is "day", and num_intervals is 48, this is equivalent to the SAITS preprocessing (insert paper/link/citation).
-    Truncated if a sample has more num_intervals steps; Padded if a sample has less than num_intervals steps.
-    Further, by default the following 12 samples are dropped since they have no time series information at all: 147514, 142731, 145611, 140501, 155655, 143656, 156254, 150309,
-    140936, 141264, 150649, 142998.
-
-    Taken the defaults of interval_length_number, interval_length_unit, num_intervals, and drop_samples, the tensor stored in .r of edata is the same as when doing the PyPOTS <insert citation/link/reference> preprocessing.
-    A simple deviation is that the tensor in ehrdata is of shape n_obs x n_vars x n_intervals (with defaults, 3000x37x48) while the tensor in PyPOTS is of shape n_obs x n_intervals x n_vars (3000x48x37).
-    The tensor stored in .r is hence also fully compatible with the PyPOTS package, as the .r tensor of EHRData objects generally is.
-
-    data_path
-        Path to the raw data. If the path exists, the data is loaded from there. Else, the data is downloaded.
-    interval_length_number
-        Numeric value of the length of one interval.
-    interval_length_unit
-        Unit belonging to the interval length.
-    num_intervals
-        Number of intervals.
-    aggregation_strategy
-        Aggregation strategy for the time series data.
-    drop_samples
-        Samples to drop from the dataset (indicate their RecordID).
-
-    Returns
-    -------
-    Returns a the processed physionet2012 dataset in an EHRData object. The raw data is also downloaded, stored and available under the data_path.
-
-    Examples
-    --------
-        >>> import ehrapy as ep
-        >>> import ehrdata as ed
-        >>> edata = ed.dt.physionet_2012()
-        >>> edata
-    """
-    if data_path is None:
-        data_path = Path("ehrapy_data/physionet2012")
-
-    pass
-    # download data
-    # load data
-    # put a/b/c in obs
-    # put outcomes in obs
-    # put record id in obs
-    # put units to var
-    # put featurenames to var
-    # put time to t
 
 
 def physionet2019():
