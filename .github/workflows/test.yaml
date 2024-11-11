@@ -49,6 +49,8 @@ jobs:
           cache-dependency-path: pyproject.toml
       - name: Install dependencies
         run: uv pip install --system ${{ matrix.pip-flags }} ".[dev,test]"
+      - name: Delete pytest cache
+        run: rm -rf .pytest_cache
       - name: Test
         env:
           MPLBACKEND: agg
