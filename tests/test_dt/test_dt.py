@@ -19,7 +19,7 @@ def duckdb_connection():
 
 def test_mimic_iv_omop():
     duckdb_connection = duckdb.connect()
-    ed.dt.mimic_iv_omop(backend_handle=duckdb_connection)
+    ed.dt.mimic_iv_omop(data_path=TEST_DATA_DIR, backend_handle=duckdb_connection)
     assert len(duckdb_connection.execute("SHOW TABLES").df()) == 30
     # sanity check of one table
     assert duckdb_connection.execute("SELECT * FROM person").df().shape == (100, 18)
@@ -28,7 +28,7 @@ def test_mimic_iv_omop():
 
 def test_gibleed_omop():
     duckdb_connection = duckdb.connect()
-    ed.dt.gibleed_omop(backend_handle=duckdb_connection)
+    ed.dt.gibleed_omop(data_path=TEST_DATA_DIR, backend_handle=duckdb_connection)
     assert len(duckdb_connection.execute("SHOW TABLES").df()) == 36
     # sanity check of one table
     assert duckdb_connection.execute("SELECT * FROM person").df().shape == (2694, 18)
@@ -37,7 +37,7 @@ def test_gibleed_omop():
 
 def test_synthea27nj_omop():
     duckdb_connection = duckdb.connect()
-    ed.dt.synthea27nj_omop(backend_handle=duckdb_connection)
+    ed.dt.synthea27nj_omop(data_path=TEST_DATA_DIR, backend_handle=duckdb_connection)
     assert len(duckdb_connection.execute("SHOW TABLES").df()) == 37
     # sanity check of one table
     assert duckdb_connection.execute("SELECT * FROM person").df().shape == (28, 18)
