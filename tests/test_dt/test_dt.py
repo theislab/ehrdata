@@ -6,7 +6,7 @@ import pytest
 
 import ehrdata as ed
 
-TEST_DATA_DIR = Path(__file__).parent / "ehrapy_data"
+TEST_DATA_DIR = Path(__file__).parent / "ehrapy_data2"
 
 
 @pytest.fixture(scope="function")
