@@ -17,25 +17,31 @@ def duckdb_connection():
     con.close()
 
 
-def test_mimic_iv_omop(duckdb_connection):
+def test_mimic_iv_omop():
+    duckdb_connection = duckdb.connect()
     ed.dt.mimic_iv_omop(backend_handle=duckdb_connection)
     assert len(duckdb_connection.execute("SHOW TABLES").df()) == 30
     # sanity check of one table
     assert duckdb_connection.execute("SELECT * FROM person").df().shape == (100, 18)
+    duckdb_connection.close()
 
 
-def test_gibleed_omop(duckdb_connection):
+def test_gibleed_omop():
+    duckdb_connection = duckdb.connect()
     ed.dt.gibleed_omop(backend_handle=duckdb_connection)
     assert len(duckdb_connection.execute("SHOW TABLES").df()) == 36
     # sanity check of one table
     assert duckdb_connection.execute("SELECT * FROM person").df().shape == (2694, 18)
+    duckdb_connection.close()
 
 
-def test_synthea27nj_omop(duckdb_connection):
+def test_synthea27nj_omop():
+    duckdb_connection = duckdb.connect()
     ed.dt.synthea27nj_omop(backend_handle=duckdb_connection)
     assert len(duckdb_connection.execute("SHOW TABLES").df()) == 37
     # sanity check of one table
     assert duckdb_connection.execute("SELECT * FROM person").df().shape == (28, 18)
+    duckdb_connection.close()
 
 
 def test_physionet2012():
