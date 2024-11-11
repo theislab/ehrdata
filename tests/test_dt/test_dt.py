@@ -59,3 +59,18 @@ def test_physionet2012():
     # first entry c two different HR value
     assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 0].r.item(), 65)
     assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 28].r.item(), 68)
+
+
+def test_physionet2012_arguments():
+    edata = ed.dt.physionet2012(
+        interval_length_number=2,
+        interval_length_unit="min",
+        num_intervals=24,
+        aggregation_strategy="first",
+        drop_samples=None,
+    )
+    assert edata.shape == (12000, 38)
+
+    assert edata.r.shape == (12000, 38, 24)
+    assert edata.obs.shape == (12000, 10)
+    assert edata.var.shape == (38, 1)

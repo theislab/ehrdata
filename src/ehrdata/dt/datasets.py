@@ -234,7 +234,7 @@ def physionet2012(
     interval_length_unit: str = "h",
     num_intervals: int = 48,
     aggregation_strategy: str = "last",
-    drop_samples: Sequence[str] = [
+    drop_samples: Sequence[str] | None = [
         "147514",
         "142731",
         "145611",
@@ -367,7 +367,7 @@ def physionet2012(
     interval_df = _generate_timedeltas(
         interval_length_number=interval_length_number,
         interval_length_unit=interval_length_unit,
-        num_intervals=48,
+        num_intervals=num_intervals,
     )
 
     df_long_time_seconds = np.array(pd.to_timedelta(df_long["Time"] + ":00").dt.total_seconds())
@@ -386,7 +386,7 @@ def physionet2012(
 
     edata = EHRData(r=r, obs=obs, var=var, t=t)
 
-    return edata[~edata.obs.index.isin(drop_samples)]
+    return edata[~edata.obs.index.isin(drop_samples or [])]
 
 
 def physionet2019():
