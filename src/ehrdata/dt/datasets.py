@@ -235,23 +235,23 @@ def physionet2012(
     num_intervals: int = 48,
     aggregation_strategy: str = "last",
     drop_samples: Sequence[str] = [
-        147514,
-        142731,
-        145611,
-        140501,
-        155655,
-        143656,
-        156254,
-        150309,
-        140936,
-        141264,
-        150649,
-        142998,
+        "147514",
+        "142731",
+        "145611",
+        "140501",
+        "155655",
+        "143656",
+        "156254",
+        "150309",
+        "140936",
+        "141264",
+        "150649",
+        "142998",
     ],
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>_`.
 
-    If interval_length_number is 1, interval_length_unit is "day", and num_intervals is 48, this is equivalent to the SAITS preprocessing (insert paper/link/citation).
+    If interval_length_number is 1, interval_length_unit is "h" (hour), and num_intervals is 48, this is equivalent to the SAITS preprocessing (insert paper/link/citation).
     Truncated if a sample has more num_intervals steps; Padded if a sample has less than num_intervals steps.
     Further, by default the following 12 samples are dropped since they have no time series information at all: 147514, 142731, 145611, 140501, 155655, 143656, 156254, 150309,
     140936, 141264, 150649, 142998.
@@ -319,29 +319,24 @@ def physionet2012(
             output_file_name=file_name,
         )
 
-    # load data
-    # person_assignment = ["RecordID", "set"]
     static_features = ["Age", "Gender", "ICUType", "Height"]
-    # outcomes = ["SAPS-I", "SOFA", "Length_of_stay", "Survival", "In-hospital_death"]
 
-    # obs_columns = person_assignment + static_features + outcomes
-
-    # read temporal data
     person_long_across_set_collector = []
-    # read each set
     for data_subset_dir in temp_data_set_names:
         person_long_within_set_collector = []
 
-        # read each person
+        # each txt file is the data of a person, in long format
+        # the columns in the txt files are: Time, Parameter, Value
         for txt_file in (data_path / data_subset_dir).glob("*.txt"):
             person_long = pd.read_csv(txt_file)
-            person_long["RecordID"] = int(txt_file.stem)
 
+            # add RecordID (=person id in this dataset) to all data points of this person
+            person_long["RecordID"] = int(txt_file.stem)
             person_long_within_set_collector.append(person_long)
 
         person_long_within_set_df = pd.concat(person_long_within_set_collector)
-        person_long_within_set_df["set"] = data_subset_dir
 
+        person_long_within_set_df["set"] = data_subset_dir
         person_long_across_set_collector.append(person_long_within_set_df)
 
     person_long_across_set_df = pd.concat(person_long_across_set_collector)
@@ -349,12 +344,12 @@ def physionet2012(
     person_outcome_collector = []
     for outcome_file_name in outcome_file_names:
         outcome_df = pd.read_csv(data_path / outcome_file_name)
-        # person_long_across_set_df = pd.merge(person_long_across_set_df, outcome_df, on="RecordID")
-        outcome_df["set"] = outcome_file_name.split("-")[1].split(".")[0]
+        # outcome_df["set"] = "set-" + outcome_file_name.split("-")[1].split(".")[0]
         person_outcome_collector.append(outcome_df)
 
     person_outcome_df = pd.concat(person_outcome_collector)
 
+    # gather the static_features together with RecordID and set for each person into the obs table
     obs = (
         person_long_across_set_df[person_long_across_set_df["Parameter"].isin(static_features)]
         .pivot(index=["RecordID", "set"], columns=["Parameter"], values=["Value"])
@@ -362,35 +357,34 @@ def physionet2012(
     )
     obs.columns = obs.columns.droplevel(0)
 
-    obs.merge(person_outcome_df, how="left", left_on="RecordID", right_on="RecordID")
-    obs["RecordID"] = obs.index
-    # TODO: some convenience to obs, e.g. gender to stringt
-    # TODO: units
+    obs = obs.merge(person_outcome_df, how="left", left_on="RecordID", right_on="RecordID")
+    obs.set_index("RecordID", inplace=True)
+    # obs.index = obsobs["RecordID"] = obs.index
+
+    # consider only time series features from now
     df_long = person_long_across_set_df[~person_long_across_set_df["Parameter"].isin(static_features)]
 
-    # intervals
     interval_df = _generate_timedeltas(
         interval_length_number=interval_length_number,
         interval_length_unit=interval_length_unit,
         num_intervals=48,
     )
 
-    # TODO: with duckdb? below gives issue of multiindex not unique; think same patient had same feature 2x in same interval.
     df_long_time_seconds = np.array(pd.to_timedelta(df_long["Time"] + ":00").dt.total_seconds())
     interval_df_interval_end_offset_seconds = np.array(interval_df["interval_end_offset"].dt.total_seconds())
-
     df_long_interval_step = np.argmax(df_long_time_seconds[:, None] <= interval_df_interval_end_offset_seconds, axis=1)
-
     df_long["interval_step"] = df_long_interval_step
-    df_long = df_long.drop_duplicates(subset=["RecordID", "Parameter", "interval_step"], keep="last")
+
+    # if one person for one feature (=Parameter) within one interval_step has multiple measurements, decide which one to keep
+    df_long = df_long.drop_duplicates(subset=["RecordID", "Parameter", "interval_step"], keep=aggregation_strategy)
 
     xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
 
     var = xa["Parameter"].to_dataframe()
-
     t = xa["interval_step"].to_dataframe()
+    r = xa["Value"].values
 
-    edata = EHRData(r=xa["Value"].values, obs=obs, var=var, t=t)
+    edata = EHRData(r=r, obs=obs, var=var, t=t)
 
     return edata[~edata.obs.index.isin(drop_samples)]
 
