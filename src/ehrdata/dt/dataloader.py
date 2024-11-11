@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
@@ -10,7 +11,8 @@ from typing import Literal
 
 import requests
 from filelock import FileLock
-from rich import print
+
+# from rich import print
 from rich.progress import Progress
 
 
@@ -56,12 +58,12 @@ def download(
     lock_path = f"{download_to_path}.lock"
     with FileLock(lock_path):
         if _remove_archive_extension(download_to_path).exists():
-            warning = f"[bold red]File {_remove_archive_extension(download_to_path)} already exists!"
+            warning = f"File {_remove_archive_extension(download_to_path)} already exists!"
             if not overwrite:
-                print(warning)
+                logging.info(warning)
                 return
             else:
-                print(f"{warning} Overwriting...")
+                logging.info(f"{warning} Overwriting...")
 
         response = requests.get(url, stream=True)
         total = int(response.headers.get("content-length", 0))

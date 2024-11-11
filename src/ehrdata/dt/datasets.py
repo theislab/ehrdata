@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from collections.abc import Sequence
@@ -57,8 +58,8 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
         if table not in used_tables:
             missing_tables.append(table)
 
-    print("missing tables: ", missing_tables)
-    print("unused files: ", unused_files)
+    logging.info(f"missing tables: {missing_tables}")
+    logging.info(f"unused files: {unused_files}")
 
 
 def _setup_eunomia_datasets(
