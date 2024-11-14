@@ -63,22 +63,21 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
 
 
 def _setup_eunomia_datasets(
+    data_url: str,
     backend_handle: DuckDBPyConnection,
     data_path: Path | None = None,
-    data_url: str = None,
-    nested_omop_table_path: str = "",
+    nested_omop_tables_folder: str = None,
     dataset_prefix: str = "",
 ) -> None:
     """Loads the Eunomia datasets in the OMOP Common Data model."""
     download(
         data_url,
-        archive_format="zip",
-        output_file_name=DOWNLOAD_VERIFICATION_TAG,
-        output_path=data_path,
+        saving_path=data_path,
     )
 
-    for file_path in (data_path / DOWNLOAD_VERIFICATION_TAG / nested_omop_table_path).glob("*.csv"):
-        shutil.move(file_path, data_path)
+    if nested_omop_tables_folder:
+        for file_path in (data_path / nested_omop_tables_folder).glob("*.csv"):
+            shutil.move(file_path, data_path)
 
     _set_up_duckdb(
         data_path,
@@ -120,10 +119,10 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
         data_path = Path("ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9")
 
     _setup_eunomia_datasets(
+        data_url=data_url,
         backend_handle=backend_handle,
         data_path=data_path,
-        data_url=data_url,
-        nested_omop_table_path="1_omop_data_csv",
+        nested_omop_tables_folder="mimic-iv-demo-data-in-the-omop-common-data-model-0.9/1_omop_data_csv",
         dataset_prefix="2b_",
     )
 
@@ -157,12 +156,13 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
     data_url = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/GiBleed/GiBleed_5.3.zip"
 
     if data_path is None:
-        data_path = Path("ehrapy_data/GiBleed")
+        data_path = Path("ehrapy_data/GiBleed_5.3")
 
     _setup_eunomia_datasets(
+        data_url=data_url,
         backend_handle=backend_handle,
         data_path=data_path,
-        data_url=data_url,
+        nested_omop_tables_folder="GiBleed_5.3",
     )
 
 
@@ -195,12 +195,12 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
     data_url = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip"
 
     if data_path is None:
-        data_path = Path("ehrapy_data/Synthea27Nj")
+        data_path = Path("ehrapy_data/Synthea27Nj_5.4")
 
     _setup_eunomia_datasets(
+        data_url=data_url,
         backend_handle=backend_handle,
         data_path=data_path,
-        data_url=data_url,
     )
 
 
@@ -289,16 +289,13 @@ def physionet2012(
     for file_name in temp_data_set_names:
         download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}.tar.gz?download",
-            output_path=data_path,
-            output_file_name=file_name + ".tar.gz",
-            archive_format="gztar",
+            saving_path=data_path,
         )
 
     for file_name in outcome_file_names:
         download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}?download",
-            output_path=data_path,
-            output_file_name=file_name,
+            saving_path=data_path,
         )
 
     static_features = ["Age", "Gender", "ICUType", "Height"]
