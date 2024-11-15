@@ -49,7 +49,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
 
             backend_handle.register(
                 file_name_trunk.replace(prefix, ""),
-                backend_handle.read_csv(f"{path}/{file_name}", dtype=dtype),
+                backend_handle.read_csv(f"{path}/{file_name}", dtype=dtype, delim=","),
             )
         elif file_name_trunk != DOWNLOAD_VERIFICATION_TAG:
             unused_files.append(file_name)
@@ -352,7 +352,7 @@ def physionet2012(
     df_long_time_seconds = np.array(pd.to_timedelta(df_long["Time"] + ":00").dt.total_seconds())
     interval_df_interval_end_offset_seconds = np.array(interval_df["interval_end_offset"].dt.total_seconds())
     df_long_interval_step = np.argmax(df_long_time_seconds[:, None] <= interval_df_interval_end_offset_seconds, axis=1)
-    df_long["interval_step"] = df_long_interval_step
+    df_long.loc[:, ["interval_step"]] = df_long_interval_step
 
     # if one person for one feature (=Parameter) within one interval_step has multiple measurements, decide which one to keep
     df_long = df_long.drop_duplicates(subset=["RecordID", "Parameter", "interval_step"], keep=aggregation_strategy)
