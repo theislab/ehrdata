@@ -47,10 +47,12 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
             else:
                 dtype = None
 
-            backend_handle.register(
-                file_name_trunk.replace(prefix, ""),
-                backend_handle.read_csv(f"{path}/{file_name}", dtype=dtype, delimiter=","),
-            )
+            df = pd.read_csv(f"{path}/{file_name}", dtype=dtype)  # noqa: F841
+            backend_handle.execute(f"CREATE TABLE {file_name_trunk.replace(prefix, '')} AS SELECT * FROM df")
+            # backend_handle.register(
+            #     file_name_trunk.replace(prefix, ""),
+            #     backend_handle.read_csv(f"{path}/{file_name}", dtype=dtype, delimiter=","),
+            # )
         elif file_name_trunk != DOWNLOAD_VERIFICATION_TAG:
             unused_files.append(file_name)
 
