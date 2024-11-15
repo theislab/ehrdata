@@ -49,7 +49,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
 
             backend_handle.register(
                 file_name_trunk.replace(prefix, ""),
-                backend_handle.read_csv(f"{path}/{file_name}", dtype=dtype, delim=","),
+                backend_handle.read_csv(f"{path}/{file_name}", dtype=dtype, delimiter=","),
             )
         elif file_name_trunk != DOWNLOAD_VERIFICATION_TAG:
             unused_files.append(file_name)
