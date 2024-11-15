@@ -460,17 +460,6 @@ def extract_procedure_occurrence(duckdb_instance):
     )
 
 
-def extract_specimen(duckdb_instance):
-    """Extract a table of an OMOP CDM Database."""
-    return get_table(
-        duckdb_instance,
-        table_name="specimen",
-        concept_id_col="specimen_concept_id",
-        value_col="unit_concept_id",  # Assuming `unit_concept_id` is a suitable value field
-        timestamp_col="specimen_datetime",
-    )
-
-
 def extract_device_exposure(duckdb_instance):
     """Extract a table of an OMOP CDM Database."""
     # return get_table(
