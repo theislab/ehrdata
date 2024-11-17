@@ -17,13 +17,6 @@ if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
-COLUMN_CASE = {
-    "uppercase": "uppercase",
-    "lowercase": "lowercase",
-    "titlecase": "titlecase",
-}
-
-
 def _setup_eunomia_datasets(
     data_url: str,
     backend_handle: DuckDBPyConnection,
@@ -41,12 +34,11 @@ def _setup_eunomia_datasets(
         for file_path in (data_path / nested_omop_tables_folder).glob("*.csv"):
             shutil.move(file_path, data_path)
 
-    edata = setup_connection(
+    setup_connection(
         data_path,
         backend_handle,
         prefix=dataset_prefix,
     )
-    return edata
 
 
 def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
@@ -81,14 +73,13 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
     if data_path is None:
         data_path = Path("ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9")
 
-    edata = _setup_eunomia_datasets(
+    _setup_eunomia_datasets(
         data_url=data_url,
         backend_handle=backend_handle,
         data_path=data_path,
         nested_omop_tables_folder="mimic-iv-demo-data-in-the-omop-common-data-model-0.9/1_omop_data_csv",
         dataset_prefix="2b_",
     )
-    return edata
 
 
 def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
@@ -122,14 +113,12 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
     if data_path is None:
         data_path = Path("ehrapy_data/GiBleed_5.3")
 
-    edata = _setup_eunomia_datasets(
+    _setup_eunomia_datasets(
         data_url=data_url,
         backend_handle=backend_handle,
         data_path=data_path,
         nested_omop_tables_folder="GiBleed_5.3",
     )
-
-    return edata
 
 
 def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
@@ -163,13 +152,11 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
     if data_path is None:
         data_path = Path("ehrapy_data/Synthea27Nj_5.4")
 
-    edata = _setup_eunomia_datasets(
+    _setup_eunomia_datasets(
         data_url=data_url,
         backend_handle=backend_handle,
         data_path=data_path,
     )
-
-    return edata
 
 
 def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
