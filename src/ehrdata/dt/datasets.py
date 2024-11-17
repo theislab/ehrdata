@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-import os
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -12,56 +10,18 @@ import pandas as pd
 from duckdb.duckdb import DuckDBPyConnection
 
 from ehrdata.dt.dataloader import download
+from ehrdata.io.omop import setup_connection
 from ehrdata.io.omop._queries import _generate_timedeltas
-from ehrdata.utils._omop_utils import get_table_catalog_dict
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
 
-DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
-
-def _get_table_list() -> list:
-    flat_table_list = []
-    for _, value_list in get_table_catalog_dict().items():
-        for value in value_list:
-            flat_table_list.append(value)
-    return flat_table_list
-
-
-def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
-    """Create tables in the backend from the CSV files in the path from datasets in the OMOP Common Data model."""
-    tables = _get_table_list()
-
-    used_tables = []
-    missing_tables = []
-    unused_files = []
-    for file_name in os.listdir(path):
-        file_name_trunk = file_name.split(".")[0].lower()
-
-        if file_name_trunk in tables or file_name_trunk.replace(prefix, "") in tables:
-            used_tables.append(file_name_trunk.replace(prefix, ""))
-
-            if file_name_trunk == "measurement":
-                dtype = {"measurement_source_value": str}
-            else:
-                dtype = None
-
-            df = pd.read_csv(f"{path}/{file_name}", dtype=dtype)  # noqa: F841
-            backend_handle.execute(f"CREATE TABLE {file_name_trunk.replace(prefix, '')} AS SELECT * FROM df")
-            # backend_handle.register(
-            #     file_name_trunk.replace(prefix, ""),
-            #     backend_handle.read_csv(f"{path}/{file_name}", dtype=dtype, delimiter=","),
-            # )
-        elif file_name_trunk != DOWNLOAD_VERIFICATION_TAG:
-            unused_files.append(file_name)
-
-    for table in tables:
-        if table not in used_tables:
-            missing_tables.append(table)
-
-    logging.info(f"missing tables: {missing_tables}")
-    logging.info(f"unused files: {unused_files}")
+COLUMN_CASE = {
+    "uppercase": "uppercase",
+    "lowercase": "lowercase",
+    "titlecase": "titlecase",
+}
 
 
 def _setup_eunomia_datasets(
@@ -81,11 +41,12 @@ def _setup_eunomia_datasets(
         for file_path in (data_path / nested_omop_tables_folder).glob("*.csv"):
             shutil.move(file_path, data_path)
 
-    _set_up_duckdb(
+    edata = setup_connection(
         data_path,
         backend_handle,
         prefix=dataset_prefix,
     )
+    return edata
 
 
 def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
@@ -120,13 +81,14 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
     if data_path is None:
         data_path = Path("ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9")
 
-    _setup_eunomia_datasets(
+    edata = _setup_eunomia_datasets(
         data_url=data_url,
         backend_handle=backend_handle,
         data_path=data_path,
         nested_omop_tables_folder="mimic-iv-demo-data-in-the-omop-common-data-model-0.9/1_omop_data_csv",
         dataset_prefix="2b_",
     )
+    return edata
 
 
 def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
@@ -160,12 +122,14 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
     if data_path is None:
         data_path = Path("ehrapy_data/GiBleed_5.3")
 
-    _setup_eunomia_datasets(
+    edata = _setup_eunomia_datasets(
         data_url=data_url,
         backend_handle=backend_handle,
         data_path=data_path,
         nested_omop_tables_folder="GiBleed_5.3",
     )
+
+    return edata
 
 
 def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
@@ -199,11 +163,13 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
     if data_path is None:
         data_path = Path("ehrapy_data/Synthea27Nj_5.4")
 
-    _setup_eunomia_datasets(
+    edata = _setup_eunomia_datasets(
         data_url=data_url,
         backend_handle=backend_handle,
         data_path=data_path,
     )
+
+    return edata
 
 
 def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:

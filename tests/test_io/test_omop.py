@@ -274,3 +274,30 @@ def test_setup_variables_illegal_argument_types(
             enrich_var_with_feature_info=enrich_var_with_feature_info,
             enrich_var_with_unit_info=enrich_var_with_unit_info,
         )
+
+
+def test_capital_letters(omop_connection_capital_letters):
+    # test capital letters both in table names and column names
+    con = omop_connection_capital_letters
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=1,
+        enrich_var_with_feature_info=False,
+        enrich_var_with_unit_info=False,
+    )
+
+    assert edata.r[0, 0, 0] == 18
+
+    tables = con.execute("SHOW TABLES").df()["name"].values
+    assert "measurement" in tables
+    assert "MEASUREMENT" not in tables
+
+    measurement_columns = con.execute("SELECT * FROM measurement").df().columns
+    assert "measurement_id" in measurement_columns
+    assert "MEASUREMENT_ID" not in measurement_columns
