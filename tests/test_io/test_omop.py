@@ -13,6 +13,7 @@ VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY = {
 VANILLA_NUM_CONCEPTS = {
     "measurement": 2,
     "observation": 2,
+    "specimen": 2,
 }
 
 # constants for setup_variables
@@ -88,12 +89,12 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
     ["person_cohort", "person_observation_period", "person_visit_occurrence"],
 )
 @pytest.mark.parametrize(
-    "data_tables",
-    [["measurement"], ["observation"]],
-)
-@pytest.mark.parametrize(
-    "data_field_to_keep",
-    [["value_as_number"], ["value_as_concept_id"]],
+    "data_tables,data_field_to_keep",
+    [
+        (["measurement"], ["value_as_number", "value_as_concept_id"]),
+        (["observation"], ["value_as_number", "value_as_concept_id"]),
+        (["specimen"], ["quantity"]),
+    ],
 )
 @pytest.mark.parametrize(
     "enrich_var_with_feature_info",
