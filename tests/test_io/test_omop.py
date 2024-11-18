@@ -302,3 +302,21 @@ def test_capital_letters(omop_connection_capital_letters):
     measurement_columns = con.execute("SELECT * FROM measurement").df().columns
     assert "measurement_id" in measurement_columns
     assert "MEASUREMENT_ID" not in measurement_columns
+
+
+def test_empty_observation(omop_connection_empty_observation, caplog):
+    con = omop_connection_empty_observation
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["observation"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=1,
+        enrich_var_with_feature_info=False,
+        enrich_var_with_unit_info=False,
+    )
+    assert edata.shape == (1, 0)
+    assert "No data found in observation. Returning edata without additional variables." in caplog.text

@@ -325,6 +325,158 @@ def setup_variables(
         else:
             raise ValueError
 
+    # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
+    count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_tables[0]}").df()["count"].item()
+    if count == 0:
+        logging.info(f"No data found in {data_tables[0]}. Returning edata without additional variables.")
+        return edata
+
+    ds = (
+        time_interval_table_query_long_format(
+            backend_handle=backend_handle,
+            time_defining_table=time_defining_table,
+            data_table=data_tables[0],
+            data_field_to_keep=data_field_to_keep,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            aggregation_strategy=aggregation_strategy,
+        )
+        .set_index(["person_id", "data_table_concept_id", "interval_step"])
+        .to_xarray()
+    )
+
+    _check_one_unit_per_feature(ds)
+    # TODO ignore? go with more vanilla omop style. _check_one_unit_per_feature(ds, unit_key="unit_source_value")
+
+    unit_report = _create_feature_unit_concept_id_report(backend_handle, ds)
+
+    var = ds["data_table_concept_id"].to_dataframe()
+
+    if enrich_var_with_feature_info or enrich_var_with_unit_info:
+        concepts = backend_handle.sql("SELECT * FROM concept").df()
+        concepts.columns = concepts.columns.str.lower()
+
+    if enrich_var_with_feature_info:
+        var = pd.merge(var, concepts, how="left", left_index=True, right_on="concept_id")
+
+    if enrich_var_with_unit_info:
+        if unit_report["multiple_units"].sum() > 0:
+            raise ValueError("Multiple units per feature found. Enrichment with feature information not possible.")
+        else:
+            var = pd.merge(
+                var,
+                unit_report,
+                how="left",
+                left_index=True,
+                right_on="unit_concept_id",
+                suffixes=("", "_unit"),
+            )
+            var = pd.merge(
+                var,
+                concepts,
+                how="left",
+                left_on="unit_concept_id",
+                right_on="concept_id",
+                suffixes=("", "_unit"),
+            )
+
+    t = ds["interval_step"].to_dataframe()
+
+    edata = EHRData(r=ds[data_field_to_keep[0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
+    edata.uns[f"unit_report_{data_tables[0]}"] = unit_report
+
+    return edata
+
+
+def setup_interval_variables(
+    edata,
+    *,
+    backend_handle: duckdb.duckdb.DuckDBPyConnection,
+    data_tables: Sequence[Literal["drug_exposure"]] | Literal["drug_exposure"],
+    data_field_to_keep: str | Sequence[str],
+    interval_length_number: int,
+    interval_length_unit: str,
+    num_intervals: int,
+    concept_ids: Literal["all"] | Sequence = "all",
+    aggregation_strategy: str = "last",
+    enrich_var_with_feature_info: bool = False,
+    enrich_var_with_unit_info: bool = False,
+    keep_start_date_only: bool = False,
+):
+    """Setup the interval variables
+
+    This function sets up the variables that are stored as interval in OMOP for the EHRData object.
+    It will fail if there is more than one unit_concept_id per feature.
+    Writes a unit report of the features to edata.uns["unit_report_<data_tables>"].
+
+    Parameters
+    ----------
+    backend_handle
+        The backend handle to the database.
+    edata
+        The EHRData object to which the variables should be added.
+    data_tables
+        The table to be used. Only a single table can be used.
+    data_field_to_keep
+        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".
+    start_time
+        Starting time for values to be included.
+    interval_length_number
+        Numeric value of the length of one interval.
+    interval_length_unit
+        Unit belonging to the interval length.
+    num_intervals
+        Number of intervals.
+    concept_ids
+        Concept IDs to use from this data table. If not specified, 'all' are used.
+    aggregation_strategy
+        Strategy to use when aggregating multiple data points within one interval.
+    enrich_var_with_feature_info
+        Whether to enrich the var table with feature information. If a concept_id is not found in the concept table, the feature information will be NaN.
+    enrich_var_with_unit_info
+        Whether to enrich the var table with unit information. Raises an Error if a) multiple units per feature are found for at least one feature. If a concept_id is not found in the concept table, the feature information will be NaN.
+
+    Returns
+    -------
+    An EHRData object with populated .r and .var field.
+    """
+    from ehrdata import EHRData
+
+    _check_valid_edata(edata)
+    _check_valid_backend_handle(backend_handle)
+    data_tables = _check_valid_data_tables(data_tables)
+    data_field_to_keep = _check_valid_data_field_to_keep(data_field_to_keep)
+    _check_valid_interval_length_number(interval_length_number)
+    _check_valid_interval_length_unit(interval_length_unit)
+    _check_valid_num_intervals(num_intervals)
+    _check_valid_concept_ids(concept_ids)
+    _check_valid_aggregation_strategy(aggregation_strategy)
+    _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
+    _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info)
+
+    time_defining_table = edata.uns.get("omop_io_observation_table", None)
+    if time_defining_table is None:
+        raise ValueError("The observation table must be set up first, use the `setup_obs` function.")
+
+    if data_tables[0] in ["drug_exposure"]:
+        # also keep unit_concept_id and unit_source_value;
+        if isinstance(data_field_to_keep, list):
+            data_field_to_keep = list(data_field_to_keep) + ["unit_concept_id", "unit_source_value"]
+        # TODO: use in future version when more than one data table can be used
+        # elif isinstance(data_field_to_keep, dict):
+        #     data_field_to_keep = {
+        #         k: v + ["unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()
+        #     }
+        else:
+            raise ValueError
+
+    # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
+    count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_tables}").df()["count"].item()
+    if count == 0:
+        logging.info(f"No data in {data_tables}.")
+        return edata
+
     ds = (
         time_interval_table_query_long_format(
             backend_handle=backend_handle,
