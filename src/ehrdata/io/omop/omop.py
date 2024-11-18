@@ -65,7 +65,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
                 dtype = None
 
             # read raw csv as temporary table
-            temp_relation = backend_handle.read_csv(path / file_name, dtype=dtype)  # noqa: F841
+            temp_relation = backend_handle.read_csv(path / file_name, dtype=dtype, escapechar="%")  # noqa: F841
             backend_handle.execute("CREATE OR REPLACE TABLE temp_table AS SELECT * FROM temp_relation")
 
             # make query to create table with lowercase column names
