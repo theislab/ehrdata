@@ -13,6 +13,7 @@ from .omop import (
     # extract_procedure_occurrence,
     # extract_specimen,
     setup_connection,
+    setup_interval_variables,
     setup_obs,
     setup_variables,
 )

@@ -14,6 +14,7 @@ VANILLA_NUM_CONCEPTS = {
     "measurement": 2,
     "observation": 2,
     "specimen": 2,
+    "drug_exposure": 2,
 }
 
 # constants for setup_variables
@@ -134,6 +135,56 @@ def test_setup_variables(
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0) + (
         VAR_DIM_UNIT_INFO if enrich_var_with_unit_info else 0
     )
+
+
+@pytest.mark.parametrize(
+    "observation_table",
+    [
+        "person_cohort",
+    ],  # "person_observation_period", "person_visit_occurrence"],
+)
+@pytest.mark.parametrize(
+    "data_tables,data_field_to_keep",
+    [
+        (["drug_exposure"], ["days_supply"]),  # ["one-hot"]
+    ],
+)
+@pytest.mark.parametrize(
+    "enrich_var_with_feature_info",
+    [False],  # True,
+)
+@pytest.mark.parametrize(
+    "keep_date",
+    ["start", "end"],  # "interval"
+)
+def test_setup_interval_variables(
+    omop_connection_vanilla,
+    observation_table,
+    data_tables,
+    data_field_to_keep,
+    enrich_var_with_feature_info,
+    keep_date,
+):
+    num_intervals = 4
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table)
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=data_tables,
+        data_field_to_keep=data_field_to_keep,
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=num_intervals,
+        enrich_var_with_feature_info=enrich_var_with_feature_info,
+        keep_date=keep_date,
+    )
+
+    assert isinstance(edata, ed.EHRData)
+    assert edata.n_obs == VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY[observation_table]
+    assert edata.n_vars == VANILLA_NUM_CONCEPTS[data_tables[0]]
+    assert edata.r.shape[2] == num_intervals
+    assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0)
 
 
 @pytest.mark.parametrize(

@@ -19,6 +19,13 @@ TIME_DEFINING_TABLE_SUBJECT_KEY = {
     "cohort": "subject_id",
 }
 
+DATA_TABLE_CONCEPT_ID_TRUNK = {
+    "measurement": "measurement",
+    "observation": "observation",
+    "specimen": "specimen",
+    "drug_exposure": "drug",
+}
+
 AGGREGATION_STRATEGY_KEY = {
     "last": "LAST",
     "first": "FIRST",
@@ -83,10 +90,14 @@ def time_interval_table_query_long_format(
     num_intervals: int,
     aggregation_strategy: str,
     data_field_to_keep: Sequence[str] | str,
+    date_prefix: str = "",
 ) -> pd.DataFrame:
     """Returns a long format DataFrame from the data_table. The following columns should be considered the indices of this long format: person_id, data_table_concept_id, interval_step. The other columns, except for start_date and end_date, should be considered the values."""
     if isinstance(data_field_to_keep, str):
         data_field_to_keep = [data_field_to_keep]
+
+    if date_prefix != "":
+        date_prefix = date_prefix + "_"
 
     timedeltas_dataframe = _generate_timedeltas(interval_length_number, interval_length_unit, num_intervals)
 
@@ -110,10 +121,10 @@ def time_interval_table_query_long_format(
         ), \
         person_data_table AS( \
             WITH distinct_data_table_concept_ids AS ( \
-                SELECT DISTINCT {data_table}_concept_id
+                SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id
                 FROM {data_table} \
             )
-            SELECT person.person_id, {data_table}_concept_id as data_table_concept_id \
+            SELECT person.person_id, {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id as data_table_concept_id \
             FROM person \
             CROSS JOIN distinct_data_table_concept_ids \
         ), \
@@ -129,7 +140,7 @@ def time_interval_table_query_long_format(
         ) \
         SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query(data_table, data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
         FROM long_format_intervals as lfi \
-        LEFT JOIN {data_table} ON lfi.person_id = {data_table}.person_id AND lfi.data_table_concept_id = {data_table}.{data_table}_concept_id AND {data_table}.{data_table}_date BETWEEN lfi.interval_start AND lfi.interval_end \
+        LEFT JOIN {data_table} ON lfi.person_id = {data_table}.person_id AND lfi.data_table_concept_id = {data_table}.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND {data_table}.{data_table}_{date_prefix}date BETWEEN lfi.interval_start AND lfi.interval_end \
         GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
     ).df()

@@ -12,6 +12,8 @@ DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 VALID_OBSERVATION_TABLES_SINGLE = ["person"]
 VALID_OBSERVATION_TABLES_JOIN = ["person_cohort", "person_observation_period", "person_visit_occurrence"]
 VALID_VARIABLE_TABLES = ["measurement", "observation", "specimen"]
+VALID_INTERVAL_VARIABLE_TABLES = ["drug_exposure"]
+VALID_KEEP_DATES = ["start", "end", "interval"]
 
 
 def _check_valid_backend_handle(backend_handle) -> None:
@@ -40,13 +42,23 @@ def _check_valid_edata(edata) -> None:
         raise TypeError("Expected edata to be of type EHRData.")
 
 
-def _check_valid_data_tables(data_tables) -> Sequence:
+def _check_valid_variable_data_tables(data_tables) -> Sequence:
     if isinstance(data_tables, str):
         data_tables = [data_tables]
     if not isinstance(data_tables, Sequence):
         raise TypeError("Expected data_tables to be a string or Sequence.")
     if not all(table in VALID_VARIABLE_TABLES for table in data_tables):
         raise ValueError(f"data_tables must be a subset of {VALID_VARIABLE_TABLES}.")
+    return data_tables
+
+
+def _check_valid_interval_variable_data_tables(data_tables) -> Sequence:
+    if isinstance(data_tables, str):
+        data_tables = [data_tables]
+    if not isinstance(data_tables, Sequence):
+        raise TypeError("Expected data_tables to be a string or Sequence.")
+    if not all(table in VALID_INTERVAL_VARIABLE_TABLES for table in data_tables):
+        raise ValueError(f"data_tables must be a subset of {VALID_INTERVAL_VARIABLE_TABLES}.")
     return data_tables
 
 
@@ -92,3 +104,10 @@ def _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info) -> N
 def _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info) -> None:
     if not isinstance(enrich_var_with_unit_info, bool):
         raise TypeError("Expected enrich_var_with_unit_info to be a boolean.")
+
+
+def _check_valid_keep_date(keep_date: str) -> None:
+    if not isinstance(keep_date, str):
+        raise TypeError("Expected keep_date to be a string.")
+    if keep_date not in VALID_KEEP_DATES:
+        raise ValueError(f"keep_date must be one of {VALID_KEEP_DATES}.")
