@@ -275,7 +275,7 @@ def setup_variables(
     data_tables
         The table to be used. Only a single table can be used.
     data_field_to_keep
-        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".
+        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id". Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval.
     start_time
         Starting time for values to be included.
     interval_length_number

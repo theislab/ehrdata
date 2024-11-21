@@ -77,8 +77,11 @@ def _drop_timedeltas(backend_handle: duckdb.duckdb.DuckDBPyConnection):
 
 
 def _generate_value_query(data_table: str, data_field_to_keep: Sequence, aggregation_strategy: str) -> str:
-    query = f"{', ' .join([f'CASE WHEN COUNT(*) = 0 THEN NULL ELSE {aggregation_strategy}({column}) END AS {column}' for column in data_field_to_keep])}"
-    return query
+    # is_present is 1 in all rows of the data_table; but need an aggregation operation, so use LAST
+    is_present_query = "LAST(is_present) as is_present, "
+    value_query = f"{', ' .join([f'{aggregation_strategy}({column}) AS {column}' for column in data_field_to_keep])}"
+
+    return is_present_query + value_query
 
 
 def time_interval_table_query_long_format(
@@ -137,10 +140,14 @@ def time_interval_table_query_long_format(
             SELECT person_id, data_table_concept_id, interval_step, start_date, start_date + interval_start_offset as interval_start, start_date + interval_end_offset as interval_end \
             FROM long_format_backbone \
             CROSS JOIN timedeltas \
+        ), \
+        data_table_with_presence_indicator as( \
+            SELECT *, 1 as is_present \
+            FROM {data_table} \
         ) \
-        SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query(data_table, data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
+        SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
         FROM long_format_intervals as lfi \
-        LEFT JOIN {data_table} ON lfi.person_id = {data_table}.person_id AND lfi.data_table_concept_id = {data_table}.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND {data_table}.{data_table}_{date_prefix}date BETWEEN lfi.interval_start AND lfi.interval_end \
+        LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{data_table}_{date_prefix}date BETWEEN lfi.interval_start AND lfi.interval_end \
         GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
     ).df()

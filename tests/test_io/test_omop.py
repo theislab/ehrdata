@@ -92,9 +92,9 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
 @pytest.mark.parametrize(
     "data_tables,data_field_to_keep",
     [
-        (["measurement"], ["value_as_number", "value_as_concept_id"]),
-        (["observation"], ["value_as_number", "value_as_concept_id"]),
-        (["specimen"], ["quantity"]),
+        (["measurement"], ["value_as_number", "value_as_concept_id", "is_present"]),
+        (["observation"], ["value_as_number", "value_as_concept_id", "is_present"]),
+        (["specimen"], ["quantity", "is_present"]),
     ],
 )
 @pytest.mark.parametrize(
