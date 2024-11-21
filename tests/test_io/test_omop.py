@@ -139,23 +139,26 @@ def test_setup_variables(
 
 @pytest.mark.parametrize(
     "observation_table",
-    [
-        "person_cohort",
-    ],  # "person_observation_period", "person_visit_occurrence"],
+    ["person_cohort", "person_observation_period", "person_visit_occurrence"],
 )
 @pytest.mark.parametrize(
     "data_tables,data_field_to_keep",
     [
-        (["drug_exposure"], ["days_supply"]),  # ["one-hot"]
+        (["drug_exposure"], ["days_supply"]),
+        (["drug_exposure"], ["is_present"]),
+        # (["condition_occurrence"], ["is_present"]), # TODO: write test file
+        # (["procedure_occurrence"], ["is_present"]), # TODO: write test file
+        # (["device_exposure"], ["is_present"]), # TODO: write test file
+        # (["note"], ["is_present"]),
     ],
 )
 @pytest.mark.parametrize(
     "enrich_var_with_feature_info",
-    [False],  # True,
+    [False, True],
 )
 @pytest.mark.parametrize(
     "keep_date",
-    ["start", "end"],  # "interval"
+    ["start", "end", "interval"],
 )
 def test_setup_interval_variables(
     omop_connection_vanilla,

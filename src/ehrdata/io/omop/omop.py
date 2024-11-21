@@ -32,6 +32,7 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_variable_data_tables,
 )
 from ehrdata.io.omop._queries import (
+    time_interval_table_for_interval_tables_query_long_format,
     time_interval_table_query_long_format,
 )
 from ehrdata.utils._omop_utils import get_table_catalog_dict
@@ -396,7 +397,7 @@ def setup_interval_variables(
     *,
     backend_handle: duckdb.duckdb.DuckDBPyConnection,
     data_tables: Sequence[Literal["drug_exposure"]] | Literal["drug_exposure"],
-    data_field_to_keep: str | Sequence[str] | Literal["one-hot"],
+    data_field_to_keep: str | Sequence[str],
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
@@ -421,7 +422,7 @@ def setup_interval_variables(
     data_tables
         The table to be used. Only a single table can be used.
     data_field_to_keep
-        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".
+        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".  Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval.
     start_time
         Starting time for values to be included.
     interval_length_number
@@ -469,24 +470,37 @@ def setup_interval_variables(
         return edata
 
     if keep_date == "start" or keep_date == "end":
-        date_prefix = keep_date
-    else:
-        raise NotImplementedError("support interval extraction coming soon")
-    ds = (
-        time_interval_table_query_long_format(
-            backend_handle=backend_handle,
-            time_defining_table=time_defining_table,
-            data_table=data_tables[0],
-            data_field_to_keep=data_field_to_keep,
-            interval_length_number=interval_length_number,
-            interval_length_unit=interval_length_unit,
-            num_intervals=num_intervals,
-            aggregation_strategy=aggregation_strategy,
-            date_prefix=date_prefix,
+        ds = (
+            time_interval_table_for_interval_tables_query_long_format(
+                backend_handle=backend_handle,
+                time_defining_table=time_defining_table,
+                data_table=data_tables[0],
+                data_field_to_keep=data_field_to_keep,
+                interval_length_number=interval_length_number,
+                interval_length_unit=interval_length_unit,
+                num_intervals=num_intervals,
+                aggregation_strategy=aggregation_strategy,
+                date_prefix=keep_date,
+            )
+            .set_index(["person_id", "data_table_concept_id", "interval_step"])
+            .to_xarray()
         )
-        .set_index(["person_id", "data_table_concept_id", "interval_step"])
-        .to_xarray()
-    )
+    elif keep_date == "interval":
+        ds = (
+            time_interval_table_for_interval_tables_query_long_format(
+                backend_handle=backend_handle,
+                time_defining_table=time_defining_table,
+                data_table=data_tables[0],
+                data_field_to_keep=data_field_to_keep,
+                interval_length_number=interval_length_number,
+                interval_length_unit=interval_length_unit,
+                num_intervals=num_intervals,
+                aggregation_strategy=aggregation_strategy,
+                date_prefix=keep_date,
+            )
+            .set_index(["person_id", "data_table_concept_id", "interval_step"])
+            .to_xarray()
+        )
 
     var = ds["data_table_concept_id"].to_dataframe()
 
