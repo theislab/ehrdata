@@ -471,7 +471,7 @@ def setup_interval_variables(
 
     if keep_date == "start" or keep_date == "end":
         ds = (
-            time_interval_table_for_interval_tables_query_long_format(
+            time_interval_table_query_long_format(
                 backend_handle=backend_handle,
                 time_defining_table=time_defining_table,
                 data_table=data_tables[0],

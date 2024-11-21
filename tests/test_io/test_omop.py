@@ -197,11 +197,70 @@ def test_setup_variables(
     "observation_table",
     ["person_cohort", "person_observation_period", "person_visit_occurrence"],
 )
+# test 1 field from table, and is_present encoding, with start, end, and interval
 @pytest.mark.parametrize(
-    "data_tables,data_field_to_keep",
+    "data_tables,data_field_to_keep,keep_date,target_r",
     [
-        (["drug_exposure"], ["days_supply"]),
-        (["drug_exposure"], ["is_present"]),
+        (
+            ["drug_exposure"],
+            ["days_supply"],
+            "start",
+            [
+                [[31.0, np.nan, np.nan, np.nan], [31.0, np.nan, np.nan, np.nan]],
+                [[31.0, np.nan, np.nan, np.nan], [31.0, np.nan, np.nan, np.nan]],
+                [[31.0, np.nan, np.nan, np.nan], [31.0, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_exposure"],
+            ["days_supply"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_exposure"],
+            ["days_supply"],
+            "interval",
+            [
+                [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
+                [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
+                [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
+            ],
+        ),
+        (
+            ["drug_exposure"],
+            ["is_present"],
+            "start",
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_exposure"],
+            ["is_present"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_exposure"],
+            ["is_present"],
+            "interval",
+            [
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+            ],
+        ),
         # (["condition_occurrence"], ["is_present"]), # TODO: write test file
         # (["procedure_occurrence"], ["is_present"]), # TODO: write test file
         # (["device_exposure"], ["is_present"]), # TODO: write test file
@@ -212,15 +271,12 @@ def test_setup_variables(
     "enrich_var_with_feature_info",
     [False, True],
 )
-@pytest.mark.parametrize(
-    "keep_date",
-    ["start", "end", "interval"],
-)
-def test_setup_interval_variables(
+def test_setup_interval_type_variables(
     omop_connection_vanilla,
     observation_table,
     data_tables,
     data_field_to_keep,
+    target_r,
     enrich_var_with_feature_info,
     keep_date,
 ):
@@ -244,6 +300,8 @@ def test_setup_interval_variables(
     assert edata.n_vars == VANILLA_NUM_CONCEPTS[data_tables[0]]
     assert edata.r.shape[2] == num_intervals
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0)
+
+    assert np.allclose(edata.r, np.array(target_r), equal_nan=True)
 
 
 @pytest.mark.parametrize(
