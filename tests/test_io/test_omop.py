@@ -1,5 +1,6 @@
 import re
 
+import numpy as np
 import pytest
 
 import ehrdata as ed
@@ -89,12 +90,64 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
     "observation_table",
     ["person_cohort", "person_observation_period", "person_visit_occurrence"],
 )
+# test 1 field from table, and is_present encoding
 @pytest.mark.parametrize(
-    "data_tables,data_field_to_keep",
+    "data_tables,data_field_to_keep,target_r",
     [
-        (["measurement"], ["value_as_number", "value_as_concept_id", "is_present"]),
-        (["observation"], ["value_as_number", "value_as_concept_id", "is_present"]),
-        (["specimen"], ["quantity", "is_present"]),
+        (
+            ["measurement"],
+            ["value_as_number"],
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [18.0, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [20.0, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [22.0, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["measurement"],
+            ["is_present"],
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["observation"],
+            ["value_as_number"],
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [3, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [5, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["observation"],
+            ["is_present"],
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["specimen"],
+            ["quantity"],
+            [
+                [[0.5, np.nan, np.nan, np.nan], [1.5, np.nan, np.nan, np.nan]],
+                [[0.5, np.nan, np.nan, np.nan], [1.5, np.nan, np.nan, np.nan]],
+                [[0.5, np.nan, np.nan, np.nan], [1.5, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["specimen"],
+            ["is_present"],
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -112,6 +165,7 @@ def test_setup_variables(
     data_field_to_keep,
     enrich_var_with_feature_info,
     enrich_var_with_unit_info,
+    target_r,
 ):
     num_intervals = 4
     con = omop_connection_vanilla
@@ -135,6 +189,8 @@ def test_setup_variables(
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0) + (
         VAR_DIM_UNIT_INFO if enrich_var_with_unit_info else 0
     )
+
+    assert np.allclose(edata.r, np.array(target_r), equal_nan=True)
 
 
 @pytest.mark.parametrize(
