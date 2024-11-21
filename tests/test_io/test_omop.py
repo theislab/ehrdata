@@ -16,6 +16,7 @@ VANILLA_NUM_CONCEPTS = {
     "observation": 2,
     "specimen": 2,
     "drug_exposure": 2,
+    "condition_occurrence": 2,
 }
 
 # constants for setup_variables
@@ -261,7 +262,66 @@ def test_setup_variables(
                 [[1, 1, 1, 1], [1, 1, 1, 1]],
             ],
         ),
-        # (["condition_occurrence"], ["is_present"]), # TODO: write test file
+        (
+            ["condition_occurrence"],
+            ["condition_source_value"],
+            "start",
+            [
+                [[15, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[15, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[15, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_occurrence"],
+            ["condition_source_value"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_occurrence"],
+            ["condition_source_value"],
+            "interval",
+            [
+                [[15, 15, 15, 15], [10, 10, 10, 10]],
+                [[15, 15, 15, 15], [10, 10, 10, 10]],
+                [[15, 15, 15, 15], [10, 10, 10, 10]],
+            ],
+        ),
+        (
+            ["condition_occurrence"],
+            ["is_present"],
+            "start",
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_occurrence"],
+            ["is_present"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_occurrence"],
+            ["is_present"],
+            "interval",
+            [
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+            ],
+        ),
         # (["procedure_occurrence"], ["is_present"]), # TODO: write test file
         # (["device_exposure"], ["is_present"]), # TODO: write test file
         # (["note"], ["is_present"]),

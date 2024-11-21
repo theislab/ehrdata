@@ -24,7 +24,16 @@ DATA_TABLE_CONCEPT_ID_TRUNK = {
     "observation": "observation",
     "specimen": "specimen",
     "drug_exposure": "drug",
+    "condition_occurrence": "condition",
 }
+DATA_TABLE_DATE_TRUNK = {
+    "measurement": "measurement",
+    "observation": "observation",
+    "specimen": "specimen",
+    "drug_exposure": "drug_exposure",
+    "condition_occurrence": "condition",
+}
+
 
 AGGREGATION_STRATEGY_KEY = {
     "last": "LAST",
@@ -147,7 +156,7 @@ def time_interval_table_query_long_format(
         ) \
         SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
         FROM long_format_intervals as lfi \
-        LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{data_table}_{date_prefix}date BETWEEN lfi.interval_start AND lfi.interval_end \
+        LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{DATA_TABLE_DATE_TRUNK[data_table]}_{date_prefix}date BETWEEN lfi.interval_start AND lfi.interval_end \
         GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
     ).df()
@@ -222,9 +231,9 @@ def time_interval_table_for_interval_tables_query_long_format(
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id \
                 AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id \
-                AND (data_table_with_presence_indicator.{data_table}_start_date BETWEEN lfi.interval_start AND lfi.interval_end \
-                    OR data_table_with_presence_indicator.{data_table}_end_date BETWEEN lfi.interval_start AND lfi.interval_end \
-                    OR (data_table_with_presence_indicator.{data_table}_start_date < lfi.interval_start AND data_table_with_presence_indicator.{data_table}_end_date > lfi.interval_end)) \
+                AND (data_table_with_presence_indicator.{DATA_TABLE_DATE_TRUNK[data_table]}_start_date BETWEEN lfi.interval_start AND lfi.interval_end \
+                    OR data_table_with_presence_indicator.{DATA_TABLE_DATE_TRUNK[data_table]}_end_date BETWEEN lfi.interval_start AND lfi.interval_end \
+                    OR (data_table_with_presence_indicator.{DATA_TABLE_DATE_TRUNK[data_table]}_start_date < lfi.interval_start AND data_table_with_presence_indicator.{DATA_TABLE_DATE_TRUNK[data_table]}_end_date > lfi.interval_end)) \
         GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
     ).df()
