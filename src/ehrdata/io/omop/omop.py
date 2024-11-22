@@ -31,10 +31,7 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_observation_table,
     _check_valid_variable_data_tables,
 )
-from ehrdata.io.omop._queries import (
-    time_interval_table_for_interval_tables_query_long_format,
-    time_interval_table_query_long_format,
-)
+from ehrdata.io.omop._queries import _time_interval_table
 from ehrdata.utils._omop_utils import get_table_catalog_dict
 
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
@@ -335,7 +332,7 @@ def setup_variables(
         return edata
 
     ds = (
-        time_interval_table_query_long_format(
+        _time_interval_table(
             backend_handle=backend_handle,
             time_defining_table=time_defining_table,
             data_table=data_tables[0],
@@ -437,7 +434,7 @@ def setup_interval_variables(
         Strategy to use when aggregating multiple data points within one interval.
     enrich_var_with_feature_info
         Whether to enrich the var table with feature information. If a concept_id is not found in the concept table, the feature information will be NaN.
-    keep_date
+    date_type
         Whether to keep the start or end date, or the interval span.
 
     Returns
@@ -469,38 +466,21 @@ def setup_interval_variables(
         logging.info(f"No data in {data_tables}.")
         return edata
 
-    if keep_date == "start" or keep_date == "end":
-        ds = (
-            time_interval_table_query_long_format(
-                backend_handle=backend_handle,
-                time_defining_table=time_defining_table,
-                data_table=data_tables[0],
-                data_field_to_keep=data_field_to_keep,
-                interval_length_number=interval_length_number,
-                interval_length_unit=interval_length_unit,
-                num_intervals=num_intervals,
-                aggregation_strategy=aggregation_strategy,
-                date_prefix=keep_date,
-            )
-            .set_index(["person_id", "data_table_concept_id", "interval_step"])
-            .to_xarray()
+    ds = (
+        _time_interval_table(
+            backend_handle=backend_handle,
+            time_defining_table=time_defining_table,
+            data_table=data_tables[0],
+            data_field_to_keep=data_field_to_keep,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            aggregation_strategy=aggregation_strategy,
+            keep_date=keep_date,
         )
-    elif keep_date == "interval":
-        ds = (
-            time_interval_table_for_interval_tables_query_long_format(
-                backend_handle=backend_handle,
-                time_defining_table=time_defining_table,
-                data_table=data_tables[0],
-                data_field_to_keep=data_field_to_keep,
-                interval_length_number=interval_length_number,
-                interval_length_unit=interval_length_unit,
-                num_intervals=num_intervals,
-                aggregation_strategy=aggregation_strategy,
-                date_prefix=keep_date,
-            )
-            .set_index(["person_id", "data_table_concept_id", "interval_step"])
-            .to_xarray()
-        )
+        .set_index(["person_id", "data_table_concept_id", "interval_step"])
+        .to_xarray()
+    )
 
     var = ds["data_table_concept_id"].to_dataframe()
 

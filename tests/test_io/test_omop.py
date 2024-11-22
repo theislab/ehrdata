@@ -25,6 +25,24 @@ VANILLA_NUM_CONCEPTS = {
     "episode": 2,
 }
 
+VANILLA_IS_PRESENT_START = [
+    [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+    [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+    [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+]
+
+VANILLA_IS_PRESENT_END = [
+    [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+    [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+    [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+]
+
+VANILLA_IS_PRESENT_INTERVAL = [
+    [[1, 1, 1, 1], [1, 1, 1, 1]],
+    [[1, 1, 1, 1], [1, 1, 1, 1]],
+    [[1, 1, 1, 1], [1, 1, 1, 1]],
+]
+
 # constants for setup_variables
 # only data_table_concept_id
 VAR_DIM_BASE = 1
@@ -113,11 +131,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
         (
             ["measurement"],
             ["is_present"],
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
         (
             ["observation"],
@@ -131,11 +145,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
         (
             ["observation"],
             ["is_present"],
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
         (
             ["specimen"],
@@ -149,11 +159,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
         (
             ["specimen"],
             ["is_present"],
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
     ],
 )
@@ -242,31 +248,19 @@ def test_setup_variables(
             ["drug_exposure"],
             ["is_present"],
             "start",
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
         (
             ["drug_exposure"],
             ["is_present"],
             "end",
-            [
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_END,
         ),
         (
             ["drug_exposure"],
             ["is_present"],
             "interval",
-            [
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-            ],
+            VANILLA_IS_PRESENT_INTERVAL,
         ),
         (
             ["condition_occurrence"],
@@ -302,31 +296,19 @@ def test_setup_variables(
             ["condition_occurrence"],
             ["is_present"],
             "start",
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
         (
             ["condition_occurrence"],
             ["is_present"],
             "end",
-            [
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_END,
         ),
         (
             ["condition_occurrence"],
             ["is_present"],
             "interval",
-            [
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-            ],
+            VANILLA_IS_PRESENT_INTERVAL,
         ),
         (
             ["procedure_occurrence"],
@@ -362,31 +344,19 @@ def test_setup_variables(
             ["procedure_occurrence"],
             ["is_present"],
             "start",
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
         (
             ["procedure_occurrence"],
             ["is_present"],
             "end",
-            [
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_END,
         ),
         (
             ["procedure_occurrence"],
             ["is_present"],
             "interval",
-            [
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-            ],
+            VANILLA_IS_PRESENT_INTERVAL,
         ),
         (
             ["device_exposure"],
@@ -422,31 +392,19 @@ def test_setup_variables(
             ["device_exposure"],
             ["is_present"],
             "start",
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
         (
             ["device_exposure"],
             ["is_present"],
             "end",
-            [
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_END,
         ),
         (
             ["device_exposure"],
             ["is_present"],
             "interval",
-            [
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-            ],
+            VANILLA_IS_PRESENT_INTERVAL,
         ),
         (
             ["drug_era"],
@@ -482,31 +440,19 @@ def test_setup_variables(
             ["drug_era"],
             ["is_present"],
             "start",
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
         (
             ["drug_era"],
             ["is_present"],
             "end",
-            [
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_END,
         ),
         (
             ["drug_era"],
             ["is_present"],
             "interval",
-            [
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-            ],
+            VANILLA_IS_PRESENT_INTERVAL,
         ),
         (
             ["dose_era"],
@@ -542,31 +488,19 @@ def test_setup_variables(
             ["dose_era"],
             ["is_present"],
             "start",
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
         (
             ["dose_era"],
             ["is_present"],
             "end",
-            [
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_END,
         ),
         (
             ["dose_era"],
             ["is_present"],
             "interval",
-            [
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-            ],
+            VANILLA_IS_PRESENT_INTERVAL,
         ),
         (
             ["condition_era"],
@@ -602,31 +536,19 @@ def test_setup_variables(
             ["condition_era"],
             ["is_present"],
             "start",
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
         (
             ["condition_era"],
             ["is_present"],
             "end",
-            [
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_END,
         ),
         (
             ["condition_era"],
             ["is_present"],
             "interval",
-            [
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-            ],
+            VANILLA_IS_PRESENT_INTERVAL,
         ),
         (
             ["episode"],
@@ -662,31 +584,19 @@ def test_setup_variables(
             ["episode"],
             ["is_present"],
             "start",
-            [
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_START,
         ),
         (
             ["episode"],
             ["is_present"],
             "end",
-            [
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
-            ],
+            VANILLA_IS_PRESENT_END,
         ),
         (
             ["episode"],
             ["is_present"],
             "interval",
-            [
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-                [[1, 1, 1, 1], [1, 1, 1, 1]],
-            ],
+            VANILLA_IS_PRESENT_INTERVAL,
         ),
     ],
 )
