@@ -1,29 +1,43 @@
 import duckdb
 import numpy as np
+import pytest
 
 import ehrdata as ed
 
 
-def test_mimic_iv_omop():
+@pytest.fixture(scope="function")
+def duckdb_connection():
+    """Fixture to create and return a DuckDB connection for testing."""
     con = duckdb.connect()
-    ed.dt.mimic_iv_omop(backend_handle=con)
-    assert len(con.execute("SHOW TABLES").df()) == 30
+    yield con
     con.close()
 
 
-# TODO
-# def test_gibleed_omop():
-#     con = duckdb.connect()
-#     ed.dt.gibleed_omop(backend_handle=con)
-#     assert len(con.execute("SHOW TABLES").df()) == 36
-#     con.close()
+def test_mimic_iv_omop(tmp_path):
+    duckdb_connection = duckdb.connect()
+    ed.dt.mimic_iv_omop(data_path=tmp_path, backend_handle=duckdb_connection)
+    assert len(duckdb_connection.execute("SHOW TABLES").df()) == 30
+    # sanity check of one table
+    assert duckdb_connection.execute("SELECT * FROM person").df().shape == (100, 18)
+    duckdb_connection.close()
 
 
-# def test_synthea27nj_omop():
-#     con = duckdb.connect()
-#     ed.dt.synthea27nj_omop(backend_handle=con)
-#     assert len(con.execute("SHOW TABLES").df()) == 37
-#     con.close()
+def test_gibleed_omop(tmp_path):
+    duckdb_connection = duckdb.connect()
+    ed.dt.gibleed_omop(data_path=tmp_path, backend_handle=duckdb_connection)
+    assert len(duckdb_connection.execute("SHOW TABLES").df()) == 36
+    # sanity check of one table
+    assert duckdb_connection.execute("SELECT * FROM person").df().shape == (2694, 18)
+    duckdb_connection.close()
+
+
+def test_synthea27nj_omop(tmp_path):
+    duckdb_connection = duckdb.connect()
+    ed.dt.synthea27nj_omop(data_path=tmp_path, backend_handle=duckdb_connection)
+    assert len(duckdb_connection.execute("SHOW TABLES").df()) == 38
+    # sanity check of one table
+    assert duckdb_connection.execute("SELECT * FROM person").df().shape == (28, 18)
+    duckdb_connection.close()
 
 
 def test_physionet2012():

@@ -1,5 +1,6 @@
 import re
 
+import numpy as np
 import pytest
 
 import ehrdata as ed
@@ -13,7 +14,34 @@ VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY = {
 VANILLA_NUM_CONCEPTS = {
     "measurement": 2,
     "observation": 2,
+    "specimen": 2,
+    "drug_exposure": 2,
+    "condition_occurrence": 2,
+    "procedure_occurrence": 2,
+    "device_exposure": 2,
+    "drug_era": 2,
+    "dose_era": 2,
+    "condition_era": 2,
+    "episode": 2,
 }
+
+VANILLA_IS_PRESENT_START = [
+    [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+    [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+    [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+]
+
+VANILLA_IS_PRESENT_END = [
+    [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+    [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+    [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+]
+
+VANILLA_IS_PRESENT_INTERVAL = [
+    [[1, 1, 1, 1], [1, 1, 1, 1]],
+    [[1, 1, 1, 1], [1, 1, 1, 1]],
+    [[1, 1, 1, 1], [1, 1, 1, 1]],
+]
 
 # constants for setup_variables
 # only data_table_concept_id
@@ -87,13 +115,53 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
     "observation_table",
     ["person_cohort", "person_observation_period", "person_visit_occurrence"],
 )
+# test 1 field from table, and is_present encoding
 @pytest.mark.parametrize(
-    "data_tables",
-    [["measurement"], ["observation"]],
-)
-@pytest.mark.parametrize(
-    "data_field_to_keep",
-    [["value_as_number"], ["value_as_concept_id"]],
+    "data_tables,data_field_to_keep,target_r",
+    [
+        (
+            ["measurement"],
+            ["value_as_number"],
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [18.0, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [20.0, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [22.0, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["measurement"],
+            ["is_present"],
+            VANILLA_IS_PRESENT_START,
+        ),
+        (
+            ["observation"],
+            ["value_as_number"],
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [3, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [5, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["observation"],
+            ["is_present"],
+            VANILLA_IS_PRESENT_START,
+        ),
+        (
+            ["specimen"],
+            ["quantity"],
+            [
+                [[0.5, np.nan, np.nan, np.nan], [1.5, np.nan, np.nan, np.nan]],
+                [[0.5, np.nan, np.nan, np.nan], [1.5, np.nan, np.nan, np.nan]],
+                [[0.5, np.nan, np.nan, np.nan], [1.5, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["specimen"],
+            ["is_present"],
+            VANILLA_IS_PRESENT_START,
+        ),
+    ],
 )
 @pytest.mark.parametrize(
     "enrich_var_with_feature_info",
@@ -110,6 +178,7 @@ def test_setup_variables(
     data_field_to_keep,
     enrich_var_with_feature_info,
     enrich_var_with_unit_info,
+    target_r,
 ):
     num_intervals = 4
     con = omop_connection_vanilla
@@ -133,6 +202,439 @@ def test_setup_variables(
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0) + (
         VAR_DIM_UNIT_INFO if enrich_var_with_unit_info else 0
     )
+
+    assert np.allclose(edata.r, np.array(target_r), equal_nan=True)
+
+
+@pytest.mark.parametrize(
+    "observation_table",
+    ["person_cohort", "person_observation_period", "person_visit_occurrence"],
+)
+# test 1 field from table, and is_present encoding, with start, end, and interval
+@pytest.mark.parametrize(
+    "data_tables,data_field_to_keep,keep_date,target_r",
+    [
+        (
+            ["drug_exposure"],
+            ["days_supply"],
+            "start",
+            [
+                [[31.0, np.nan, np.nan, np.nan], [31.0, np.nan, np.nan, np.nan]],
+                [[31.0, np.nan, np.nan, np.nan], [31.0, np.nan, np.nan, np.nan]],
+                [[31.0, np.nan, np.nan, np.nan], [31.0, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_exposure"],
+            ["days_supply"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_exposure"],
+            ["days_supply"],
+            "interval",
+            [
+                [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
+                [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
+                [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
+            ],
+        ),
+        (
+            ["drug_exposure"],
+            ["is_present"],
+            "start",
+            VANILLA_IS_PRESENT_START,
+        ),
+        (
+            ["drug_exposure"],
+            ["is_present"],
+            "end",
+            VANILLA_IS_PRESENT_END,
+        ),
+        (
+            ["drug_exposure"],
+            ["is_present"],
+            "interval",
+            VANILLA_IS_PRESENT_INTERVAL,
+        ),
+        (
+            ["condition_occurrence"],
+            ["condition_source_value"],
+            "start",
+            [
+                [[15, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[15, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[15, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_occurrence"],
+            ["condition_source_value"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_occurrence"],
+            ["condition_source_value"],
+            "interval",
+            [
+                [[15, 15, 15, 15], [10, 10, 10, 10]],
+                [[15, 15, 15, 15], [10, 10, 10, 10]],
+                [[15, 15, 15, 15], [10, 10, 10, 10]],
+            ],
+        ),
+        (
+            ["condition_occurrence"],
+            ["is_present"],
+            "start",
+            VANILLA_IS_PRESENT_START,
+        ),
+        (
+            ["condition_occurrence"],
+            ["is_present"],
+            "end",
+            VANILLA_IS_PRESENT_END,
+        ),
+        (
+            ["condition_occurrence"],
+            ["is_present"],
+            "interval",
+            VANILLA_IS_PRESENT_INTERVAL,
+        ),
+        (
+            ["procedure_occurrence"],
+            ["procedure_source_value"],
+            "start",
+            [
+                [[180256009, np.nan, np.nan, np.nan], [430193006, np.nan, np.nan, np.nan]],
+                [[180256009, np.nan, np.nan, np.nan], [430193006, np.nan, np.nan, np.nan]],
+                [[180256009, np.nan, np.nan, np.nan], [430193006, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["procedure_occurrence"],
+            ["procedure_source_value"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["procedure_occurrence"],
+            ["procedure_source_value"],
+            "interval",
+            [
+                [[180256009, 180256009, 180256009, 180256009], [430193006, 430193006, 430193006, 430193006]],
+                [[180256009, 180256009, 180256009, 180256009], [430193006, 430193006, 430193006, 430193006]],
+                [[180256009, 180256009, 180256009, 180256009], [430193006, 430193006, 430193006, 430193006]],
+            ],
+        ),
+        (
+            ["procedure_occurrence"],
+            ["is_present"],
+            "start",
+            VANILLA_IS_PRESENT_START,
+        ),
+        (
+            ["procedure_occurrence"],
+            ["is_present"],
+            "end",
+            VANILLA_IS_PRESENT_END,
+        ),
+        (
+            ["procedure_occurrence"],
+            ["is_present"],
+            "interval",
+            VANILLA_IS_PRESENT_INTERVAL,
+        ),
+        (
+            ["device_exposure"],
+            ["device_source_value"],
+            "start",
+            [
+                [[72506001, np.nan, np.nan, np.nan], [224087, np.nan, np.nan, np.nan]],
+                [[72506001, np.nan, np.nan, np.nan], [224087, np.nan, np.nan, np.nan]],
+                [[72506001, np.nan, np.nan, np.nan], [224087, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["device_exposure"],
+            ["device_source_value"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["device_exposure"],
+            ["device_source_value"],
+            "interval",
+            [
+                [[72506001, 72506001, 72506001, 72506001], [224087, 224087, 224087, 224087]],
+                [[72506001, 72506001, 72506001, 72506001], [224087, 224087, 224087, 224087]],
+                [[72506001, 72506001, 72506001, 72506001], [224087, 224087, 224087, 224087]],
+            ],
+        ),
+        (
+            ["device_exposure"],
+            ["is_present"],
+            "start",
+            VANILLA_IS_PRESENT_START,
+        ),
+        (
+            ["device_exposure"],
+            ["is_present"],
+            "end",
+            VANILLA_IS_PRESENT_END,
+        ),
+        (
+            ["device_exposure"],
+            ["is_present"],
+            "interval",
+            VANILLA_IS_PRESENT_INTERVAL,
+        ),
+        (
+            ["drug_era"],
+            ["drug_exposure_count"],
+            "start",
+            [
+                [[2, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
+                [[2, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
+                [[2, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_era"],
+            ["drug_exposure_count"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_era"],
+            ["drug_exposure_count"],
+            "interval",
+            [
+                [[2, 2, 2, 2], [4, 4, 4, 4]],
+                [[2, 2, 2, 2], [4, 4, 4, 4]],
+                [[2, 2, 2, 2], [4, 4, 4, 4]],
+            ],
+        ),
+        (
+            ["drug_era"],
+            ["is_present"],
+            "start",
+            VANILLA_IS_PRESENT_START,
+        ),
+        (
+            ["drug_era"],
+            ["is_present"],
+            "end",
+            VANILLA_IS_PRESENT_END,
+        ),
+        (
+            ["drug_era"],
+            ["is_present"],
+            "interval",
+            VANILLA_IS_PRESENT_INTERVAL,
+        ),
+        (
+            ["dose_era"],
+            ["dose_value"],
+            "start",
+            [
+                [[2.5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[2.5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[2.5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["dose_era"],
+            ["dose_value"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["dose_era"],
+            ["dose_value"],
+            "interval",
+            [
+                [[2.5, 2.5, 2.5, 2.5], [10, 10, 10, 10]],
+                [[2.5, 2.5, 2.5, 2.5], [10, 10, 10, 10]],
+                [[2.5, 2.5, 2.5, 2.5], [10, 10, 10, 10]],
+            ],
+        ),
+        (
+            ["dose_era"],
+            ["is_present"],
+            "start",
+            VANILLA_IS_PRESENT_START,
+        ),
+        (
+            ["dose_era"],
+            ["is_present"],
+            "end",
+            VANILLA_IS_PRESENT_END,
+        ),
+        (
+            ["dose_era"],
+            ["is_present"],
+            "interval",
+            VANILLA_IS_PRESENT_INTERVAL,
+        ),
+        (
+            ["condition_era"],
+            ["condition_occurrence_count"],
+            "start",
+            [
+                [[1, np.nan, np.nan, np.nan], [256, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [256, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [256, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_era"],
+            ["condition_occurrence_count"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_era"],
+            ["condition_occurrence_count"],
+            "interval",
+            [
+                [[1, 1, 1, 1], [256, 256, 256, 256]],
+                [[1, 1, 1, 1], [256, 256, 256, 256]],
+                [[1, 1, 1, 1], [256, 256, 256, 256]],
+            ],
+        ),
+        (
+            ["condition_era"],
+            ["is_present"],
+            "start",
+            VANILLA_IS_PRESENT_START,
+        ),
+        (
+            ["condition_era"],
+            ["is_present"],
+            "end",
+            VANILLA_IS_PRESENT_END,
+        ),
+        (
+            ["condition_era"],
+            ["is_present"],
+            "interval",
+            VANILLA_IS_PRESENT_INTERVAL,
+        ),
+        (
+            ["episode"],
+            ["episode_source_value"],
+            "start",
+            [
+                [[5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["episode"],
+            ["episode_source_value"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["episode"],
+            ["episode_source_value"],
+            "interval",
+            [
+                [[5, 5, 5, 5], [10, 10, 10, 10]],
+                [[5, 5, 5, 5], [10, 10, 10, 10]],
+                [[5, 5, 5, 5], [10, 10, 10, 10]],
+            ],
+        ),
+        (
+            ["episode"],
+            ["is_present"],
+            "start",
+            VANILLA_IS_PRESENT_START,
+        ),
+        (
+            ["episode"],
+            ["is_present"],
+            "end",
+            VANILLA_IS_PRESENT_END,
+        ),
+        (
+            ["episode"],
+            ["is_present"],
+            "interval",
+            VANILLA_IS_PRESENT_INTERVAL,
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "enrich_var_with_feature_info",
+    [False, True],
+)
+def test_setup_interval_type_variables(
+    omop_connection_vanilla,
+    observation_table,
+    data_tables,
+    data_field_to_keep,
+    target_r,
+    enrich_var_with_feature_info,
+    keep_date,
+):
+    num_intervals = 4
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table)
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=data_tables,
+        data_field_to_keep=data_field_to_keep,
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=num_intervals,
+        enrich_var_with_feature_info=enrich_var_with_feature_info,
+        keep_date=keep_date,
+    )
+
+    assert isinstance(edata, ed.EHRData)
+    assert edata.n_obs == VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY[observation_table]
+    assert edata.n_vars == VANILLA_NUM_CONCEPTS[data_tables[0]]
+    assert edata.r.shape[2] == num_intervals
+    assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0)
+
+    assert np.allclose(edata.r, np.array(target_r), equal_nan=True)
 
 
 @pytest.mark.parametrize(
@@ -274,3 +776,48 @@ def test_setup_variables_illegal_argument_types(
             enrich_var_with_feature_info=enrich_var_with_feature_info,
             enrich_var_with_unit_info=enrich_var_with_unit_info,
         )
+
+
+def test_capital_letters(omop_connection_capital_letters):
+    # test capital letters both in table names and column names
+    con = omop_connection_capital_letters
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=1,
+        enrich_var_with_feature_info=False,
+        enrich_var_with_unit_info=False,
+    )
+
+    assert edata.r[0, 0, 0] == 18
+
+    tables = con.execute("SHOW TABLES").df()["name"].values
+    assert "measurement" in tables
+    assert "MEASUREMENT" not in tables
+
+    measurement_columns = con.execute("SELECT * FROM measurement").df().columns
+    assert "measurement_id" in measurement_columns
+    assert "MEASUREMENT_ID" not in measurement_columns
+
+
+def test_empty_observation(omop_connection_empty_observation, caplog):
+    con = omop_connection_empty_observation
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["observation"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=1,
+        enrich_var_with_feature_info=False,
+        enrich_var_with_unit_info=False,
+    )
+    assert edata.shape == (1, 0)
+    assert "No data found in observation. Returning edata without additional variables." in caplog.text

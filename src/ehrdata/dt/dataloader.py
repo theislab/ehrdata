@@ -1,24 +1,21 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
 from pathlib import Path
-from random import choice
-from string import ascii_lowercase
-from typing import Literal
 
 import requests
 from filelock import FileLock
-from rich import print
+
+# from rich import print
 from rich.progress import Progress
 
 
 def download(
     url: str,
-    archive_format: Literal["zip", "tar", "tar.gz", "tgz"] = None,
-    output_file_name: str = None,
-    output_path: str | Path = None,
+    saving_path: Path | str,
     block_size: int = 1024,
     overwrite: bool = False,
 ) -> None:  # pragma: no cover
@@ -26,47 +23,51 @@ def download(
 
     Args:
         url: URL to download.
-        archive_format: The format if an archive file.
-        output_file_name: Name of the downloaded file.
-        output_path: Path to download/extract the files to. Defaults to 'OS tmpdir' if not specified.
-        block_size: Block size for downloads in bytes.
-        overwrite: Whether to overwrite existing files.
+        download_path: Where the data should be downloaded to.
     """
-    if output_file_name is None:
-        letters = ascii_lowercase
-        output_file_name = f"ehrapy_tmp_{''.join(choice(letters) for _ in range(10))}"
+    # note: tar.gz has to be before gz for the _remove_archive_extension function to remove the entire extension
+    compression_formats = ["tar.gz", "zip", "tar", "gz", "bz", "xz"]
+    raw_formats = ["csv", "txt", "parquet"]
 
-    if output_path is None:
-        output_path = tempfile.gettempdir()
+    saving_path = Path(saving_path)
+    # urls can end with "?download"
+    file_name = os.path.basename(url).split("?")[0]
+    suffix = file_name.split(".")[-1]
 
-    def _sanitize_file_name(file_name):
-        if os.name == "nt":
-            file_name = file_name.replace("?", "_").replace("*", "_")
-        return file_name
+    def _remove_archive_extension(file_path: str) -> str:
+        for ext in compression_formats:
+            # if the file path ends with extension, remove the extension and the dot before it (hence the -1)
+            if file_path.endswith(ext):
+                return file_path[: -len(ext) - 1]
+        return file_path
 
-    download_to_path = Path(
-        _sanitize_file_name(
-            f"{output_path}{output_file_name}"
-            if str(output_path).endswith("/")
-            else f"{output_path}/{output_file_name}"
-        )
-    )
+    if suffix in raw_formats:
+        raw_data_saving_path = saving_path / file_name
+        path_to_check = raw_data_saving_path
+    elif suffix in compression_formats:
+        tmpdir = tempfile.mkdtemp()
+        raw_data_saving_path = Path(tmpdir) / file_name
+        path_to_check = saving_path / _remove_archive_extension(file_name)
+    else:
+        raise RuntimeError(f"Unknown file format: {suffix}")
+        return
 
-    Path(output_path).mkdir(parents=True, exist_ok=True)
-    lock_path = f"{download_to_path}.lock"
+    if path_to_check.exists():
+        info = f"File {path_to_check} already exists!"
+        if not overwrite:
+            logging.info(f"{info} Use downloaded dataset...")
+            return
+        else:
+            logging.info(f"{info} Overwriting...")
+
+    logging.info(f"Downloading {file_name} from {url} to {raw_data_saving_path}")
+
+    lock_path = f"{raw_data_saving_path}.lock"
     with FileLock(lock_path):
-        if _remove_archive_extension(download_to_path).exists():
-            warning = f"[bold red]File {_remove_archive_extension(download_to_path)} already exists!"
-            if not overwrite:
-                print(warning)
-                return
-            else:
-                print(f"{warning} Overwriting...")
-
         response = requests.get(url, stream=True)
         total = int(response.headers.get("content-length", 0))
 
-        temp_file_name = f"{download_to_path}.part"
+        temp_file_name = f"{raw_data_saving_path}.part"
 
         with Progress(refresh_per_second=1500) as progress:
             task = progress.add_task("[red]Downloading...", total=total)
@@ -78,34 +79,12 @@ def download(
             # force the progress bar to 100% at the end
             progress.update(task, completed=total, refresh=True)
 
-            Path(temp_file_name).replace(download_to_path)
+            Path(temp_file_name).replace(raw_data_saving_path)
 
-        if archive_format:
-            output_path = output_path or tempfile.gettempdir()
-            shutil.unpack_archive(download_to_path, output_path, format=archive_format)
-            download_to_path.unlink()
-            list_of_paths = [path for path in Path(output_path).resolve().glob("*/") if not path.name.startswith(".")]
-            latest_path = max(list_of_paths, key=lambda path: path.stat().st_ctime)
-            shutil.move(
-                latest_path,
-                latest_path.parent / _remove_archive_extension(output_file_name),
-            )  # type: ignore
+        if suffix in compression_formats:
+            shutil.unpack_archive(raw_data_saving_path, saving_path)
+            logging.info(
+                f"Extracted archive {file_name} from {raw_data_saving_path} to {saving_path / _remove_archive_extension(file_name)}"
+            )
 
     Path(lock_path).unlink(missing_ok=True)
-
-
-def _remove_archive_extension(file_path):
-    path = Path(file_path)
-    for ext in [
-        ".tar.gz",
-        ".tgz",
-        ".tar.bz2",
-        ".tbz2",
-        ".tar.xz",
-        ".txz",
-        ".zip",
-        ".tar",
-    ]:
-        if str(path).endswith(ext):
-            return Path(str(path)[: -len(ext)])
-    return Path(path)

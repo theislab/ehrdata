@@ -16,4 +16,5 @@ notebooks/omop_tables_tutorial
 notebooks/cohort_definition
 notebooks/study_design_example_omop_cdm
 notebooks/indwelling_arterial_catheters
+notebooks/tutorial_time_series_with_pypots
 ```

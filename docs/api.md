@@ -23,17 +23,6 @@
     io.omop.setup_obs
     io.omop.setup_variables
     io.omop.get_time_interval_table
-    io.omop.load
-    io.omop.extract_person
-    io.omop.extract_observation_period
-    io.omop.extract_measurement
-    io.omop.extract_observation
-    io.omop.extract_procedure_occurrence
-    io.omop.extract_specimen
-    io.omop.extract_device_exposure
-    io.omop.extract_drug_exposure
-    io.omop.extract_condition_occurrence
-    io.omop.extract_note
 ```
 
 ## Datasets

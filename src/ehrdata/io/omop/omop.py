@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Sequence
 from pathlib import Path
@@ -9,104 +10,90 @@ import awkward as ak
 import duckdb
 import numpy as np
 import pandas as pd
+from duckdb.duckdb import DuckDBPyConnection
 
-from ehrdata.io.omop._queries import (
-    AGGREGATION_STRATEGY_KEY,
-    time_interval_table_query_long_format,
+from ehrdata.io.omop._check_arguments import (
+    VALID_OBSERVATION_TABLES_JOIN,
+    VALID_OBSERVATION_TABLES_SINGLE,
+    _check_valid_aggregation_strategy,
+    _check_valid_backend_handle,
+    _check_valid_concept_ids,
+    _check_valid_data_field_to_keep,
+    _check_valid_death_table,
+    _check_valid_edata,
+    _check_valid_enrich_var_with_feature_info,
+    _check_valid_enrich_var_with_unit_info,
+    _check_valid_interval_length_number,
+    _check_valid_interval_length_unit,
+    _check_valid_interval_variable_data_tables,
+    _check_valid_keep_date,
+    _check_valid_num_intervals,
+    _check_valid_observation_table,
+    _check_valid_variable_data_tables,
 )
-from ehrdata.utils._omop_utils import get_omop_table_names
+from ehrdata.io.omop._queries import _time_interval_table
+from ehrdata.utils._omop_utils import get_table_catalog_dict
 
-VALID_OBSERVATION_TABLES_SINGLE = ["person"]
-VALID_OBSERVATION_TABLES_JOIN = ["person_cohort", "person_observation_period", "person_visit_occurrence"]
-VALID_VARIABLE_TABLES = ["measurement", "observation", "specimen"]
-
-
-def _check_sanity_of_folder(folder_path: str | Path):
-    pass
+DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
 
-def _check_sanity_of_database(backend_handle: duckdb.DuckDB):
-    pass
+def _get_table_list() -> list:
+    flat_table_list = []
+    for _, value_list in get_table_catalog_dict().items():
+        for value in value_list:
+            flat_table_list.append(value)
+    return flat_table_list
 
 
-def _check_valid_backend_handle(backend_handle) -> None:
-    if not isinstance(backend_handle, duckdb.duckdb.DuckDBPyConnection):
-        raise TypeError("Expected backend_handle to be of type DuckDBPyConnection.")
+def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str = "") -> str:
+    """Create tables in the backend from the CSV files in the path from datasets in the OMOP Common Data model."""
+    tables = _get_table_list()
 
+    used_tables = []
+    missing_tables = []
+    unused_files = []
+    for file_name in os.listdir(path):
+        file_name_trunk = file_name.split(".")[0].lower()
+        regular_omop_table_name = file_name_trunk.replace(prefix, "")
 
-def _check_valid_observation_table(observation_table) -> None:
-    if not isinstance(observation_table, str):
-        raise TypeError("Expected observation_table to be a string.")
-    if observation_table not in VALID_OBSERVATION_TABLES_SINGLE + VALID_OBSERVATION_TABLES_JOIN:
-        raise ValueError(
-            f"observation_table must be one of {VALID_OBSERVATION_TABLES_SINGLE+VALID_OBSERVATION_TABLES_JOIN}."
-        )
+        if regular_omop_table_name in tables:
+            used_tables.append(regular_omop_table_name)
 
+            if regular_omop_table_name == "measurement":
+                dtype = {"measurement_source_value": str}
+            else:
+                dtype = None
 
-def _check_valid_death_table(death_table) -> None:
-    if not isinstance(death_table, bool):
-        raise TypeError("Expected death_table to be a boolean.")
+            # read raw csv as temporary table
+            temp_relation = backend_handle.read_csv(path / file_name, dtype=dtype, escapechar="%")  # noqa: F841
+            backend_handle.execute("CREATE OR REPLACE TABLE temp_table AS SELECT * FROM temp_relation")
 
+            # make query to create table with lowercase column names
+            column_names = backend_handle.execute("DESCRIBE temp_table").df()["column_name"].values
+            select_columns = ", ".join([f'"{col}" AS "{col.lower()}"' for col in column_names])
+            create_table_with_lowercase_columns_query = (
+                f"CREATE TABLE {regular_omop_table_name} AS SELECT {select_columns} FROM temp_table"
+            )
 
-def _check_valid_edata(edata) -> None:
-    from ehrdata import EHRData
+            # write proper table
+            existing_tables = backend_handle.execute("SHOW TABLES").df()["name"].values
+            if regular_omop_table_name in existing_tables:
+                logging.info(f"Table {regular_omop_table_name} already exists. Dropping and recreating...")
+                backend_handle.execute(f"DROP TABLE {regular_omop_table_name}")
 
-    if not isinstance(edata, EHRData):
-        raise TypeError("Expected edata to be of type EHRData.")
+            backend_handle.execute(create_table_with_lowercase_columns_query)
 
+            backend_handle.execute("DROP TABLE temp_table")
 
-def _check_valid_data_tables(data_tables) -> Sequence:
-    if isinstance(data_tables, str):
-        data_tables = [data_tables]
-    if not isinstance(data_tables, Sequence):
-        raise TypeError("Expected data_tables to be a string or Sequence.")
-    if not all(table in VALID_VARIABLE_TABLES for table in data_tables):
-        raise ValueError(f"data_tables must be a subset of {VALID_VARIABLE_TABLES}.")
-    return data_tables
+        elif file_name_trunk != DOWNLOAD_VERIFICATION_TAG:
+            unused_files.append(file_name)
 
+    for table in tables:
+        if table not in used_tables:
+            missing_tables.append(table)
 
-def _check_valid_data_field_to_keep(data_field_to_keep) -> Sequence:
-    if isinstance(data_field_to_keep, str):
-        data_field_to_keep = [data_field_to_keep]
-    if not isinstance(data_field_to_keep, Sequence):
-        raise TypeError("Expected data_field_to_keep to be a string or Sequence.")
-    return data_field_to_keep
-
-
-def _check_valid_interval_length_number(interval_length_number) -> None:
-    if not isinstance(interval_length_number, int):
-        raise TypeError("Expected interval_length_number to be an integer.")
-
-
-def _check_valid_interval_length_unit(interval_length_unit) -> None:
-    # TODO: maybe check if it is a valid unit from pandas.to_timedelta
-    if not isinstance(interval_length_unit, str):
-        raise TypeError("Expected interval_length_unit to be a string.")
-
-
-def _check_valid_num_intervals(num_intervals) -> None:
-    if not isinstance(num_intervals, int):
-        raise TypeError("Expected num_intervals to be an integer.")
-
-
-def _check_valid_concept_ids(concept_ids) -> None:
-    if concept_ids != "all" and not isinstance(concept_ids, Sequence):
-        raise TypeError("concept_ids must be a sequence of integers or 'all'.")
-
-
-def _check_valid_aggregation_strategy(aggregation_strategy) -> None:
-    if aggregation_strategy not in AGGREGATION_STRATEGY_KEY.keys():
-        raise TypeError(f"aggregation_strategy must be one of {AGGREGATION_STRATEGY_KEY.keys()}.")
-
-
-def _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info) -> None:
-    if not isinstance(enrich_var_with_feature_info, bool):
-        raise TypeError("Expected enrich_var_with_feature_info to be a boolean.")
-
-
-def _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info) -> None:
-    if not isinstance(enrich_var_with_unit_info, bool):
-        raise TypeError("Expected enrich_var_with_unit_info to be a boolean.")
+    logging.info(f"missing tables: {missing_tables}")
+    logging.info(f"unused files: {unused_files}")
 
 
 def _collect_units_per_feature(ds, unit_key="unit_concept_id") -> dict:
@@ -182,28 +169,28 @@ def _create_enriched_var_with_unit_info(backend_handle, ds, var, unit_report) ->
     return feature_concept_id_unit_info_table
 
 
-def register_omop_to_db_connection(
-    path: Path,
-    backend_handle: duckdb.duckdb.DuckDBPyConnection,
-    source: Literal["csv"] = "csv",
-) -> None:
-    """Register the OMOP CDM tables to the database."""
-    missing_tables = []
-    for table in get_omop_table_names():
-        # if path exists lowercse, uppercase, capitalized:
-        table_path = f"{path}/{table}.csv"
-        if os.path.exists(table_path):
-            if table == "measurement":
-                backend_handle.register(
-                    table, backend_handle.read_csv(f"{path}/{table}.csv", dtype={"measurement_source_value": str})
-                )
-            else:
-                backend_handle.register(table, backend_handle.read_csv(f"{path}/{table}.csv"))
-        else:
-            missing_tables.append([table])
-    print("missing tables: ", missing_tables)
+def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
+    """Setup a connection to the OMOP CDM database.
 
-    return None
+    This function sets up a connection to the OMOP CDM database.
+    It checks the capitalization of the 'person' table, and assumes the same capitalization style is used for all other tables.
+
+
+    Parameters
+    ----------
+    path
+        The path to the folder containing the CSV files.
+    backend_handle
+        The backend handle to the database.
+    prefix
+        The prefix to be removed from the CSV filenames.
+
+    Returns
+    -------
+    An EHRData object with populated .uns["omop_table_capitalization"] field.
+
+    """
+    _set_up_duckdb(Path(path), backend_handle, prefix)
 
 
 def setup_obs(
@@ -286,7 +273,7 @@ def setup_variables(
     data_tables
         The table to be used. Only a single table can be used.
     data_field_to_keep
-        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".
+        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id". Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval.
     start_time
         Starting time for values to be included.
     interval_length_number
@@ -312,7 +299,7 @@ def setup_variables(
 
     _check_valid_edata(edata)
     _check_valid_backend_handle(backend_handle)
-    data_tables = _check_valid_data_tables(data_tables)
+    data_tables = _check_valid_variable_data_tables(data_tables)
     data_field_to_keep = _check_valid_data_field_to_keep(data_field_to_keep)
     _check_valid_interval_length_number(interval_length_number)
     _check_valid_interval_length_unit(interval_length_unit)
@@ -326,7 +313,7 @@ def setup_variables(
     if time_defining_table is None:
         raise ValueError("The observation table must be set up first, use the `setup_obs` function.")
 
-    if data_tables[0] in ["measurement", "observation"]:
+    if data_tables[0] in ["measurement", "observation", "specimen"]:
         # also keep unit_concept_id and unit_source_value;
         if isinstance(data_field_to_keep, list):
             data_field_to_keep = list(data_field_to_keep) + ["unit_concept_id", "unit_source_value"]
@@ -338,8 +325,14 @@ def setup_variables(
         else:
             raise ValueError
 
+    # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
+    count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_tables[0]}").df()["count"].item()
+    if count == 0:
+        logging.info(f"No data found in {data_tables[0]}. Returning edata without additional variables.")
+        return edata
+
     ds = (
-        time_interval_table_query_long_format(
+        _time_interval_table(
             backend_handle=backend_handle,
             time_defining_table=time_defining_table,
             data_table=data_tables[0],
@@ -359,7 +352,10 @@ def setup_variables(
     unit_report = _create_feature_unit_concept_id_report(backend_handle, ds)
 
     var = ds["data_table_concept_id"].to_dataframe()
-    concepts = backend_handle.sql("SELECT * FROM concept").df()
+
+    if enrich_var_with_feature_info or enrich_var_with_unit_info:
+        concepts = backend_handle.sql("SELECT * FROM concept").df()
+        concepts.columns = concepts.columns.str.lower()
 
     if enrich_var_with_feature_info:
         var = pd.merge(var, concepts, how="left", left_index=True, right_on="concept_id")
@@ -393,19 +389,113 @@ def setup_variables(
     return edata
 
 
-def load(
-    backend_handle: Literal[str, duckdb, Path],
-    # folder_path: str,
-    # delimiter: str = ",",
-    # make_filename_lowercase: bool = True,
-) -> None:
-    """Initialize a connection to the OMOP CDM Database."""
-    if isinstance(backend_handle, str) or isinstance(backend_handle, Path):
-        _check_sanity_of_folder(backend_handle)
-    elif isinstance(backend_handle, duckdb.DuckDB):
-        _check_sanity_of_database(backend_handle)
-    else:
-        raise NotImplementedError(f"Backend {backend_handle} not supported. Choose a valid backend.")
+def setup_interval_variables(
+    edata,
+    *,
+    backend_handle: duckdb.duckdb.DuckDBPyConnection,
+    data_tables: Sequence[Literal["drug_exposure"]] | Literal["drug_exposure"],
+    data_field_to_keep: str | Sequence[str],
+    interval_length_number: int,
+    interval_length_unit: str,
+    num_intervals: int,
+    concept_ids: Literal["all"] | Sequence = "all",
+    aggregation_strategy: str = "last",
+    enrich_var_with_feature_info: bool = False,
+    enrich_var_with_unit_info: bool = False,
+    keep_date: Literal["start", "end", "interval"] = "start",
+):
+    """Setup the interval variables
+
+    This function sets up the variables that are stored as interval in OMOP for the EHRData object.
+    It will fail if there is more than one unit_concept_id per feature.
+    Writes a unit report of the features to edata.uns["unit_report_<data_tables>"].
+
+    Parameters
+    ----------
+    backend_handle
+        The backend handle to the database.
+    edata
+        The EHRData object to which the variables should be added.
+    data_tables
+        The table to be used. Only a single table can be used.
+    data_field_to_keep
+        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".  Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval.
+    start_time
+        Starting time for values to be included.
+    interval_length_number
+        Numeric value of the length of one interval.
+    interval_length_unit
+        Unit belonging to the interval length.
+    num_intervals
+        Number of intervals.
+    concept_ids
+        Concept IDs to use from this data table. If not specified, 'all' are used.
+    aggregation_strategy
+        Strategy to use when aggregating multiple data points within one interval.
+    enrich_var_with_feature_info
+        Whether to enrich the var table with feature information. If a concept_id is not found in the concept table, the feature information will be NaN.
+    date_type
+        Whether to keep the start or end date, or the interval span.
+
+    Returns
+    -------
+    An EHRData object with populated .r and .var field.
+    """
+    from ehrdata import EHRData
+
+    _check_valid_edata(edata)
+    _check_valid_backend_handle(backend_handle)
+    data_tables = _check_valid_interval_variable_data_tables(data_tables)
+    data_field_to_keep = _check_valid_data_field_to_keep(data_field_to_keep)
+    _check_valid_interval_length_number(interval_length_number)
+    _check_valid_interval_length_unit(interval_length_unit)
+    _check_valid_num_intervals(num_intervals)
+    _check_valid_concept_ids(concept_ids)
+    _check_valid_aggregation_strategy(aggregation_strategy)
+    _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
+    _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info)
+    _check_valid_keep_date(keep_date)
+
+    time_defining_table = edata.uns.get("omop_io_observation_table", None)
+    if time_defining_table is None:
+        raise ValueError("The observation table must be set up first, use the `setup_obs` function.")
+
+    # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
+    count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_tables[0]}").df()["count"].item()
+    if count == 0:
+        logging.info(f"No data in {data_tables}.")
+        return edata
+
+    ds = (
+        _time_interval_table(
+            backend_handle=backend_handle,
+            time_defining_table=time_defining_table,
+            data_table=data_tables[0],
+            data_field_to_keep=data_field_to_keep,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            aggregation_strategy=aggregation_strategy,
+            keep_date=keep_date,
+        )
+        .set_index(["person_id", "data_table_concept_id", "interval_step"])
+        .to_xarray()
+    )
+
+    var = ds["data_table_concept_id"].to_dataframe()
+
+    if enrich_var_with_feature_info or enrich_var_with_unit_info:
+        concepts = backend_handle.sql("SELECT * FROM concept").df()
+        concepts.columns = concepts.columns.str.lower()
+
+    if enrich_var_with_feature_info:
+        var = pd.merge(var, concepts, how="left", left_index=True, right_on="concept_id")
+
+    t = ds["interval_step"].to_dataframe()
+
+    edata = EHRData(r=ds[data_field_to_keep[0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
+
+    return edata
 
 
 def get_table(duckdb_instance, table_name: str) -> pd.DataFrame:
@@ -457,17 +547,6 @@ def extract_procedure_occurrence(duckdb_instance):
         concept_id_col="procedure_concept_id",
         value_col="procedure_type_concept_id",  # Assuming `procedure_type_concept_id` is a suitable value field
         timestamp_col="procedure_datetime",
-    )
-
-
-def extract_specimen(duckdb_instance):
-    """Extract a table of an OMOP CDM Database."""
-    return get_table(
-        duckdb_instance,
-        table_name="specimen",
-        concept_id_col="specimen_concept_id",
-        value_col="unit_concept_id",  # Assuming `unit_concept_id` is a suitable value field
-        timestamp_col="specimen_datetime",
     )
 
 

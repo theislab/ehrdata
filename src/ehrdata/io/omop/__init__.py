@@ -1,7 +1,6 @@
 from .omop import (
     get_table,
     get_time_interval_table,
-    load,
     # extract_condition_occurrence,
     # extract_device_exposure,
     # extract_drug_exposure,
@@ -13,7 +12,8 @@ from .omop import (
     # extract_person_observation_period,
     # extract_procedure_occurrence,
     # extract_specimen,
-    register_omop_to_db_connection,
+    setup_connection,
+    setup_interval_variables,
     setup_obs,
     setup_variables,
 )
