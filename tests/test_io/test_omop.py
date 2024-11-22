@@ -19,6 +19,7 @@ VANILLA_NUM_CONCEPTS = {
     "condition_occurrence": 2,
     "procedure_occurrence": 2,
     "device_exposure": 2,
+    "drug_era": 2,
 }
 
 # constants for setup_variables
@@ -444,7 +445,66 @@ def test_setup_variables(
                 [[1, 1, 1, 1], [1, 1, 1, 1]],
             ],
         ),
-        # (["note"], ["is_present"]),
+        (
+            ["drug_era"],
+            ["drug_exposure_count"],
+            "start",
+            [
+                [[2, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
+                [[2, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
+                [[2, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_era"],
+            ["drug_exposure_count"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_era"],
+            ["drug_exposure_count"],
+            "interval",
+            [
+                [[2, 2, 2, 2], [4, 4, 4, 4]],
+                [[2, 2, 2, 2], [4, 4, 4, 4]],
+                [[2, 2, 2, 2], [4, 4, 4, 4]],
+            ],
+        ),
+        (
+            ["drug_era"],
+            ["is_present"],
+            "start",
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_era"],
+            ["is_present"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["drug_era"],
+            ["is_present"],
+            "interval",
+            [
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+            ],
+        ),
     ],
 )
 @pytest.mark.parametrize(
