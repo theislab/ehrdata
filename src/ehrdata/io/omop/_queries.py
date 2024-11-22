@@ -3,16 +3,22 @@ from collections.abc import Sequence
 import duckdb
 import pandas as pd
 
-START_DATE_KEY = {
-    "visit_occurrence": "visit_start_date",
-    "observation_period": "observation_period_start_date",
-    "cohort": "cohort_start_date",
-}
-END_DATE_KEY = {
-    "visit_occurrence": "visit_end_date",
-    "observation_period": "observation_period_end_date",
-    "cohort": "cohort_end_date",
-}
+# START_DATE_KEY = {
+#     "visit_occurrence": "visit_start_date",
+#     "observation_period": "observation_period_start_date",
+#     "cohort": "cohort_start_date",
+#     "drug_exposure": "drug_exposure_start_date",
+#     "condition_occurrence": "condition_start_date",
+#     "procedure_occurrence": "procedure_date",  # v5.4, as v5.3 had no end! TODO: allow v5.3 too
+# }
+# END_DATE_KEY = {
+#     "visit_occurrence": "visit_end_date",
+#     "observation_period": "observation_period_end_date",
+#     "cohort": "cohort_end_date",
+#     "drug_exposure": "drug_exposure_end_date",
+#     "condition_occurrence": "condition_end_date",
+#     "procedure_occurrence": "procedure_end_date",  # v5.4, as v5.3 had no end! TODO: allow v5.3 too
+# }
 TIME_DEFINING_TABLE_SUBJECT_KEY = {
     "visit_occurrence": "person_id",
     "observation_period": "person_id",
@@ -25,15 +31,40 @@ DATA_TABLE_CONCEPT_ID_TRUNK = {
     "specimen": "specimen",
     "drug_exposure": "drug",
     "condition_occurrence": "condition",
+    "procedure_occurrence": "procedure",
 }
-DATA_TABLE_DATE_TRUNK = {
-    "measurement": "measurement",
-    "observation": "observation",
-    "specimen": "specimen",
-    "drug_exposure": "drug_exposure",
-    "condition_occurrence": "condition",
-}
+# DATA_TABLE_DATE_TRUNK = {
+#     "measurement": "measurement",
+#     "observation": "observation",
+#     "specimen": "specimen",
+#     "drug_exposure": "drug_exposure",
+#     "condition_occurrence": "condition",
+#     "procedure_occurrence": "procedure",
+# }
 
+DATA_TABLE_DATE_KEYS = {
+    "timepoint": {
+        "measurement": "measurement_date",
+        "observation": "observation_date",
+        "specimen": "specimen_date",
+    },
+    "start": {
+        "visit_occurrence": "visit_start_date",
+        "observation_period": "observation_period_start_date",
+        "cohort": "cohort_start_date",
+        "drug_exposure": "drug_exposure_start_date",
+        "condition_occurrence": "condition_start_date",
+        "procedure_occurrence": "procedure_date",  # in v5.3, procedure didnt have end date
+    },
+    "end": {
+        "visit_occurrence": "visit_end_date",
+        "observation_period": "observation_period_end_date",
+        "cohort": "cohort_end_date",
+        "drug_exposure": "drug_exposure_end_date",
+        "condition_occurrence": "condition_end_date",
+        "procedure_occurrence": "procedure_end_date",  # in v5.3, procedure didnt have end date TODO v5.3 support
+    },
+}
 
 AGGREGATION_STRATEGY_KEY = {
     "last": "LAST",
@@ -108,8 +139,8 @@ def time_interval_table_query_long_format(
     if isinstance(data_field_to_keep, str):
         data_field_to_keep = [data_field_to_keep]
 
-    if date_prefix != "":
-        date_prefix = date_prefix + "_"
+    if date_prefix == "":
+        date_prefix = "timepoint"
 
     timedeltas_dataframe = _generate_timedeltas(interval_length_number, interval_length_unit, num_intervals)
 
@@ -127,7 +158,7 @@ def time_interval_table_query_long_format(
     df = backend_handle.execute(
         f"""
         WITH person_time_defining_table AS ( \
-            SELECT person.person_id as person_id, {START_DATE_KEY[time_defining_table]} as start_date, {END_DATE_KEY[time_defining_table]} as end_date \
+            SELECT person.person_id as person_id, {DATA_TABLE_DATE_KEYS["start"][time_defining_table]} as start_date, {DATA_TABLE_DATE_KEYS["end"][time_defining_table]} as end_date \
             FROM person \
             JOIN {time_defining_table} ON person.person_id = {time_defining_table}.{TIME_DEFINING_TABLE_SUBJECT_KEY[time_defining_table]} \
         ), \
@@ -156,7 +187,7 @@ def time_interval_table_query_long_format(
         ) \
         SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
         FROM long_format_intervals as lfi \
-        LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{DATA_TABLE_DATE_TRUNK[data_table]}_{date_prefix}date BETWEEN lfi.interval_start AND lfi.interval_end \
+        LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS[date_prefix][data_table]} BETWEEN lfi.interval_start AND lfi.interval_end \
         GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
     ).df()
@@ -200,7 +231,7 @@ def time_interval_table_for_interval_tables_query_long_format(
     df = backend_handle.execute(
         f"""
         WITH person_time_defining_table AS ( \
-            SELECT person.person_id as person_id, {START_DATE_KEY[time_defining_table]} as start_date, {END_DATE_KEY[time_defining_table]} as end_date \
+            SELECT person.person_id as person_id, {DATA_TABLE_DATE_KEYS["start"][time_defining_table]} as start_date, {DATA_TABLE_DATE_KEYS["end"][time_defining_table]} as end_date \
             FROM person \
             JOIN {time_defining_table} ON person.person_id = {time_defining_table}.{TIME_DEFINING_TABLE_SUBJECT_KEY[time_defining_table]} \
         ), \
@@ -231,9 +262,9 @@ def time_interval_table_for_interval_tables_query_long_format(
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id \
                 AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id \
-                AND (data_table_with_presence_indicator.{DATA_TABLE_DATE_TRUNK[data_table]}_start_date BETWEEN lfi.interval_start AND lfi.interval_end \
-                    OR data_table_with_presence_indicator.{DATA_TABLE_DATE_TRUNK[data_table]}_end_date BETWEEN lfi.interval_start AND lfi.interval_end \
-                    OR (data_table_with_presence_indicator.{DATA_TABLE_DATE_TRUNK[data_table]}_start_date < lfi.interval_start AND data_table_with_presence_indicator.{DATA_TABLE_DATE_TRUNK[data_table]}_end_date > lfi.interval_end)) \
+                AND (data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS["start"][data_table]} BETWEEN lfi.interval_start AND lfi.interval_end \
+                    OR data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS["end"][data_table]} BETWEEN lfi.interval_start AND lfi.interval_end \
+                    OR (data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS["start"][data_table]} < lfi.interval_start AND data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS["end"][data_table]} > lfi.interval_end)) \
         GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
     ).df()

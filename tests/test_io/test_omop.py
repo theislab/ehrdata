@@ -17,6 +17,7 @@ VANILLA_NUM_CONCEPTS = {
     "specimen": 2,
     "drug_exposure": 2,
     "condition_occurrence": 2,
+    "procedure_occurrence": 2,
 }
 
 # constants for setup_variables
@@ -322,7 +323,66 @@ def test_setup_variables(
                 [[1, 1, 1, 1], [1, 1, 1, 1]],
             ],
         ),
-        # (["procedure_occurrence"], ["is_present"]), # TODO: write test file
+        (
+            ["procedure_occurrence"],
+            ["procedure_source_value"],
+            "start",
+            [
+                [[180256009, np.nan, np.nan, np.nan], [430193006, np.nan, np.nan, np.nan]],
+                [[180256009, np.nan, np.nan, np.nan], [430193006, np.nan, np.nan, np.nan]],
+                [[180256009, np.nan, np.nan, np.nan], [430193006, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["procedure_occurrence"],
+            ["procedure_source_value"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["procedure_occurrence"],
+            ["procedure_source_value"],
+            "interval",
+            [
+                [[180256009, 180256009, 180256009, 180256009], [430193006, 430193006, 430193006, 430193006]],
+                [[180256009, 180256009, 180256009, 180256009], [430193006, 430193006, 430193006, 430193006]],
+                [[180256009, 180256009, 180256009, 180256009], [430193006, 430193006, 430193006, 430193006]],
+            ],
+        ),
+        (
+            ["procedure_occurrence"],
+            ["is_present"],
+            "start",
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["procedure_occurrence"],
+            ["is_present"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["procedure_occurrence"],
+            ["is_present"],
+            "interval",
+            [
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+            ],
+        ),
         # (["device_exposure"], ["is_present"]), # TODO: write test file
         # (["note"], ["is_present"]),
     ],
