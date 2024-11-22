@@ -3,22 +3,6 @@ from collections.abc import Sequence
 import duckdb
 import pandas as pd
 
-# START_DATE_KEY = {
-#     "visit_occurrence": "visit_start_date",
-#     "observation_period": "observation_period_start_date",
-#     "cohort": "cohort_start_date",
-#     "drug_exposure": "drug_exposure_start_date",
-#     "condition_occurrence": "condition_start_date",
-#     "procedure_occurrence": "procedure_date",  # v5.4, as v5.3 had no end! TODO: allow v5.3 too
-# }
-# END_DATE_KEY = {
-#     "visit_occurrence": "visit_end_date",
-#     "observation_period": "observation_period_end_date",
-#     "cohort": "cohort_end_date",
-#     "drug_exposure": "drug_exposure_end_date",
-#     "condition_occurrence": "condition_end_date",
-#     "procedure_occurrence": "procedure_end_date",  # v5.4, as v5.3 had no end! TODO: allow v5.3 too
-# }
 TIME_DEFINING_TABLE_SUBJECT_KEY = {
     "visit_occurrence": "person_id",
     "observation_period": "person_id",
@@ -34,15 +18,8 @@ DATA_TABLE_CONCEPT_ID_TRUNK = {
     "procedure_occurrence": "procedure",
     "device_exposure": "device",
     "drug_era": "drug",
+    "dose_era": "drug",
 }
-# DATA_TABLE_DATE_TRUNK = {
-#     "measurement": "measurement",
-#     "observation": "observation",
-#     "specimen": "specimen",
-#     "drug_exposure": "drug_exposure",
-#     "condition_occurrence": "condition",
-#     "procedure_occurrence": "procedure",
-# }
 
 DATA_TABLE_DATE_KEYS = {
     "timepoint": {
@@ -59,6 +36,7 @@ DATA_TABLE_DATE_KEYS = {
         "procedure_occurrence": "procedure_date",  # in v5.3, procedure didnt have end date
         "device_exposure": "device_exposure_start_date",
         "drug_era": "drug_era_start_date",
+        "dose_era": "dose_era_start_date",
     },
     "end": {
         "visit_occurrence": "visit_end_date",
@@ -69,6 +47,7 @@ DATA_TABLE_DATE_KEYS = {
         "procedure_occurrence": "procedure_end_date",  # in v5.3, procedure didnt have end date TODO v5.3 support
         "device_exposure": "device_exposure_end_date",
         "drug_era": "drug_era_end_date",
+        "dose_era": "dose_era_end_date",
     },
 }
 

@@ -20,6 +20,7 @@ VANILLA_NUM_CONCEPTS = {
     "procedure_occurrence": 2,
     "device_exposure": 2,
     "drug_era": 2,
+    "dose_era": 2,
 }
 
 # constants for setup_variables
@@ -497,6 +498,66 @@ def test_setup_variables(
         ),
         (
             ["drug_era"],
+            ["is_present"],
+            "interval",
+            [
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+            ],
+        ),
+        (
+            ["dose_era"],
+            ["dose_value"],
+            "start",
+            [
+                [[2.5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[2.5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[2.5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["dose_era"],
+            ["dose_value"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["dose_era"],
+            ["dose_value"],
+            "interval",
+            [
+                [[2.5, 2.5, 2.5, 2.5], [10, 10, 10, 10]],
+                [[2.5, 2.5, 2.5, 2.5], [10, 10, 10, 10]],
+                [[2.5, 2.5, 2.5, 2.5], [10, 10, 10, 10]],
+            ],
+        ),
+        (
+            ["dose_era"],
+            ["is_present"],
+            "start",
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["dose_era"],
+            ["is_present"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["dose_era"],
             ["is_present"],
             "interval",
             [
