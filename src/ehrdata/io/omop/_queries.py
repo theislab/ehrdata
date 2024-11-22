@@ -20,6 +20,7 @@ DATA_TABLE_CONCEPT_ID_TRUNK = {
     "drug_era": "drug",
     "dose_era": "drug",
     "condition_era": "condition",
+    "episode": "episode",
 }
 
 DATA_TABLE_DATE_KEYS = {
@@ -39,6 +40,7 @@ DATA_TABLE_DATE_KEYS = {
         "drug_era": "drug_era_start_date",
         "dose_era": "dose_era_start_date",
         "condition_era": "condition_era_start_date",
+        "episode": "episode_start_date",
     },
     "end": {
         "visit_occurrence": "visit_end_date",
@@ -51,6 +53,7 @@ DATA_TABLE_DATE_KEYS = {
         "drug_era": "drug_era_end_date",
         "dose_era": "dose_era_end_date",
         "condition_era": "condition_era_end_date",
+        "episode": "episode_end_date",
     },
 }
 

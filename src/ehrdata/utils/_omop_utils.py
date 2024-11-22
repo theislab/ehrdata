@@ -43,6 +43,7 @@ def get_table_catalog_dict(version: Literal["5.4"] = "5.4"):
         "note_nlp",
         "observation",
         "fact_relationship",
+        "episode",
     ]
 
     table_catalog_dict["Health system data"] = ["location", "care_site", "provider"]

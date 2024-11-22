@@ -20,6 +20,7 @@ VALID_INTERVAL_VARIABLE_TABLES = [
     "drug_era",
     "dose_era",
     "condition_era",
+    "episode",
 ]
 VALID_KEEP_DATES = ["start", "end", "interval"]
 

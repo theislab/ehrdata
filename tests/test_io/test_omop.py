@@ -22,6 +22,7 @@ VANILLA_NUM_CONCEPTS = {
     "drug_era": 2,
     "dose_era": 2,
     "condition_era": 2,
+    "episode": 2,
 }
 
 # constants for setup_variables
@@ -619,6 +620,66 @@ def test_setup_variables(
         ),
         (
             ["condition_era"],
+            ["is_present"],
+            "interval",
+            [
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+            ],
+        ),
+        (
+            ["episode"],
+            ["episode_source_value"],
+            "start",
+            [
+                [[5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+                [[5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["episode"],
+            ["episode_source_value"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["episode"],
+            ["episode_source_value"],
+            "interval",
+            [
+                [[5, 5, 5, 5], [10, 10, 10, 10]],
+                [[5, 5, 5, 5], [10, 10, 10, 10]],
+                [[5, 5, 5, 5], [10, 10, 10, 10]],
+            ],
+        ),
+        (
+            ["episode"],
+            ["is_present"],
+            "start",
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["episode"],
+            ["is_present"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["episode"],
             ["is_present"],
             "interval",
             [

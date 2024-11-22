@@ -34,7 +34,7 @@ def test_gibleed_omop(tmp_path):
 def test_synthea27nj_omop(tmp_path):
     duckdb_connection = duckdb.connect()
     ed.dt.synthea27nj_omop(data_path=tmp_path, backend_handle=duckdb_connection)
-    assert len(duckdb_connection.execute("SHOW TABLES").df()) == 37
+    assert len(duckdb_connection.execute("SHOW TABLES").df()) == 38
     # sanity check of one table
     assert duckdb_connection.execute("SELECT * FROM person").df().shape == (28, 18)
     duckdb_connection.close()
