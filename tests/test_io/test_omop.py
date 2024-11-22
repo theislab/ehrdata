@@ -21,6 +21,7 @@ VANILLA_NUM_CONCEPTS = {
     "device_exposure": 2,
     "drug_era": 2,
     "dose_era": 2,
+    "condition_era": 2,
 }
 
 # constants for setup_variables
@@ -558,6 +559,66 @@ def test_setup_variables(
         ),
         (
             ["dose_era"],
+            ["is_present"],
+            "interval",
+            [
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+            ],
+        ),
+        (
+            ["condition_era"],
+            ["condition_occurrence_count"],
+            "start",
+            [
+                [[1, np.nan, np.nan, np.nan], [256, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [256, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [256, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_era"],
+            ["condition_occurrence_count"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_era"],
+            ["condition_occurrence_count"],
+            "interval",
+            [
+                [[1, 1, 1, 1], [256, 256, 256, 256]],
+                [[1, 1, 1, 1], [256, 256, 256, 256]],
+                [[1, 1, 1, 1], [256, 256, 256, 256]],
+            ],
+        ),
+        (
+            ["condition_era"],
+            ["is_present"],
+            "start",
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_era"],
+            ["is_present"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["condition_era"],
             ["is_present"],
             "interval",
             [
