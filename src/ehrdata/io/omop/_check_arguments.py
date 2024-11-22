@@ -12,7 +12,12 @@ DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 VALID_OBSERVATION_TABLES_SINGLE = ["person"]
 VALID_OBSERVATION_TABLES_JOIN = ["person_cohort", "person_observation_period", "person_visit_occurrence"]
 VALID_VARIABLE_TABLES = ["measurement", "observation", "specimen"]
-VALID_INTERVAL_VARIABLE_TABLES = ["drug_exposure", "condition_occurrence", "procedure_occurrence"]
+VALID_INTERVAL_VARIABLE_TABLES = [
+    "drug_exposure",
+    "condition_occurrence",
+    "procedure_occurrence",
+    "device_exposure",
+]
 VALID_KEEP_DATES = ["start", "end", "interval"]
 
 

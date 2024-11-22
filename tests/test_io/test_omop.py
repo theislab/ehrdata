@@ -18,6 +18,7 @@ VANILLA_NUM_CONCEPTS = {
     "drug_exposure": 2,
     "condition_occurrence": 2,
     "procedure_occurrence": 2,
+    "device_exposure": 2,
 }
 
 # constants for setup_variables
@@ -383,7 +384,66 @@ def test_setup_variables(
                 [[1, 1, 1, 1], [1, 1, 1, 1]],
             ],
         ),
-        # (["device_exposure"], ["is_present"]), # TODO: write test file
+        (
+            ["device_exposure"],
+            ["device_source_value"],
+            "start",
+            [
+                [[72506001, np.nan, np.nan, np.nan], [224087, np.nan, np.nan, np.nan]],
+                [[72506001, np.nan, np.nan, np.nan], [224087, np.nan, np.nan, np.nan]],
+                [[72506001, np.nan, np.nan, np.nan], [224087, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["device_exposure"],
+            ["device_source_value"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["device_exposure"],
+            ["device_source_value"],
+            "interval",
+            [
+                [[72506001, 72506001, 72506001, 72506001], [224087, 224087, 224087, 224087]],
+                [[72506001, 72506001, 72506001, 72506001], [224087, 224087, 224087, 224087]],
+                [[72506001, 72506001, 72506001, 72506001], [224087, 224087, 224087, 224087]],
+            ],
+        ),
+        (
+            ["device_exposure"],
+            ["is_present"],
+            "start",
+            [
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+                [[1, np.nan, np.nan, np.nan], [1, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["device_exposure"],
+            ["is_present"],
+            "end",
+            [
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
+            ],
+        ),
+        (
+            ["device_exposure"],
+            ["is_present"],
+            "interval",
+            [
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+                [[1, 1, 1, 1], [1, 1, 1, 1]],
+            ],
+        ),
         # (["note"], ["is_present"]),
     ],
 )

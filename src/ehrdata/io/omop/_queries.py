@@ -32,6 +32,7 @@ DATA_TABLE_CONCEPT_ID_TRUNK = {
     "drug_exposure": "drug",
     "condition_occurrence": "condition",
     "procedure_occurrence": "procedure",
+    "device_exposure": "device",
 }
 # DATA_TABLE_DATE_TRUNK = {
 #     "measurement": "measurement",
@@ -55,6 +56,7 @@ DATA_TABLE_DATE_KEYS = {
         "drug_exposure": "drug_exposure_start_date",
         "condition_occurrence": "condition_start_date",
         "procedure_occurrence": "procedure_date",  # in v5.3, procedure didnt have end date
+        "device_exposure": "device_exposure_start_date",
     },
     "end": {
         "visit_occurrence": "visit_end_date",
@@ -63,6 +65,7 @@ DATA_TABLE_DATE_KEYS = {
         "drug_exposure": "drug_exposure_end_date",
         "condition_occurrence": "condition_end_date",
         "procedure_occurrence": "procedure_end_date",  # in v5.3, procedure didnt have end date TODO v5.3 support
+        "device_exposure": "device_exposure_end_date",
     },
 }
 
