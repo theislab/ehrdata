@@ -1,240 +1,179 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+import numpy as np
 import pandas as pd
 from anndata import AnnData
 
 from ehrdata.core.constants import R_LAYER_KEY
 
+if TYPE_CHECKING:
+    from anndata._core.index import Index as ADIndex
+    from anndata._core.index import Index1D
 
-class EHRData:
-    """EHRData object."""
+    Index = ADIndex | tuple[Index1D, Index1D, Index1D]
+
+
+class EHRData(AnnData):
+    """EHRData object.
+
+    Inherits `__init__` parameters, methods, and properties from :class:`~anndata.AnnData`.
+
+    Parameters
+    ----------
+    X
+        See :attr:`~anndata.AnnData.X`.
+    r
+        3-Dimensional tensor. See :attr:`r`.
+    t
+        Time dataframe for describing third axis. See :attr:`t`.
+    """
+
+    _t: pd.DataFrame | None
 
     def __init__(
         self,
-        adata=None,
         X=None,
-        r=None,
-        obs=None,
-        var=None,
-        t=None,
-        uns=None,
-        obsm=None,
-        varm=None,
-        layers=None,
-        raw=None,
-        dtype=None,
-        shape=None,
-        filename=None,
-        filemode=None,
-        asview=None,
+        r: np.ndarray | None = None,
         *,
-        obsp=None,
-        varp=None,
-        oidx=None,
-        vidx=None,
-        tidx=None,
+        t: pd.DataFrame | None = None,
+        **kwargs,
     ):
-        """EHRData object."""
-        if adata is None:
-            self._adata = AnnData(
-                X=X,
-                obs=obs,
-                var=var,
-                uns=uns,
-                obsm=obsm,
-                varm=varm,
-                layers=layers,
-                raw=raw,
-                dtype=dtype,
-                shape=shape,
-                filename=filename,
-                filemode=filemode,
-                asview=asview,
-                obsp=obsp,
-                varp=varp,
-                oidx=oidx,
-                vidx=vidx,
-            )
-
-        elif isinstance(adata, AnnData):
-            self._adata = adata
-
-        else:
-            raise ValueError("adata must be an AnnData object")
+        super().__init__(X=X, **kwargs)
 
         if r is not None:
+            if (r2 := self.layers.get(R_LAYER_KEY)) is not None and r2 is not r:
+                msg = "`r` is both specified and already present in `adata.layers`."
+                raise ValueError(msg)
             self.layers[R_LAYER_KEY] = r
         # else:
         #     self.layers[R_LAYER_KEY] = np.zeros((self._adata.shape[0], self._adata.shape[1], 0))
 
-        if t is not None:
-            if isinstance(t, pd.DataFrame):
-                self.t = t
-            else:
-                raise ValueError("t must be a pandas.DataFrame")
-
+        if t is None:
+            l = 1 if r is None or len(r.shape) <= 2 else r.shape[2]
+            self.t = pd.DataFrame(index=pd.RangeIndex(l))
+        elif isinstance(t, pd.DataFrame):
+            self.t = t
         else:
-            if R_LAYER_KEY not in self.layers.keys():
-                self.t = pd.DataFrame(pd.RangeIndex(1))
-            elif len(self.layers[R_LAYER_KEY].shape) <= 2:
-                self.t = pd.DataFrame(pd.RangeIndex(1))
-            else:
-                self.t = pd.DataFrame(index=pd.RangeIndex(self.layers[R_LAYER_KEY].shape[2]))
+            raise ValueError("t must be a pandas.DataFrame")
 
-        if tidx is not None:
-            self.t = t.iloc[tidx]
+    @classmethod
+    def from_adata(
+        cls,
+        adata: AnnData,
+        *,
+        r: np.ndarray | None = None,
+        t: pd.DataFrame | None = None,
+    ) -> EHRData:
+        """Create an EHRData object from an AnnData object.
 
-    @property
-    def X(self):
-        """Field from AnnData."""
-        return self._adata.X
+        Parameters
+        ----------
+        adata
+            Annotated data object.
+        r
+            3-Dimensional tensor, see :attr:`r`.
+        t
+            Time dataframe for describing third axis, see :attr:`t`.
 
-    @X.setter
-    def X(self, input):
-        self._adata.X = input
-
-    @property
-    def obs(self):
-        """Field from AnnData."""
-        return self._adata.obs
-
-    @obs.setter
-    def obs(self, input):
-        self._adata.obs = input
-
-    @property
-    def var(self):
-        """Field from AnnData."""
-        return self._adata.var
-
-    @var.setter
-    def var(self, input):
-        self._adata.obs = input
-
-    @property
-    def obsm(self):
-        """Field from AnnData."""
-        return self._adata.obsm
-
-    @obsm.setter
-    def obsm(self, input):
-        self._adata.obsm = input
-
-    @property
-    def varm(self):
-        """Field from AnnData."""
-        return self._adata.varm
-
-    @varm.setter
-    def varm(self, input):
-        self._adata.varm = input
+        Returns
+        -------
+        An EHRData object.
+        """
+        instance = cls(shape=adata.shape)
+        if adata.is_view:
+            instance._init_as_view(adata, slice(None), slice(None))
+        else:
+            instance._init_as_actual(
+                X=adata.X,
+                obs=adata.obs,
+                var=adata.var,
+                uns=adata.uns,
+                obsm=adata.obsm,
+                varm=adata.varm,
+                obsp=adata.obsp,
+                varp=adata.varp,
+                raw=adata.raw,
+                layers=adata.layers,
+                shape=adata.shape if adata.X is None else None,
+                filename=adata.filename,
+                filemode=adata.file._filemode,
+            )
+        instance.r = r
+        instance.t = t
+        return instance
 
     @property
-    def obsp(self):
-        """Field from AnnData."""
-        return self._adata.obsp
-
-    @obsp.setter
-    def obsp(self, input):
-        self._adata.obsp = input
-
-    @property
-    def varp(self):
-        """Field from AnnData."""
-        return self._adata.varp
-
-    @varp.setter
-    def varp(self, input):
-        self._adata.varp = input
-
-    @property
-    def var_names(self):
-        """Field from AnnData."""
-        return self._adata.var_names
-
-    @var_names.setter
-    def var_names(self, input):
-        self._adata.var_names = input
-
-    @property
-    def obs_names(self):
-        """Field from AnnData."""
-        return self._adata.obs_names
-
-    @obs_names.setter
-    def obs_names(self, input):
-        self._adata.obs_names = input
-
-    @property
-    def uns(self):
-        """Field from AnnData."""
-        return self._adata.uns
-
-    @uns.setter
-    def uns(self, input):
-        self._adata.uns = input
-
-    @property
-    def layers(self):
-        """Field from AnnData."""
-        # TODO: dont allow writing a specific key to layers..?
-        return self._adata.layers
-
-    @layers.setter
-    def layers(self, key, input):
-        # TODO: if 3D: need to match time dimension?
-        self._adata.layers[key] = input
-
-    @property
-    def r(self):
+    def r(self) -> np.ndarray | None:
         """3-Dimensional tensor, aligned with obs along first axis, var along second axis, and allowing a 3rd axis."""
-        return self._adata.layers.get(R_LAYER_KEY)
+        return self.layers.get(R_LAYER_KEY)
 
     @r.setter
-    def r(self, input):
-        self._adata.layers[R_LAYER_KEY] = input
+    def r(self, input: np.ndarray | None) -> None:
+        if input is None:
+            del self.r
+        else:
+            self.layers[R_LAYER_KEY] = input
+
+    @r.deleter
+    def r(self) -> None:
+        self.layers.pop(R_LAYER_KEY, None)
 
     @property
-    def t(self):
+    def t(self) -> pd.DataFrame | None:
         """Time dataframe for describing third axis."""
         return self._t
 
     @t.setter
-    def t(self, input):
+    def t(self, input: pd.DataFrame | None) -> None:
         self._t = input
 
-    def __repr__(self):
-        return f"EHRData object with n_obs x n_var = {self._adata.n_obs} x {self._adata.n_vars}, and a timeseries of {len(self.t)} steps.\n \
-            shape of .X: {self._adata.shape} \n \
-            shape of .r: ({self.r.shape if self.r is not None else (0,0,0)}) \n"
+    @t.deleter
+    def t(self) -> None:
+        del self._t
 
-    @property
-    def shape(self):
-        """Shape of the data matrix without r's third dimension."""
-        return self._adata.shape
+    def __repr__(self) -> str:
+        # TODO: derive from `r` if self.t is None
+        timeseries = "no timeseries" if self.t is None else f"a timeseries of {len(self.t)} steps"
+        return f"EHRData object with n_obs x n_var = {self.n_obs} x {self.n_vars}, and {timeseries}.\n \
+            shape of .X: {self.X.shape if self.X is not None else (0,0)} \n \
+            shape of .r: {self.r.shape if self.r is not None else (0,0,0)} \n"
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: Index) -> EHRData:
+        """Slice the EHRData object along 1–3 axes.
+
+        Parameters
+        ----------
+        index
+            1D, 2D, or 3D index.
+
+        Returns
+        -------
+        An EHRData view object.
+        """
         oidx, vidx, tidx = self._unpack_index(index)
-        adata_sliced = self._adata[oidx, vidx]
-        t_sliced = self._t.iloc[tidx]
+        adata_sliced = super().__getitem__((oidx, vidx))
+        r_sliced = None if self.r is None else adata_sliced.layers[R_LAYER_KEY][:, :, tidx]
+        t_sliced = None if self.t is None else self.t.iloc[tidx]
+        return EHRData.from_adata(adata=adata_sliced, r=r_sliced, t=t_sliced)
 
-        adata_2D_sliced = EHRData(adata=adata_sliced, t=t_sliced)
-        adata_2D_sliced.r = adata_2D_sliced.r[:, :, tidx]
-
-        return adata_2D_sliced
-
-    def _unpack_index(self, index):
+    def _unpack_index(self, index: Index) -> tuple[Index1D, Index1D, Index1D]:
         if not isinstance(index, tuple):
-            return index, slice(None)
+            return index, slice(None), slice(None)
         elif len(index) == 3:
             return index
         elif len(index) == 2:
             return index[0], index[1], slice(None)
         elif len(index) == 1:
-            return index[0], slice(None)
+            return index[0], slice(None), slice(None)
         else:
             raise IndexError("invalid number of indices")
 
-    def copy(self):
+    def copy(self) -> EHRData:
         """Returns a copy of the EHRData object."""
-        return EHRData(adata=self._adata.copy(), t=self._t.copy())
+        return EHRData.from_adata(
+            super().copy(),
+            r=None if self.r is None else self.r.copy(),
+            t=None if self.t is None else self.t.copy(),
+        )

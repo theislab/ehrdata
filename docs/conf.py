@@ -4,11 +4,18 @@
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+from __future__ import annotations
+
 # -- Path setup --------------------------------------------------------------
 import sys
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
+
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "extensions"))
@@ -59,6 +66,8 @@ extensions = [
     "sphinx.ext.mathjax",
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinxext.opengraph",
+    "scanpydoc.elegant_typehints",
+    "scanpydoc.definition_list_typed_field",
     *[p.stem for p in (HERE / "extensions").glob("*.py")],
 ]
 
@@ -96,6 +105,11 @@ intersphinx_mapping = {
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
     "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy", None),
+    "pandas": ("https://pandas.pydata.org/docs", None),
+    "zarr": ("https://zarr.readthedocs.io/en/stable", None),
+    "vitessce": ("https://python-docs.vitessce.io", None),
+    "lamin": ("https://docs.lamin.ai", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -129,4 +143,14 @@ pygments_style = "default"
 nitpick_ignore = [
     # https://github.com/duckdb/duckdb-web/issues/3806
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
+    # Is documented as a py:attribute instead
+    ("py:class", "numpy.int64"),
+    # For now not in public facing API
+    ("py:class", "awkward.highlevel.Array"),
 ]
+
+# Redirect broken parameter annotation classes
+qualname_overrides = {
+    "zarr._storage.store.Store": "zarr.storage.MemoryStore",
+    "lnschema_core.models.Artifact": "lamindb.Artifact",
+}
