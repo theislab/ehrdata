@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from duckdb.duckdb import DuckDBPyConnection
 
+from ehrdata._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._check_arguments import (
     VALID_OBSERVATION_TABLES_JOIN,
     VALID_OBSERVATION_TABLES_SINGLE,
@@ -31,7 +32,6 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_observation_table,
     _check_valid_variable_data_tables,
 )
-from ehrdata.io.omop._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._queries import _time_interval_table
 
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
