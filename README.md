@@ -6,7 +6,7 @@
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/theislab/ehrdata/test.yaml?branch=main
 [badge-docs]: https://img.shields.io/readthedocs/ehrdata
 
-A Python package for EHR data
+Python package for EHR data
 
 ## Getting started
 
