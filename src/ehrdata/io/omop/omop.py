@@ -31,8 +31,8 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_observation_table,
     _check_valid_variable_data_tables,
 )
+from ehrdata.io.omop._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._queries import _time_interval_table
-from ehrdata.utils._omop_utils import get_table_catalog_dict
 
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
