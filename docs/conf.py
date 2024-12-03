@@ -141,6 +141,7 @@ pygments_style = "default"
 # If building the documentation fails because of a missing link that is outside your control,
 # you can add an exception to this list:
 nitpick_ignore = [
+    ("py:class", "types.EllipsisType"),
     # https://github.com/duckdb/duckdb-web/issues/3806
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
     # Is documented as a py:attribute instead
