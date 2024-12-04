@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from duckdb.duckdb import DuckDBPyConnection
 
+from ehrdata._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._check_arguments import (
     VALID_OBSERVATION_TABLES_JOIN,
     VALID_OBSERVATION_TABLES_SINGLE,
@@ -32,7 +33,6 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_variable_data_tables,
 )
 from ehrdata.io.omop._queries import _time_interval_table
-from ehrdata.utils._omop_utils import get_table_catalog_dict
 
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
@@ -328,7 +328,7 @@ def setup_variables(
     # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
     count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_tables[0]}").df()["count"].item()
     if count == 0:
-        logging.info(f"No data found in {data_tables[0]}. Returning edata without additional variables.")
+        logging.warning(f"No data found in {data_tables[0]}. Returning edata without additional variables.")
         return edata
 
     ds = (
@@ -463,7 +463,7 @@ def setup_interval_variables(
     # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
     count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_tables[0]}").df()["count"].item()
     if count == 0:
-        logging.info(f"No data in {data_tables}.")
+        logging.warning(f"No data in {data_tables}.")
         return edata
 
     ds = (

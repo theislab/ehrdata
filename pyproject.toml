@@ -29,6 +29,7 @@ dependencies = [
   "awkward",
   "duckdb",
   # for debug logging (referenced from the issue template)
+  "lamin-utils",
   "session-info",
   "xarray",
 ]

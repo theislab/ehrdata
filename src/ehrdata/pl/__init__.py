@@ -1,8 +1,6 @@
 from importlib.util import find_spec
 
-__all__ = ["BasicClass", "basic_plot", "vitessce"]
-
-from .basic import BasicClass, basic_plot
+__all__ = ["vitessce"]
 
 if find_spec("vitessce"):
     from . import vitessce
