@@ -251,7 +251,7 @@ def setup_obs(
 
 def setup_variables(
     edata,
-    # *,
+    *,
     backend_handle: duckdb.duckdb.DuckDBPyConnection,
     data_tables: Sequence[Literal["measurement", "observation", "specimen"]]
     | Literal["measurement", "observation", "specimen"],
