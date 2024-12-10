@@ -821,3 +821,21 @@ def test_empty_observation(omop_connection_empty_observation, caplog):
     )
     assert edata.shape == (1, 0)
     assert "No data found in observation. Returning edata without additional variables." in caplog.text
+
+
+def test_multiple_units(omop_connection_multiple_units, caplog):
+    con = omop_connection_multiple_units
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["observation"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=2,
+        enrich_var_with_feature_info=False,
+        enrich_var_with_unit_info=False,
+    )
+    # assert edata.shape == (1, 0)
+    assert "multiple units for features: [[0]\n [1]]\n" in caplog.text
