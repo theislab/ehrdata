@@ -111,7 +111,7 @@ def _check_one_unit_per_feature(ds, unit_key="unit_concept_id") -> None:
     num_units = np.array([len(units) for _, units in feature_units.items()])
 
     # print(f"no units for features: {np.argwhere(num_units == 0)}")
-    print(f"multiple units for features: {np.argwhere(num_units > 1)}")
+    logging.warning(f"multiple units for features: {np.argwhere(num_units > 1)}")
 
 
 def _create_feature_unit_concept_id_report(backend_handle, ds) -> pd.DataFrame:
@@ -257,12 +257,18 @@ def setup_variables(
     aggregation_strategy: str = "last",
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
+    instantiate_tensor: bool = True,
 ):
     """Setup the variables.
 
     This function sets up the variables for the EHRData object.
     It will fail if there is more than one unit_concept_id per feature.
     Writes a unit report of the features to edata.uns["unit_report_<data_tables>"].
+    Writes the setup arguments into edata.uns["omop_io_variable_setup"].
+
+    Stores a table named `long_person_timestamp_feature_value` in long format in the RDBMS.
+    This table is instantiated into edata.r if `instantiate_tensor` is set to True;
+    otherwise, the table is only stored in the RDBMS for later use.
 
     Parameters
     ----------
@@ -290,6 +296,8 @@ def setup_variables(
         Whether to enrich the var table with feature information. If a concept_id is not found in the concept table, the feature information will be NaN.
     enrich_var_with_unit_info
         Whether to enrich the var table with unit information. Raises an Error if a) multiple units per feature are found for at least one feature. If a concept_id is not found in the concept table, the feature information will be NaN.
+    instantiate_tensor
+        Whether to instantiate the tensor into the .r field of the EHRData object.
 
     Returns
     -------
@@ -331,6 +339,7 @@ def setup_variables(
         logging.warning(f"No data found in {data_tables[0]}. Returning edata without additional variables.")
         return edata
 
+    # TODO: if instantiate_tensor
     ds = (
         _time_interval_table(
             backend_handle=backend_handle,
@@ -341,11 +350,13 @@ def setup_variables(
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
             aggregation_strategy=aggregation_strategy,
+            return_as_df=True,
         )
         .set_index(["person_id", "data_table_concept_id", "interval_step"])
         .to_xarray()
     )
 
+    # TODO: if instantiate_tensor! rdbms backed, make ds independent but build on long table
     _check_one_unit_per_feature(ds)
     # TODO ignore? go with more vanilla omop style. _check_one_unit_per_feature(ds, unit_key="unit_source_value")
 
@@ -477,6 +488,7 @@ def setup_interval_variables(
             num_intervals=num_intervals,
             aggregation_strategy=aggregation_strategy,
             keep_date=keep_date,
+            return_as_df=True,
         )
         .set_index(["person_id", "data_table_concept_id", "interval_step"])
         .to_xarray()

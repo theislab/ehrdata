@@ -125,7 +125,8 @@ def _time_interval_table(
     aggregation_strategy: str,
     data_field_to_keep: Sequence[str] | str,
     keep_date: str = "",
-):
+    return_as_df: bool = False,
+) -> pd.DataFrame | None:
     if isinstance(data_field_to_keep, str):
         data_field_to_keep = [data_field_to_keep]
 
@@ -138,6 +139,8 @@ def _time_interval_table(
         backend_handle,
         timedeltas_dataframe,
     )
+
+    create_long_table_query = "CREATE TABLE long_person_timestamp_feature_value AS\n"
 
     # multi-step query
     # 1. Create person_time_defining_table, which matches the one created for obs. Needs to contain the person_id, and the start date in particular.
@@ -196,10 +199,147 @@ def _time_interval_table(
         GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
 
-    query = prepare_alias_query + select_query
+    query = create_long_table_query + prepare_alias_query + select_query
 
-    df = backend_handle.execute(query).df()
+    backend_handle.execute("DROP TABLE IF EXISTS long_person_timestamp_feature_value")
+    backend_handle.execute(query)
 
-    _drop_timedeltas(backend_handle)
+    add_person_range_index_query = """
+        ALTER TABLE long_person_timestamp_feature_value
+        ADD COLUMN person_index INTEGER;
 
-    return df
+        WITH RankedPersons AS (
+            SELECT person_id,
+                ROW_NUMBER() OVER (ORDER BY person_id) - 1 AS idx
+            FROM (SELECT DISTINCT person_id FROM long_person_timestamp_feature_value) AS unique_persons
+        )
+        UPDATE long_person_timestamp_feature_value
+        SET person_index = RP.idx
+        FROM RankedPersons RP
+        WHERE long_person_timestamp_feature_value.person_id = RP.person_id;
+    """
+    backend_handle.execute(add_person_range_index_query)
+
+    if return_as_df:
+        return backend_handle.execute("SELECT * FROM long_person_timestamp_feature_value").df()
+    else:
+        return None
+
+
+# def _get_time_interval_table(
+#     backend_handle: duckdb.duckdb.DuckDBPyConnection,
+#     time_defining_table: str,
+#     data_table: str,
+#     interval_length_number: int,
+#     interval_length_unit: str,
+#     num_intervals: int,
+#     aggregation_strategy: str,
+#     data_field_to_keep: Sequence[str] | str,
+#     keep_date: str = "",
+# ):
+#     return backend_handle.execute("SELECT * FROM long_person_timestamp_feature_value").df()
+
+
+# def _time_interval_table_for_dataloader(
+#     backend_handle: duckdb.duckdb.DuckDBPyConnection,
+#     time_defining_table: str,
+#     data_table: str,
+#     interval_length_number: int,
+#     interval_length_unit: str,
+#     num_intervals: int,
+#     aggregation_strategy: str,
+#     data_field_to_keep: Sequence[str] | str,
+#     keep_date: str = "",
+# ):
+#     if isinstance(data_field_to_keep, str):
+#         data_field_to_keep = [data_field_to_keep]
+
+#     if keep_date == "":
+#         keep_date = "timepoint"
+
+#     timedeltas_dataframe = _generate_timedeltas(interval_length_number, interval_length_unit, num_intervals)
+
+#     _write_timedeltas_to_db(
+#         backend_handle,
+#         timedeltas_dataframe,
+#     )
+
+#     # multi-step query
+#     # 1. Create person_time_defining_table, which matches the one created for obs. Needs to contain the person_id, and the start date in particular.
+#     # 2. Create person_data_table (data_table is typically measurement), which contains the cross product of person_id and the distinct concept_id s.
+#     # 3. Create long_format_backbone, which is the left join of person_time_defining_table and person_data_table.
+#     # 4. Create long_format_intervals, which is the cross product of long_format_backbone and timedeltas. This table contains most notably the person_id, the concept_id, the interval start and end dates.
+#     # 5. Create the final table, which is the join with the data_table (typically measurement); each measurement is assigned to its person_id, its concept_id, and the interval it fits into.
+#     prepare_alias_query = f"""
+#         CREATE TABLE long_person_timestamp_feature_value AS \
+#         WITH person_time_defining_table AS ( \
+#             SELECT person.person_id as person_id, {DATA_TABLE_DATE_KEYS["start"][time_defining_table]} as start_date, {DATA_TABLE_DATE_KEYS["end"][time_defining_table]} as end_date \
+#             FROM person \
+#             JOIN {time_defining_table} ON person.person_id = {time_defining_table}.{TIME_DEFINING_TABLE_SUBJECT_KEY[time_defining_table]} \
+#             WHERE visit_concept_id = 262 \
+#         ), \
+#         person_data_table AS( \
+#             WITH distinct_data_table_concept_ids AS ( \
+#                 SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id
+#                 FROM {data_table} \
+#             )
+#             SELECT person.person_id, {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id as data_table_concept_id \
+#             FROM person \
+#             CROSS JOIN distinct_data_table_concept_ids \
+#         ), \
+#         long_format_backbone as ( \
+#             SELECT person_time_defining_table.person_id, data_table_concept_id, start_date, end_date \
+#             FROM person_time_defining_table \
+#             LEFT JOIN person_data_table USING(person_id)\
+#         ), \
+#         long_format_intervals as ( \
+#             SELECT person_id, data_table_concept_id, interval_step, start_date, start_date + interval_start_offset as interval_start, start_date + interval_end_offset as interval_end \
+#             FROM long_format_backbone \
+#             CROSS JOIN timedeltas \
+#         ), \
+#         data_table_with_presence_indicator as( \
+#             SELECT *, 1 as is_present \
+#             FROM {data_table} \
+#         ) \
+#         """
+
+#     if keep_date in ["timepoint", "start", "end"]:
+#         select_query = f"""
+#             SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
+#             FROM long_format_intervals as lfi \
+#             LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS[keep_date][data_table]} BETWEEN lfi.interval_start AND lfi.interval_end \
+#             GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
+#         """
+
+#     elif keep_date == "interval":
+#         select_query = f"""
+#             SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
+#             FROM long_format_intervals as lfi \
+#             LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id \
+#                     AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id \
+#                     AND (data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS["start"][data_table]} BETWEEN lfi.interval_start AND lfi.interval_end \
+#                         OR data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS["end"][data_table]} BETWEEN lfi.interval_start AND lfi.interval_end \
+#                         OR (data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS["start"][data_table]} < lfi.interval_start AND data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS["end"][data_table]} > lfi.interval_end)) \
+#             GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
+#         """
+
+#     query = prepare_alias_query + select_query
+#     backend_handle.execute("DROP TABLE IF EXISTS long_person_timestamp_feature_value")
+#     backend_handle.execute(query)
+#     add_person_range_index_query = """
+#         ALTER TABLE long_person_timestamp_feature_value
+#         ADD COLUMN person_index INTEGER;
+
+#         WITH RankedPersons AS (
+#             SELECT person_id,
+#                 ROW_NUMBER() OVER (ORDER BY person_id) - 1 AS idx
+#             FROM (SELECT DISTINCT person_id FROM long_person_timestamp_feature_value) AS unique_persons
+#         )
+#         UPDATE long_person_timestamp_feature_value
+#         SET person_index = RP.idx
+#         FROM RankedPersons RP
+#         WHERE long_person_timestamp_feature_value.person_id = RP.person_id;
+#     """
+#     backend_handle.execute(add_person_range_index_query)
+
+#     return None
