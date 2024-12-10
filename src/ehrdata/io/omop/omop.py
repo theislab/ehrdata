@@ -32,7 +32,7 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_observation_table,
     _check_valid_variable_data_tables,
 )
-from ehrdata.io.omop._queries import _time_interval_table
+from ehrdata.io.omop._queries import _write_long_time_interval_table
 
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
@@ -345,30 +345,21 @@ def setup_variables(
         logging.warning(f"No data found in {data_tables[0]}. Returning edata without additional variables.")
         return edata
 
-    # TODO: if instantiate_tensor
-    ds = (
-        _time_interval_table(
-            backend_handle=backend_handle,
-            time_defining_table=time_defining_table,
-            data_table=data_tables[0],
-            data_field_to_keep=data_field_to_keep,
-            interval_length_number=interval_length_number,
-            interval_length_unit=interval_length_unit,
-            num_intervals=num_intervals,
-            aggregation_strategy=aggregation_strategy,
-            return_as_df=True,
-        )
-        .set_index(["person_id", "data_table_concept_id", "interval_step"])
-        .to_xarray()
+    _write_long_time_interval_table(
+        backend_handle=backend_handle,
+        time_defining_table=time_defining_table,
+        data_table=data_tables[0],
+        data_field_to_keep=data_field_to_keep,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
     )
 
-    # TODO: if instantiate_tensor! rdbms backed, make ds independent but build on long table
     _check_one_unit_per_feature(backend_handle)
-    # TODO ignore? go with more vanilla omop style. _check_one_unit_per_feature(ds, unit_key="unit_source_value")
-
     unit_report = _create_feature_unit_concept_id_report(backend_handle)
 
-    var = ds["data_table_concept_id"].to_dataframe()
+    var = backend_handle.execute("SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value").df()
 
     if enrich_var_with_feature_info or enrich_var_with_unit_info:
         concepts = backend_handle.sql("SELECT * FROM concept").df()
@@ -398,9 +389,19 @@ def setup_variables(
                 suffixes=("", "_unit"),
             )
 
-    t = ds["interval_step"].to_dataframe()
+    t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
-    edata = EHRData(r=ds[data_field_to_keep[0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
+    if instantiate_tensor:
+        ds = (
+            (backend_handle.execute("SELECT * FROM long_person_timestamp_feature_value").df())
+            .set_index(["person_id", "data_table_concept_id", "interval_step"])
+            .to_xarray()
+        )
+
+    else:
+        ds = None
+
+    edata = EHRData(r=ds[data_field_to_keep[0]].values if ds else None, obs=edata.obs, var=var, uns=edata.uns, t=t)
     edata.uns[f"unit_report_{data_tables[0]}"] = unit_report
 
     return edata
@@ -420,6 +421,7 @@ def setup_interval_variables(
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
     keep_date: Literal["start", "end", "interval"] = "start",
+    instantiate_tensor: bool = True,
 ):
     """Setup the interval variables
 
@@ -453,6 +455,8 @@ def setup_interval_variables(
         Whether to enrich the var table with feature information. If a concept_id is not found in the concept table, the feature information will be NaN.
     date_type
         Whether to keep the start or end date, or the interval span.
+    instantiate_tensor
+        Whether to instantiate the tensor into the .r field of the EHRData object.
 
     Returns
     -------
@@ -483,24 +487,26 @@ def setup_interval_variables(
         logging.warning(f"No data in {data_tables}.")
         return edata
 
+    _write_long_time_interval_table(
+        backend_handle=backend_handle,
+        time_defining_table=time_defining_table,
+        data_table=data_tables[0],
+        data_field_to_keep=data_field_to_keep,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
+        keep_date=keep_date,
+    )
+
     ds = (
-        _time_interval_table(
-            backend_handle=backend_handle,
-            time_defining_table=time_defining_table,
-            data_table=data_tables[0],
-            data_field_to_keep=data_field_to_keep,
-            interval_length_number=interval_length_number,
-            interval_length_unit=interval_length_unit,
-            num_intervals=num_intervals,
-            aggregation_strategy=aggregation_strategy,
-            keep_date=keep_date,
-            return_as_df=True,
-        )
+        backend_handle.execute("SELECT * FROM long_person_timestamp_feature_value")
+        .df()
         .set_index(["person_id", "data_table_concept_id", "interval_step"])
         .to_xarray()
     )
 
-    var = ds["data_table_concept_id"].to_dataframe()
+    var = backend_handle.execute("SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value").df()
 
     if enrich_var_with_feature_info or enrich_var_with_unit_info:
         concepts = backend_handle.sql("SELECT * FROM concept").df()
@@ -509,7 +515,7 @@ def setup_interval_variables(
     if enrich_var_with_feature_info:
         var = pd.merge(var, concepts, how="left", left_index=True, right_on="concept_id")
 
-    t = ds["interval_step"].to_dataframe()
+    t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
     edata = EHRData(r=ds[data_field_to_keep[0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
 
