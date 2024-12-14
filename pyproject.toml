@@ -69,6 +69,10 @@ optional-dependencies.test = [
   "ehrdata[torch,vitessce,lamin]",
   "pytest",
 ]
+optional-dependencies.torch = [
+  "torch",
+]
+
 optional-dependencies.vitessce = [
   "vitessce[all]>=3.4", # the actual dependency
   "zarr<3",             # vitessce does not support zarr>=3
@@ -77,10 +81,6 @@ optional-dependencies.vitessce = [
 urls.Documentation = "https://ehrdata.readthedocs.io/"
 urls.Homepage = "https://github.com/theislab/ehrdata"
 urls.Source = "https://github.com/theislab/ehrdata"
-
-optional-depencencies.torch = [
-  "torch",
-]
 
 [tool.hatch.envs.default]
 installer = "uv"
