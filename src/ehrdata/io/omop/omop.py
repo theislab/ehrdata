@@ -32,7 +32,7 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_observation_table,
     _check_valid_variable_data_tables,
 )
-from ehrdata.io.omop._queries import _time_interval_table
+from ehrdata.io.omop._queries import _write_long_time_interval_table
 
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
@@ -65,7 +65,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
                 dtype = None
 
             # read raw csv as temporary table
-            temp_relation = backend_handle.read_csv(path / file_name, dtype=dtype, escapechar="%")  # noqa: F841
+            temp_relation = backend_handle.read_csv(path / file_name, dtype=dtype)  # noqa: F841
             backend_handle.execute("CREATE OR REPLACE TABLE temp_table AS SELECT * FROM temp_relation")
 
             # make query to create table with lowercase column names
@@ -96,26 +96,32 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
     logging.info(f"unused files: {unused_files}")
 
 
-def _collect_units_per_feature(ds, unit_key="unit_concept_id") -> dict:
+def _collect_units_per_feature(backend_handle, unit_key="unit_concept_id") -> dict:
+    query = f"""
+    SELECT DISTINCT data_table_concept_id, {unit_key} FROM long_person_timestamp_feature_value
+    WHERE is_present = 1
+    """
+    result = backend_handle.execute(query).fetchall()
+
     feature_units = {}
-    for i in range(ds[unit_key].shape[1]):
-        single_feature_units = ds[unit_key].isel({ds[unit_key].dims[1]: i})
-        single_feature_units_flat = np.array(single_feature_units).flatten()
-        single_feature_units_unique = pd.unique(single_feature_units_flat[~pd.isna(single_feature_units_flat)])
-        feature_units[ds["data_table_concept_id"][i].item()] = single_feature_units_unique
+    for feature, unit in result:
+        if feature in feature_units:
+            feature_units[feature].append(unit)
+        else:
+            feature_units[feature] = [unit]
     return feature_units
 
 
-def _check_one_unit_per_feature(ds, unit_key="unit_concept_id") -> None:
-    feature_units = _collect_units_per_feature(ds, unit_key=unit_key)
+def _check_one_unit_per_feature(backend_handle, unit_key="unit_concept_id") -> None:
+    feature_units = _collect_units_per_feature(backend_handle, unit_key=unit_key)
     num_units = np.array([len(units) for _, units in feature_units.items()])
 
     # print(f"no units for features: {np.argwhere(num_units == 0)}")
-    print(f"multiple units for features: {np.argwhere(num_units > 1)}")
+    logging.warning(f"multiple units for features: {np.argwhere(num_units > 1)}")
 
 
-def _create_feature_unit_concept_id_report(backend_handle, ds) -> pd.DataFrame:
-    feature_units_concept = _collect_units_per_feature(ds, unit_key="unit_concept_id")
+def _create_feature_unit_concept_id_report(backend_handle) -> pd.DataFrame:
+    feature_units_concept = _collect_units_per_feature(backend_handle, unit_key="unit_concept_id")
 
     feature_units_long_format = []
     for feature, units in feature_units_concept.items():
@@ -257,12 +263,18 @@ def setup_variables(
     aggregation_strategy: str = "last",
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
+    instantiate_tensor: bool = True,
 ):
     """Setup the variables.
 
     This function sets up the variables for the EHRData object.
     It will fail if there is more than one unit_concept_id per feature.
     Writes a unit report of the features to edata.uns["unit_report_<data_tables>"].
+    Writes the setup arguments into edata.uns["omop_io_variable_setup"].
+
+    Stores a table named `long_person_timestamp_feature_value` in long format in the RDBMS.
+    This table is instantiated into edata.r if `instantiate_tensor` is set to True;
+    otherwise, the table is only stored in the RDBMS for later use.
 
     Parameters
     ----------
@@ -289,7 +301,9 @@ def setup_variables(
     enrich_var_with_feature_info
         Whether to enrich the var table with feature information. If a concept_id is not found in the concept table, the feature information will be NaN.
     enrich_var_with_unit_info
-        Whether to enrich the var table with unit information. Raises an Error if a) multiple units per feature are found for at least one feature. If a concept_id is not found in the concept table, the feature information will be NaN.
+        Whether to enrich the var table with unit information. Raises an Error if multiple units per feature are found for at least one feature. For entire missing data points, the units are ignored. For observed data points with missing unit information (NULL in either unit_concept_id or unit_source_value), the value NULL/NaN is considered a single unit.
+    instantiate_tensor
+        Whether to instantiate the tensor into the .r field of the EHRData object.
 
     Returns
     -------
@@ -331,27 +345,21 @@ def setup_variables(
         logging.warning(f"No data found in {data_tables[0]}. Returning edata without additional variables.")
         return edata
 
-    ds = (
-        _time_interval_table(
-            backend_handle=backend_handle,
-            time_defining_table=time_defining_table,
-            data_table=data_tables[0],
-            data_field_to_keep=data_field_to_keep,
-            interval_length_number=interval_length_number,
-            interval_length_unit=interval_length_unit,
-            num_intervals=num_intervals,
-            aggregation_strategy=aggregation_strategy,
-        )
-        .set_index(["person_id", "data_table_concept_id", "interval_step"])
-        .to_xarray()
+    _write_long_time_interval_table(
+        backend_handle=backend_handle,
+        time_defining_table=time_defining_table,
+        data_table=data_tables[0],
+        data_field_to_keep=data_field_to_keep,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
     )
 
-    _check_one_unit_per_feature(ds)
-    # TODO ignore? go with more vanilla omop style. _check_one_unit_per_feature(ds, unit_key="unit_source_value")
+    _check_one_unit_per_feature(backend_handle)
+    unit_report = _create_feature_unit_concept_id_report(backend_handle)
 
-    unit_report = _create_feature_unit_concept_id_report(backend_handle, ds)
-
-    var = ds["data_table_concept_id"].to_dataframe()
+    var = backend_handle.execute("SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value").df()
 
     if enrich_var_with_feature_info or enrich_var_with_unit_info:
         concepts = backend_handle.sql("SELECT * FROM concept").df()
@@ -381,9 +389,19 @@ def setup_variables(
                 suffixes=("", "_unit"),
             )
 
-    t = ds["interval_step"].to_dataframe()
+    t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
-    edata = EHRData(r=ds[data_field_to_keep[0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
+    if instantiate_tensor:
+        ds = (
+            (backend_handle.execute("SELECT * FROM long_person_timestamp_feature_value").df())
+            .set_index(["person_id", "data_table_concept_id", "interval_step"])
+            .to_xarray()
+        )
+
+    else:
+        ds = None
+
+    edata = EHRData(r=ds[data_field_to_keep[0]].values if ds else None, obs=edata.obs, var=var, uns=edata.uns, t=t)
     edata.uns[f"unit_report_{data_tables[0]}"] = unit_report
 
     return edata
@@ -403,6 +421,7 @@ def setup_interval_variables(
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
     keep_date: Literal["start", "end", "interval"] = "start",
+    instantiate_tensor: bool = True,
 ):
     """Setup the interval variables
 
@@ -436,6 +455,8 @@ def setup_interval_variables(
         Whether to enrich the var table with feature information. If a concept_id is not found in the concept table, the feature information will be NaN.
     date_type
         Whether to keep the start or end date, or the interval span.
+    instantiate_tensor
+        Whether to instantiate the tensor into the .r field of the EHRData object.
 
     Returns
     -------
@@ -466,23 +487,26 @@ def setup_interval_variables(
         logging.warning(f"No data in {data_tables}.")
         return edata
 
+    _write_long_time_interval_table(
+        backend_handle=backend_handle,
+        time_defining_table=time_defining_table,
+        data_table=data_tables[0],
+        data_field_to_keep=data_field_to_keep,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
+        keep_date=keep_date,
+    )
+
     ds = (
-        _time_interval_table(
-            backend_handle=backend_handle,
-            time_defining_table=time_defining_table,
-            data_table=data_tables[0],
-            data_field_to_keep=data_field_to_keep,
-            interval_length_number=interval_length_number,
-            interval_length_unit=interval_length_unit,
-            num_intervals=num_intervals,
-            aggregation_strategy=aggregation_strategy,
-            keep_date=keep_date,
-        )
+        backend_handle.execute("SELECT * FROM long_person_timestamp_feature_value")
+        .df()
         .set_index(["person_id", "data_table_concept_id", "interval_step"])
         .to_xarray()
     )
 
-    var = ds["data_table_concept_id"].to_dataframe()
+    var = backend_handle.execute("SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value").df()
 
     if enrich_var_with_feature_info or enrich_var_with_unit_info:
         concepts = backend_handle.sql("SELECT * FROM concept").df()
@@ -491,7 +515,7 @@ def setup_interval_variables(
     if enrich_var_with_feature_info:
         var = pd.merge(var, concepts, how="left", left_index=True, right_on="concept_id")
 
-    t = ds["interval_step"].to_dataframe()
+    t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
     edata = EHRData(r=ds[data_field_to_keep[0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
 

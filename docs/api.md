@@ -37,7 +37,19 @@
     dt.mimic_iv_omop
     dt.gibleed_omop
     dt.synthea27nj_omop
-    dt.mimic_ii
+    dt.physionet2012
+```
+
+## Tools
+
+```{eval-rst}
+.. module:: ehrdata.tl
+.. currentmodule:: ehrdata
+
+.. autosummary::
+    :toctree: generated
+
+    tl.omop.EHRDataset
 ```
 
 ## Plotting

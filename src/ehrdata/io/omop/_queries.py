@@ -115,7 +115,7 @@ def _generate_value_query(data_table: str, data_field_to_keep: Sequence, aggrega
     return is_present_query + value_query
 
 
-def _time_interval_table(
+def _write_long_time_interval_table(
     backend_handle: duckdb.duckdb.DuckDBPyConnection,
     time_defining_table: str,
     data_table: str,
@@ -125,7 +125,7 @@ def _time_interval_table(
     aggregation_strategy: str,
     data_field_to_keep: Sequence[str] | str,
     keep_date: str = "",
-):
+) -> None:
     if isinstance(data_field_to_keep, str):
         data_field_to_keep = [data_field_to_keep]
 
@@ -138,6 +138,8 @@ def _time_interval_table(
         backend_handle,
         timedeltas_dataframe,
     )
+
+    create_long_table_query = "CREATE TABLE long_person_timestamp_feature_value AS\n"
 
     # multi-step query
     # 1. Create person_time_defining_table, which matches the one created for obs. Needs to contain the person_id, and the start date in particular.
@@ -196,10 +198,23 @@ def _time_interval_table(
         GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
 
-    query = prepare_alias_query + select_query
+    query = create_long_table_query + prepare_alias_query + select_query
 
-    df = backend_handle.execute(query).df()
+    backend_handle.execute("DROP TABLE IF EXISTS long_person_timestamp_feature_value")
+    backend_handle.execute(query)
 
-    _drop_timedeltas(backend_handle)
+    add_person_range_index_query = """
+        ALTER TABLE long_person_timestamp_feature_value
+        ADD COLUMN person_index INTEGER;
 
-    return df
+        WITH RankedPersons AS (
+            SELECT person_id,
+                ROW_NUMBER() OVER (ORDER BY person_id) - 1 AS idx
+            FROM (SELECT DISTINCT person_id FROM long_person_timestamp_feature_value) AS unique_persons
+        )
+        UPDATE long_person_timestamp_feature_value
+        SET person_index = RP.idx
+        FROM RankedPersons RP
+        WHERE long_person_timestamp_feature_value.person_id = RP.person_id;
+    """
+    backend_handle.execute(add_person_range_index_query)

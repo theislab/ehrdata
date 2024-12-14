@@ -39,7 +39,7 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
-  "ehrdata[lamin,vitessce]",
+  "ehrdata[torch,lamin,vitessce]",
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
@@ -66,9 +66,13 @@ optional-dependencies.lamin = [
 ]
 optional-dependencies.test = [
   "coverage",
-  "ehrdata[vitessce,lamin]",
+  "ehrdata[torch,vitessce,lamin]",
   "pytest",
 ]
+optional-dependencies.torch = [
+  "torch",
+]
+
 optional-dependencies.vitessce = [
   "vitessce[all]>=3.4", # the actual dependency
   "zarr<3",             # vitessce does not support zarr>=3
