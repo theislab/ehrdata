@@ -1,14 +1,18 @@
 from collections.abc import Sequence
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-import torch
 from duckdb.duckdb import DuckDBPyConnection
-from torch.utils.data import Dataset
 
+from ehrdata.core._optional_modules_import import lazy_import_torch
 from ehrdata.io.omop._queries import DATA_TABLE_DATE_KEYS
 
+torch = lazy_import_torch()
 
-class EHRDataset(Dataset):
+if TYPE_CHECKING:
+    import torch
+
+
+class EHRDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         con: DuckDBPyConnection,

@@ -66,7 +66,7 @@ optional-dependencies.lamin = [
 ]
 optional-dependencies.test = [
   "coverage",
-  "ehrdata[vitessce,lamin]",
+  "ehrdata[torch,vitessce,lamin]",
   "pytest",
 ]
 optional-dependencies.vitessce = [
@@ -77,6 +77,10 @@ optional-dependencies.vitessce = [
 urls.Documentation = "https://ehrdata.readthedocs.io/"
 urls.Homepage = "https://github.com/theislab/ehrdata"
 urls.Source = "https://github.com/theislab/ehrdata"
+
+optional-depencencies.torch = [
+  "torch",
+]
 
 [tool.hatch.envs.default]
 installer = "uv"
