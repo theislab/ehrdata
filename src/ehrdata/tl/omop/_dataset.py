@@ -1,27 +1,63 @@
 from collections.abc import Sequence
+from typing import Literal
 
 import torch
 from duckdb.duckdb import DuckDBPyConnection
 from torch.utils.data import Dataset
 
+from ehrdata.io.omop._queries import DATA_TABLE_DATE_KEYS
 
-class EHRDataSet(Dataset):
+
+class EHRDataset(Dataset):
     def __init__(
         self,
         con: DuckDBPyConnection,
-        n_variables: int,
-        n_timesteps: int,
+        edata,
         batch_size: int = 10,
+        target: Literal["mortality"] = "mortality",
+        datetime: bool = True,
         idxs: Sequence[int] | None = None,
-    ):
+    ) -> torch.utils.data.Dataset:
+        """Return a torch.utils.data.Dataset object for EHR data.
+
+        This function builds a torch.utils.data.Dataset object for EHR data. The EHR data is assumed to be in the OMOP CDM format.
+        It is a Dataset structure for the tensor in ehrdata.r, in a suitable format for pytorch.utils.data.DataLoader.
+        This allows to stream the data in batches from the RDBMS, not requiring to load the entire dataset in memory.
+
+        Parameters
+        ----------
+        con
+            The connection to the database.
+        edata
+            The EHRData object.
+        batch_size
+            The batch size.
+        target
+            The target variable to be used.
+        datetime
+            If True, use datetime, if False, use date.
+        idxs
+            The indices of the patients to be used, can be used to include only a subset of the data, for e.g. train-test splits.
+            The observation table to be used.
+
+        Returns
+        -------
+        EHRDataset
+            A torch.utils.data.Dataset object of the .r tensor in ehrdata.
+        """
         super().__init__()
         self.con = con
-        self.batch_size = batch_size
+        self.edata = edata
+        self.target = target
+        self.datetime = datetime
         self.idxs = idxs
 
-        # TODO: get from database or EHRData?
-        self.n_timesteps = n_timesteps
-        self.n_variables = n_variables
+        self.n_timesteps = con.execute(
+            "SELECT COUNT(DISTINCT interval_step) FROM long_person_timestamp_feature_value"
+        ).fetchone()[0]
+        self.n_variables = con.execute(
+            "SELECT COUNT(DISTINCT data_table_concept_id) FROM long_person_timestamp_feature_value"
+        ).fetchone()[0]
 
     def __len__(self):
         if self.idxs:
@@ -33,37 +69,52 @@ class EHRDataSet(Dataset):
             FROM long_person_timestamp_feature_value
             {where_clause}
         """
-        return self.con.execute(query).fetchone()[0]  # .item()
+        return self.con.execute(query).fetchone()[0]
 
-    def __getitem__(self, person_id):
-        # if isinstance(person_ids, int):
-        #     person_ids = [person_ids]  # Make it a list for consistent handling
-        # elif isinstance(person_ids, slice):
-        #     person_ids = range(person_ids.start or 0, person_ids.stop, person_ids.step or 1)
-
-        where_clause = f"WHERE person_index = {person_id}"
+    def __getitem__(self, person_index):
+        person_id_query = (
+            f"SELECT DISTINCT person_id FROM long_person_timestamp_feature_value WHERE person_index = {person_index}"
+        )
+        person_id = self.con.execute(person_id_query).fetchone()[0]
+        where_clause = f"WHERE person_index = {person_index}"
 
         if self.idxs:
             where_clause += f" AND person_index IN ({','.join(str(_) for _ in self.idxs)})"
-        # else:
-        #     where_clause = ""
 
         query = f"""
             SELECT person_index, data_table_concept_id, interval_step, COALESCE(CAST(value_as_number AS DOUBLE), 'NaN') AS value_as_number
             FROM long_person_timestamp_feature_value
             {where_clause}
         """
-        # AND data_table_concept_id = {feature_id}
-        # AND interval_step = {timestep}
-        # data is fetched in long format
+
         long_format_data = torch.tensor(self.con.execute(query).fetchall(), dtype=torch.float32)
 
         # convert long format to 3D tensor
-        # sample_ids, sample_idx = torch.unique(long_format_data[:, 0], return_inverse=True)
         feature_ids, feature_idx = torch.unique(long_format_data[:, 1], return_inverse=True)
         step_ids, step_idx = torch.unique(long_format_data[:, 2], return_inverse=True)
 
         result = torch.zeros(len(feature_ids), len(step_ids))
         values = long_format_data[:, 3]
         result.index_put_((feature_idx, step_idx), values)
-        return result
+
+        if self.target != "mortality":
+            raise NotImplementedError(f"Target {self.target} is not implemented")
+
+        # If person has an entry in the death table that is within visit_start_datetime and visit_end_datetime of the visit_occurrence table, report 1, else 0:
+        # Left join ensures that for every patient, 0 or 1 is obtained
+        omop_io_observation_table = self.edata.uns["omop_io_observation_table"]
+        time_postfix = "time" if self.datetime else ""
+        target_query = f"""
+        SELECT
+            CASE
+                WHEN death_datetime BETWEEN {DATA_TABLE_DATE_KEYS["start"][omop_io_observation_table]}{time_postfix} AND {DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table]}{time_postfix} THEN 1
+                ELSE 0
+            END AS mortality
+        FROM {self.edata.uns["omop_io_observation_table"]}
+        LEFT JOIN death USING (person_id)
+        WHERE person_id = {person_id} AND {omop_io_observation_table}_id = {self.edata.obs[self.edata.obs["person_id"] == person_id][f"{omop_io_observation_table}_id"].item()}
+        """
+
+        targets = torch.tensor(self.con.execute(target_query).fetchall(), dtype=torch.float32)
+
+        return result, targets

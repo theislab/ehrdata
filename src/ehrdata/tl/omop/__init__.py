@@ -1,1 +1,1 @@
-from ._dataset import EHRDataSet
+from ._dataset import EHRDataset
