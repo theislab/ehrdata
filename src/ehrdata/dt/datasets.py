@@ -85,7 +85,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
 def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the GiBleed dataset in the OMOP Common Data model.
 
-    This function loads the GIBleed dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>_`.
+    This function loads the GIBleed dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>`_.
     More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/GiBleed.
 
     Parameters
@@ -124,7 +124,7 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
 def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the Synthea27Nj dataset in the OMOP Common Data model.
 
-    This function loads the Synthea27Nj dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>_`.
+    This function loads the Synthea27Nj dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>`_.
     More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/Synthea27Nj.
 
     Parameters
@@ -186,7 +186,7 @@ def physionet2012(
         "142998",
     ],
 ) -> EHRData:
-    """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>_`.
+    """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>`_.
 
     If interval_length_number is 1, interval_length_unit is "h" (hour), and num_intervals is 48, this is equivalent to the SAITS preprocessing (insert paper/link/citation).
     Truncated if a sample has more num_intervals steps; Padded if a sample has less than num_intervals steps.
