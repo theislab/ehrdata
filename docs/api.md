@@ -38,7 +38,6 @@
     dt.gibleed_omop
     dt.synthea27nj_omop
     dt.physionet2012
-    dt.mimic_ii
 ```
 
 ## Tools
