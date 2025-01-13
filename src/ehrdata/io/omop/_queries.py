@@ -110,7 +110,7 @@ def _drop_timedeltas(backend_handle: duckdb.duckdb.DuckDBPyConnection):
 def _generate_value_query(data_table: str, data_field_to_keep: Sequence, aggregation_strategy: str) -> str:
     # is_present is 1 in all rows of the data_table; but need an aggregation operation, so use LAST
     is_present_query = "LAST(is_present) as is_present, "
-    value_query = f"{', ' .join([f'{aggregation_strategy}({column}) AS {column}' for column in data_field_to_keep])}"
+    value_query = f"{', '.join([f'{aggregation_strategy}({column}) AS {column}' for column in data_field_to_keep])}"
 
     return is_present_query + value_query
 
