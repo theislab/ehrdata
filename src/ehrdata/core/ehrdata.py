@@ -137,8 +137,8 @@ class EHRData(AnnData):
         # TODO: derive from `r` if self.t is None
         timeseries = "no timeseries" if self.t is None else f"a timeseries of {len(self.t)} steps"
         return f"EHRData object with n_obs x n_var = {self.n_obs} x {self.n_vars}, and {timeseries}.\n \
-            shape of .X: {self.X.shape if self.X is not None else (0,0)} \n \
-            shape of .r: {self.r.shape if self.r is not None else (0,0,0)} \n"
+            shape of .X: {self.X.shape if self.X is not None else (0, 0)} \n \
+            shape of .r: {self.r.shape if self.r is not None else (0, 0, 0)} \n"
 
     def __getitem__(self, index: Index) -> EHRData:
         """Slice the EHRData object along 1–3 axes.

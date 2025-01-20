@@ -35,7 +35,7 @@ def _check_valid_observation_table(observation_table) -> None:
         raise TypeError("Expected observation_table to be a string.")
     if observation_table not in VALID_OBSERVATION_TABLES_SINGLE + VALID_OBSERVATION_TABLES_JOIN:
         raise ValueError(
-            f"observation_table must be one of {VALID_OBSERVATION_TABLES_SINGLE+VALID_OBSERVATION_TABLES_JOIN}."
+            f"observation_table must be one of {VALID_OBSERVATION_TABLES_SINGLE + VALID_OBSERVATION_TABLES_JOIN}."
         )
 
 
