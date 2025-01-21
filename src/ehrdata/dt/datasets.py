@@ -320,9 +320,145 @@ def physionet2012(
 
     edata = EHRData(r=r, obs=obs, var=var, t=t)
 
+    edata = edata[:, edata.var_names != "RecordID"]
+
     return edata[~edata.obs.index.isin(drop_samples or [])]
 
 
-def physionet2019():
-    """Loads the dataset of the `PhysioNet challenge 2019 <https://physionet.org/content/challenge-2019/1.0.0/>_`."""
-    raise NotImplementedError()
+def physionet2019(
+    data_path: Path | None = None,
+    interval_length_number: int = 1,
+    interval_length_unit: str = "h",
+    num_intervals: int = 48,
+    aggregation_strategy: str = "last",
+    drop_samples: Sequence[str] | None = [],
+) -> EHRData:
+    """Loads the dataset of the `PhysioNet challenge 2019 (v1.0.0) <https://physionet.org/content/challenge-2019/1.0.0/>`_.
+
+    If interval_length_number is 1, interval_length_unit is "h" (hour), and num_intervals is 48, this is equivalent to the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ preprocessing.
+    Truncated if a sample has more num_intervals steps; Padded if a sample has less than num_intervals steps.
+
+    A simple deviation is that the tensor in ehrdata is of shape n_obs x n_vars x n_intervals (with defaults, 3000x34x48) while the tensor in PyPOTS is of shape n_obs x n_intervals x n_vars (3000x48x34).
+    The tensor stored in .r is hence also fully compatible with the PyPOTS package, as the .r tensor of EHRData objects generally is.
+
+    Parameters
+    ----------
+    data_path
+        Path to the raw data. If the path exists, the data is loaded from there. Else, the data is downloaded.
+    interval_length_number
+        Numeric value of the length of one interval.
+    interval_length_unit
+        Unit belonging to the interval length.
+    num_intervals
+        Number of intervals.
+    aggregation_strategy
+        Aggregation strategy for the time series data when multiple measurements for a person's parameter within a time interval is available. Available are 'first' and 'last', as used in `pd.DataFrame.drop_duplicates <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.drop_duplicates.html>`_.
+    drop_samples
+        Samples to drop from the dataset (indicate their RecordID).
+
+    Returns
+    -------
+    Returns a the processed physionet2012 dataset in an EHRData object. The raw data is also downloaded, stored and available under the data_path.
+
+    Examples
+    --------
+        >>> import ehrapy as ep
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.physionet_2012()
+        >>> edata
+    """
+    if data_path is None:
+        data_path = Path("ehrapy_data/physionet2019")
+
+    # download(
+    #     url="https://archive.physionet.org/users/shared/challenge-2019/training_setA.zip",
+    #     saving_path=data_path,
+    #     manual_path_to_check="training",
+    # )
+
+    # download(
+    #     url="https://archive.physionet.org/users/shared/challenge-2019/training_setB.zip",
+    #     saving_path=data_path,
+    # )
+
+    static_features = ["Age", "Gender", "Unit1", "Unit2", "HospAdmTime"]
+    patient_static_features = {}
+
+    dataset_subset_dirs = ["training", "training_setB"]
+    # temp_data_set_names = ["set-a", "set-b", "set-c"]
+
+    person_across_set_collector = []
+    for data_subset_dir in dataset_subset_dirs:
+        patient_data_collector = []
+
+        # each txt file is the data of a person, in long format
+        # the columns in the txt files are: Time, Parameter, Value
+        for txt_file in (data_path / data_subset_dir).glob("*.psv"):
+            person_table = pd.read_csv(txt_file, sep="|")
+
+            patient_static_features[txt_file.stem] = {
+                "RecordID": txt_file.stem,
+                "Age": person_table["Age"].iloc[0],
+                "Gender": person_table["Gender"].iloc[0],
+                "HospAdmTime": person_table["HospAdmTime"].iloc[0],
+                "dataset_split": data_subset_dir,
+            }
+
+            # add RecordID (=person id in this dataset) to all data points of this person
+            person_table["RecordID"] = txt_file.stem
+            patient_data_collector.append(person_table)
+
+        person_within_set = pd.concat(patient_data_collector)
+
+        person_within_set["set"] = data_subset_dir
+        person_across_set_collector.append(person_within_set)
+
+    person_long_across_set_df = pd.concat(person_across_set_collector)
+
+    return patient_static_features, person_long_across_set_df
+    # person_outcome_collector = []
+    # for outcome_file_name in outcome_file_names:
+    #     outcome_df = pd.read_csv(data_path / outcome_file_name)
+    #     # outcome_df["set"] = "set-" + outcome_file_name.split("-")[1].split(".")[0]
+    #     person_outcome_collector.append(outcome_df)
+
+    # person_outcome_df = pd.concat(person_outcome_collector)
+
+    # # gather the static_features together with RecordID and set for each person into the obs table
+    # obs = (
+    #     person_long_across_set_df[person_long_across_set_df["Parameter"].isin(static_features)]
+    #     .pivot(index=["RecordID", "set"], columns=["Parameter"], values=["Value"])
+    #     .reset_index(level="set", col_level=1)
+    # )
+    # obs.columns = obs.columns.droplevel(0)
+
+    # obs = obs.merge(person_outcome_df, how="left", left_on="RecordID", right_on="RecordID")
+    # obs.set_index("RecordID", inplace=True)
+    # # obs.index = obsobs["RecordID"] = obs.index
+
+    # # consider only time series features from now
+    # df_long = person_long_across_set_df[~person_long_across_set_df["Parameter"].isin(static_features)]
+
+    # interval_df = _generate_timedeltas(
+    #     interval_length_number=interval_length_number,
+    #     interval_length_unit=interval_length_unit,
+    #     num_intervals=num_intervals,
+    # )
+
+    # df_long_time_seconds = np.array(pd.to_timedelta(df_long["Time"] + ":00").dt.total_seconds())
+    # interval_df_interval_end_offset_seconds = np.array(interval_df["interval_end_offset"].dt.total_seconds())
+    # df_long_interval_step = np.argmax(df_long_time_seconds[:, None] <= interval_df_interval_end_offset_seconds, axis=1)
+    # df_long.loc[:, ["interval_step"]] = df_long_interval_step
+
+    # # if one person for one feature (=Parameter) within one interval_step has multiple measurements, decide which one to keep
+    # df_long = df_long.drop_duplicates(subset=["RecordID", "Parameter", "interval_step"], keep=aggregation_strategy)
+
+    # xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
+
+    # var = xa["Parameter"].to_dataframe()
+    # t = xa["interval_step"].to_dataframe()
+    # r = xa["Value"].values
+
+    # edata = EHRData(r=r, obs=obs, var=var, t=t)
+
+    # return edata[~edata.obs.index.isin(drop_samples or [])]
