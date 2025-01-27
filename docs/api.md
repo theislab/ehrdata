@@ -20,9 +20,10 @@
 .. autosummary::
     :toctree: generated
 
+    io.omop.setup_connection
     io.omop.setup_obs
     io.omop.setup_variables
-    io.omop.get_time_interval_table
+    io.omop.setup_interval_variables
 ```
 
 ## Datasets
