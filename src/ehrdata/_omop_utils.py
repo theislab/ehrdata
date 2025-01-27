@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Literal
 
 
-
 def get_table_catalog_dict(version: Literal["5.4"] = "5.4"):
     """Get the table catalog dictionary of the OMOP CDM.
 
