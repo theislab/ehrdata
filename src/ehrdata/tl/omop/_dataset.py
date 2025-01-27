@@ -6,10 +6,10 @@ from duckdb.duckdb import DuckDBPyConnection
 from ehrdata.core._optional_modules_import import lazy_import_torch
 from ehrdata.io.omop._queries import DATA_TABLE_DATE_KEYS
 
-torch = lazy_import_torch()
-
 if TYPE_CHECKING:
     import torch
+
+torch = lazy_import_torch()
 
 
 class EHRDataset(torch.utils.data.Dataset):
@@ -21,7 +21,7 @@ class EHRDataset(torch.utils.data.Dataset):
         target: Literal["mortality"] = "mortality",
         datetime: bool = True,
         idxs: Sequence[int] | None = None,
-    ) -> torch.utils.data.Dataset:
+    ) -> None:
         """Return a torch.utils.data.Dataset object for EHR data.
 
         This function builds a torch.utils.data.Dataset object for EHR data. The EHR data is assumed to be in the OMOP CDM format.

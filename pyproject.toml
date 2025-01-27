@@ -148,6 +148,15 @@ omit = [
   "**/test_*.py",
 ]
 
+[tool.mypy]
+strict = false
+pretty = true
+show_column_numbers = true
+show_error_codes = true
+show_error_context = true
+ignore_missing_imports = true
+no_strict_optional = true
+
 [tool.cruft]
 skip = [
   "tests",

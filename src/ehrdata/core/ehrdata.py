@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from anndata._core.index import Index as ADIndex
     from anndata._core.index import Index1D
 
-    Index = ADIndex | tuple[Index1D, Index1D, Index1D]
+    Index: TypeAlias = ADIndex | tuple[Index1D, Index1D, Index1D]
 
 
 class EHRData(AnnData):
@@ -140,7 +140,7 @@ class EHRData(AnnData):
             shape of .X: {self.X.shape if self.X is not None else (0, 0)} \n \
             shape of .r: {self.r.shape if self.r is not None else (0, 0, 0)} \n"
 
-    def __getitem__(self, index: Index) -> EHRData:
+    def __getitem__(self, index: Index | None) -> EHRData:
         """Slice the EHRData object along 1–3 axes.
 
         Parameters
