@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
+import dask.dataframe as dd
 import duckdb
 import numpy as np
 import pandas as pd
@@ -390,17 +391,66 @@ def setup_variables(
 
     t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
+    meta = pd.DataFrame(
+        columns=[
+            "person_id",
+            "data_table_concept_id",
+            "interval_step",
+            "interval_start",
+            "interval_end",
+            "is_present",
+            "measurement_source_value",
+            "unit_concept_id",
+            "unit_source_value",
+        ]
+    )
+    meta.person_id = meta.person_id.astype(np.int64)
+    meta.data_table_concept_id = meta.data_table_concept_id.astype(np.int64)
+    meta.interval_step = meta.interval_step.astype(np.int32)
+    meta.interval_start = pd.to_datetime(meta.interval_start)
+    meta.interval_end = pd.to_datetime(meta.interval_end)
+    meta.is_present = meta.is_present.astype(np.float64)
+    meta.measurement_source_value = meta.measurement_source_value.astype(str)
+    meta.unit_concept_id = meta.unit_concept_id.astype(np.int64)
+    meta.unit_source_value = meta.unit_source_value.astype(str)
+
+    backend_handle.close()
     if instantiate_tensor:
-        ds = (
-            (backend_handle.execute("SELECT * FROM long_person_timestamp_feature_value").df())
-            .set_index(["person_id", "data_table_concept_id", "interval_step"])
-            .to_xarray()
+        backend_handle.close()
+        df = dd.read_sql_table(
+            "long_person_timestamp_feature_value", "duckdb:///con_gi_local.db", index_col="person_index", meta=meta
         )
+
+        values = df[data_field_to_keep[0]].values
+
+        # Get unique values for the dimensions
+        person_ids = df["person_id"].unique().compute()
+        concept_ids = df["data_table_concept_id"].unique().compute()
+        interval_steps = df["interval_step"].unique().compute()
+
+        # Map each dimension to a coordinate index
+        person_idx = df["person_id"].map({v: i for i, v in enumerate(person_ids)})
+        concept_idx = df["data_table_concept_id"].map({v: i for i, v in enumerate(concept_ids)})
+        interval_idx = df["interval_step"].map({v: i for i, v in enumerate(interval_steps)})
+
+        # Use Dask Array to construct a 3D array
+        import dask.array as da
+
+        shape = (len(person_ids), len(concept_ids), len(interval_steps))
+        cube = da.zeros(shape, dtype=values.dtype)  # Placeholder
+        cube = cube.at[(person_idx, concept_idx, interval_idx)].set(values)
+
+        backend_handle = duckdb.connect("con_gi_local.db")
+        # ds = (
+        #     (backend_handle.execute("SELECT * FROM long_person_timestamp_feature_value").df())
+        #     .set_index(["person_id", "data_table_concept_id", "interval_step"])
+        #     .to_xarray()
+        # )
 
     else:
         ds = None
 
-    edata = EHRData(r=ds[data_field_to_keep[0]].values if ds else None, obs=edata.obs, var=var, uns=edata.uns, t=t)
+    edata = EHRData(r=cube if ds else None, obs=edata.obs, var=var, uns=edata.uns, t=t)
     edata.uns[f"unit_report_{data_tables[0]}"] = unit_report
 
     return edata
