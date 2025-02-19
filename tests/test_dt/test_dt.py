@@ -46,11 +46,11 @@ def test_synthea27nj_omop(tmp_path):
 @pytest.mark.slow
 def test_physionet2012():
     edata = ed.dt.physionet2012()
-    assert edata.shape == (11988, 38)
+    assert edata.shape == (11988, 37)
 
-    assert edata.r.shape == (11988, 38, 48)
+    assert edata.r.shape == (11988, 37, 48)
     assert edata.obs.shape == (11988, 10)
-    assert edata.var.shape == (38, 1)
+    assert edata.var.shape == (37, 1)
 
     # check a few hand-picked values for a stricter test
     # first entry set a
@@ -87,8 +87,8 @@ def test_physionet2012_arguments():
         aggregation_strategy="first",
         drop_samples=None,
     )
-    assert edata.shape == (12000, 38)
+    assert edata.shape == (12000, 37)
 
-    assert edata.r.shape == (12000, 38, 24)
+    assert edata.r.shape == (12000, 37, 24)
     assert edata.obs.shape == (12000, 10)
-    assert edata.var.shape == (38, 1)
+    assert edata.var.shape == (37, 1)
