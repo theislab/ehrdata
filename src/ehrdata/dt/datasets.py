@@ -263,6 +263,8 @@ def physionet2012(
         # the columns in the txt files are: Time, Parameter, Value
         for txt_file in (data_path / data_subset_dir).glob("*.txt"):
             person_long = pd.read_csv(txt_file)
+            # drop the first row, which has the RecordID
+            person_long = person_long.iloc[1:]
 
             # add RecordID (=person id in this dataset) to all data points of this person
             person_long["RecordID"] = int(txt_file.stem)
@@ -278,7 +280,6 @@ def physionet2012(
     person_outcome_collector = []
     for outcome_file_name in outcome_file_names:
         outcome_df = pd.read_csv(data_path / outcome_file_name)
-        # outcome_df["set"] = "set-" + outcome_file_name.split("-")[1].split(".")[0]
         person_outcome_collector.append(outcome_df)
 
     person_outcome_df = pd.concat(person_outcome_collector)
@@ -293,7 +294,6 @@ def physionet2012(
 
     obs = obs.merge(person_outcome_df, how="left", left_on="RecordID", right_on="RecordID")
     obs.set_index("RecordID", inplace=True)
-    # obs.index = obsobs["RecordID"] = obs.index
 
     # consider only time series features from now
     df_long = person_long_across_set_df[~person_long_across_set_df["Parameter"].isin(static_features)]
