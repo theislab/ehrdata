@@ -19,3 +19,4 @@ ehrapy_data/
 # docs
 /docs/generated/
 /docs/_build/
+/docs/notebooks/data/
