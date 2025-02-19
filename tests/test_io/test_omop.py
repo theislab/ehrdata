@@ -686,7 +686,7 @@ def test_setup_interval_type_variables(
             4,
             False,
             False,
-            "Expected data_field_to_keep to be a string or Sequence.",
+            "Expected data_field_to_keep to be a string, Sequence, or dict, but is <class 'int'>",
         ),
         (
             None,

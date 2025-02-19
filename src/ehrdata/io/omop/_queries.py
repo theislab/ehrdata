@@ -139,14 +139,14 @@ def _write_long_time_interval_table(
         timedeltas_dataframe,
     )
 
-    create_long_table_query = "CREATE TABLE long_person_timestamp_feature_value AS\n"
+    create_long_table_query = f"CREATE TABLE long_person_timestamp_feature_value_{data_table} AS\n"
 
     # multi-step query
     # 1. Create person_time_defining_table, which matches the one created for obs. Needs to contain the person_id, and the start date in particular.
     # 2. Create person_data_table (data_table is typically measurement), which contains the cross product of person_id and the distinct concept_id s.
     # 3. Create long_format_backbone, which is the left join of person_time_defining_table and person_data_table.
     # 4. Create long_format_intervals, which is the cross product of long_format_backbone and timedeltas. This table contains most notably the person_id, the concept_id, the interval start and end dates.
-    # 5. Create the final table, which is the join with the data_table (typically measurement); each measurement is assigned to its person_id, its concept_id, and the interval it fits into.
+    # 5. Create the final table long_person_timestamp_feature_value_<data_table>, which is the join with the data_table (typically measurement); each measurement is assigned to its person_id, its concept_id, and the interval it fits into.
     prepare_alias_query = f"""
         WITH person_time_defining_table AS ( \
             SELECT person.person_id as person_id, {DATA_TABLE_DATE_KEYS["start"][time_defining_table]} as start_date, {DATA_TABLE_DATE_KEYS["end"][time_defining_table]} as end_date \
@@ -200,21 +200,24 @@ def _write_long_time_interval_table(
 
     query = create_long_table_query + prepare_alias_query + select_query
 
-    backend_handle.execute("DROP TABLE IF EXISTS long_person_timestamp_feature_value")
+    backend_handle.execute(f"DROP TABLE IF EXISTS long_person_timestamp_feature_value_{data_table}")
     backend_handle.execute(query)
 
-    add_person_range_index_query = """
-        ALTER TABLE long_person_timestamp_feature_value
+    add_person_range_index_query = f"""
+        ALTER TABLE long_person_timestamp_feature_value_{data_table}
         ADD COLUMN person_index INTEGER;
 
         WITH RankedPersons AS (
             SELECT person_id,
                 ROW_NUMBER() OVER (ORDER BY person_id) - 1 AS idx
-            FROM (SELECT DISTINCT person_id FROM long_person_timestamp_feature_value) AS unique_persons
+            FROM (SELECT DISTINCT person_id FROM long_person_timestamp_feature_value_{data_table}) AS unique_persons
         )
-        UPDATE long_person_timestamp_feature_value
+        UPDATE long_person_timestamp_feature_value_{data_table}
         SET person_index = RP.idx
         FROM RankedPersons RP
-        WHERE long_person_timestamp_feature_value.person_id = RP.person_id;
+        WHERE long_person_timestamp_feature_value_{data_table}.person_id = RP.person_id;
     """
     backend_handle.execute(add_person_range_index_query)
+
+    rename_table_query = f"ALTER TABLE long_person_timestamp_feature_value_{data_table} RENAME TO long_person_timestamp_feature_value_{data_table}"
+    backend_handle.execute(rename_table_query)

@@ -95,9 +95,9 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
     logging.info(f"unused files: {unused_files}")
 
 
-def _collect_units_per_feature(backend_handle, unit_key="unit_concept_id") -> dict:
+def _collect_units_per_feature(backend_handle, data_table, unit_key="unit_concept_id") -> dict:
     query = f"""
-    SELECT DISTINCT data_table_concept_id, {unit_key} FROM long_person_timestamp_feature_value
+    SELECT DISTINCT data_table_concept_id, {unit_key} FROM long_person_timestamp_feature_value_{data_table}
     WHERE is_present = 1
     """
     result = backend_handle.execute(query).fetchall()
@@ -111,17 +111,18 @@ def _collect_units_per_feature(backend_handle, unit_key="unit_concept_id") -> di
     return feature_units
 
 
-def _check_one_unit_per_feature(backend_handle, unit_key="unit_concept_id") -> None:
-    feature_units = _collect_units_per_feature(backend_handle, unit_key=unit_key)
+def _check_one_unit_per_feature(backend_handle, data_table, unit_key="unit_concept_id") -> None:
+    # TODO: do so for each data_tables
+    feature_units = _collect_units_per_feature(backend_handle, data_table, unit_key=unit_key)
     num_units = np.array([len(units) for _, units in feature_units.items()])
 
     # print(f"no units for features: {np.argwhere(num_units == 0)}")
     logging.warning(f"multiple units for features: {np.argwhere(num_units > 1)}")
 
 
-def _create_feature_unit_concept_id_report(backend_handle) -> pd.DataFrame:
-    feature_units_concept = _collect_units_per_feature(backend_handle, unit_key="unit_concept_id")
-
+def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.DataFrame:
+    # TODO: do so for each data_tables
+    feature_units_concept = _collect_units_per_feature(backend_handle, data_table, unit_key="unit_concept_id")
     feature_units_long_format = []
     for feature, units in feature_units_concept.items():
         if len(units) == 0:
@@ -284,7 +285,7 @@ def setup_variables(
     data_tables
         The table to be used. Only a single table can be used.
     data_field_to_keep
-        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id". Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval.
+        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".  Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval. Should be a dictionary to specify the data fields to keep per table if multiple data tables are used. For example, if data_tables=["measurement", "observation"], data_field_to_keep={"measurement": "value_as_number", "observation": "value_as_number"}.
     start_time
         Starting time for values to be included.
     interval_length_number
@@ -313,7 +314,7 @@ def setup_variables(
     _check_valid_edata(edata)
     _check_valid_backend_handle(backend_handle)
     data_tables = _check_valid_variable_data_tables(data_tables)
-    data_field_to_keep = _check_valid_data_field_to_keep(data_field_to_keep)
+    data_field_to_keep = _check_valid_data_field_to_keep(data_field_to_keep, data_tables)
     _check_valid_interval_length_number(interval_length_number)
     _check_valid_interval_length_unit(interval_length_unit)
     _check_valid_num_intervals(num_intervals)
@@ -326,82 +327,97 @@ def setup_variables(
     if time_defining_table is None:
         raise ValueError("The observation table must be set up first, use the `setup_obs` function.")
 
-    if data_tables[0] in ["measurement", "observation", "specimen"]:
-        # also keep unit_concept_id and unit_source_value;
-        if isinstance(data_field_to_keep, list):
-            data_field_to_keep = list(data_field_to_keep) + ["unit_concept_id", "unit_source_value"]
-        # TODO: use in future version when more than one data table can be used
-        # elif isinstance(data_field_to_keep, dict):
-        #     data_field_to_keep = {
-        #         k: v + ["unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()
-        #     }
-        else:
-            raise ValueError
+    # TODO: Test
+    # if isinstance(data_field_to_keep, Sequence):
+    #     data_field_to_keep = list(data_field_to_keep) + ["unit_concept_id", "unit_source_value"]
+    # elif isinstance(data_field_to_keep, dict):
+    data_field_to_keep = {k: v + ["unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()}
+    # else:
+    #     raise ValueError
 
-    # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
-    count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_tables[0]}").df()["count"].item()
-    if count == 0:
-        logging.warning(f"No data found in {data_tables[0]}. Returning edata without additional variables.")
-        return edata
+    var_collector = {}
+    r_collector = {}
+    unit_report_collector = {}
+    for data_table in data_tables:
+        # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
+        count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_table}").df()["count"].item()
+        if count == 0:
+            logging.warning(f"No data found in {data_table}. Returning edata without additional variables.")
+            return edata
 
-    _write_long_time_interval_table(
-        backend_handle=backend_handle,
-        time_defining_table=time_defining_table,
-        data_table=data_tables[0],
-        data_field_to_keep=data_field_to_keep,
-        interval_length_number=interval_length_number,
-        interval_length_unit=interval_length_unit,
-        num_intervals=num_intervals,
-        aggregation_strategy=aggregation_strategy,
-    )
+        _write_long_time_interval_table(
+            backend_handle=backend_handle,
+            time_defining_table=time_defining_table,
+            data_table=data_table,
+            data_field_to_keep=data_field_to_keep[data_table],
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            aggregation_strategy=aggregation_strategy,
+        )
 
-    _check_one_unit_per_feature(backend_handle)
-    unit_report = _create_feature_unit_concept_id_report(backend_handle)
+        _check_one_unit_per_feature(backend_handle, data_table)
+        unit_report = _create_feature_unit_concept_id_report(backend_handle, data_table=data_table)
 
-    var = backend_handle.execute("SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value").df()
+        var = backend_handle.execute(
+            f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_table}"
+        ).df()
 
-    if enrich_var_with_feature_info or enrich_var_with_unit_info:
-        concepts = backend_handle.sql("SELECT * FROM concept").df()
-        concepts.columns = concepts.columns.str.lower()
+        if enrich_var_with_feature_info or enrich_var_with_unit_info:
+            concepts = backend_handle.sql("SELECT * FROM concept").df()
+            concepts.columns = concepts.columns.str.lower()
 
-    if enrich_var_with_feature_info:
-        var = pd.merge(var, concepts, how="left", left_index=True, right_on="concept_id")
+        if enrich_var_with_feature_info:
+            var = pd.merge(var, concepts, how="left", left_index=True, right_on="concept_id")
 
-    if enrich_var_with_unit_info:
-        if unit_report["multiple_units"].sum() > 0:
-            raise ValueError("Multiple units per feature found. Enrichment with feature information not possible.")
-        else:
-            var = pd.merge(
-                var,
-                unit_report,
-                how="left",
-                left_index=True,
-                right_on="unit_concept_id",
-                suffixes=("", "_unit"),
+        if enrich_var_with_unit_info:
+            if unit_report["multiple_units"].sum() > 0:
+                raise ValueError("Multiple units per feature found. Enrichment with feature information not possible.")
+            else:
+                var = pd.merge(
+                    var,
+                    unit_report,
+                    how="left",
+                    left_index=True,
+                    right_on="unit_concept_id",
+                    suffixes=("", "_unit"),
+                )
+                var = pd.merge(
+                    var,
+                    concepts,
+                    how="left",
+                    left_on="unit_concept_id",
+                    right_on="concept_id",
+                    suffixes=("", "_unit"),
+                )
+
+        if instantiate_tensor:
+            ds = (
+                (backend_handle.execute(f"SELECT * FROM long_person_timestamp_feature_value_{data_table}").df())
+                .set_index(["person_id", "data_table_concept_id", "interval_step"])
+                .to_xarray()
             )
-            var = pd.merge(
-                var,
-                concepts,
-                how="left",
-                left_on="unit_concept_id",
-                right_on="concept_id",
-                suffixes=("", "_unit"),
-            )
+            r_collector[data_table] = ds[data_field_to_keep[data_table][0]].values
+
+        else:
+            ds = None
+
+        var_collector[data_table] = var
+        unit_report_collector[data_table] = unit_report
+
+    var = pd.concat(var_collector.values(), axis=0)
+
+    if instantiate_tensor:
+        r = np.concatenate(list(r_collector.values()), axis=1)
+    else:
+        r = None
 
     t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
-    if instantiate_tensor:
-        ds = (
-            (backend_handle.execute("SELECT * FROM long_person_timestamp_feature_value").df())
-            .set_index(["person_id", "data_table_concept_id", "interval_step"])
-            .to_xarray()
-        )
+    edata = EHRData(r=r, obs=edata.obs, var=var, uns=edata.uns, t=t)
 
-    else:
-        ds = None
-
-    edata = EHRData(r=ds[data_field_to_keep[0]].values if ds else None, obs=edata.obs, var=var, uns=edata.uns, t=t)
-    edata.uns[f"unit_report_{data_tables[0]}"] = unit_report
+    for data_table in data_tables:
+        edata.uns[f"unit_report_{data_table}"] = unit_report_collector[data_table]
 
     return edata
 
@@ -411,7 +427,7 @@ def setup_interval_variables(
     *,
     backend_handle: duckdb.duckdb.DuckDBPyConnection,
     data_tables: Sequence[Literal["drug_exposure"]] | Literal["drug_exposure"],
-    data_field_to_keep: str | Sequence[str],
+    data_field_to_keep: str | Sequence[str] | dict,
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
@@ -437,7 +453,7 @@ def setup_interval_variables(
     data_tables
         The table to be used. Only a single table can be used.
     data_field_to_keep
-        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".  Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval.
+        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".  Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval. Should be a dictionary to specify the data fields to keep per table if multiple data tables are used. For example, if data_tables=["measurement", "observation"], data_field_to_keep={"measurement": "value_as_number", "observation": "value_as_number"}.
     start_time
         Starting time for values to be included.
     interval_length_number
@@ -466,7 +482,7 @@ def setup_interval_variables(
     _check_valid_edata(edata)
     _check_valid_backend_handle(backend_handle)
     data_tables = _check_valid_interval_variable_data_tables(data_tables)
-    data_field_to_keep = _check_valid_data_field_to_keep(data_field_to_keep)
+    data_field_to_keep = _check_valid_data_field_to_keep(data_field_to_keep, data_tables)
     _check_valid_interval_length_number(interval_length_number)
     _check_valid_interval_length_unit(interval_length_unit)
     _check_valid_num_intervals(num_intervals)
@@ -490,7 +506,7 @@ def setup_interval_variables(
         backend_handle=backend_handle,
         time_defining_table=time_defining_table,
         data_table=data_tables[0],
-        data_field_to_keep=data_field_to_keep,
+        data_field_to_keep=data_field_to_keep[data_tables[0]],
         interval_length_number=interval_length_number,
         interval_length_unit=interval_length_unit,
         num_intervals=num_intervals,
@@ -498,14 +514,18 @@ def setup_interval_variables(
         keep_date=keep_date,
     )
 
+    # TODO: activate the below line and add tests
+    # _check_one_unit_per_feature(backend_handle, data_tables[0])
     ds = (
-        backend_handle.execute("SELECT * FROM long_person_timestamp_feature_value")
+        backend_handle.execute(f"SELECT * FROM long_person_timestamp_feature_value_{data_tables[0]}")
         .df()
         .set_index(["person_id", "data_table_concept_id", "interval_step"])
         .to_xarray()
     )
 
-    var = backend_handle.execute("SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value").df()
+    var = backend_handle.execute(
+        f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_tables[0]}"
+    ).df()
 
     if enrich_var_with_feature_info or enrich_var_with_unit_info:
         concepts = backend_handle.sql("SELECT * FROM concept").df()
@@ -516,7 +536,7 @@ def setup_interval_variables(
 
     t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
-    edata = EHRData(r=ds[data_field_to_keep[0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
+    edata = EHRData(r=ds[data_field_to_keep[data_tables[0]][0]].values, obs=edata.obs, var=var, uns=edata.uns, t=t)
 
     return edata
 
