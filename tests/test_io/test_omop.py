@@ -632,6 +632,16 @@ def test_setup_variables(
             "interval",
             VANILLA_IS_PRESENT_INTERVAL,
         ),
+        (
+            ["condition_era", "episode"],
+            {"condition_era": "is_present", "episode": "episode_source_value"},
+            "interval",
+            [
+                [[1, 1, 1, 1], [1, 1, 1, 1], [5, 5, 5, 5], [10, 10, 10, 10]],
+                [[1, 1, 1, 1], [1, 1, 1, 1], [5, 5, 5, 5], [10, 10, 10, 10]],
+                [[1, 1, 1, 1], [1, 1, 1, 1], [5, 5, 5, 5], [10, 10, 10, 10]],
+            ],
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -664,7 +674,7 @@ def test_setup_interval_type_variables(
 
     assert isinstance(edata, ed.EHRData)
     assert edata.n_obs == VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY[observation_table]
-    assert edata.n_vars == VANILLA_NUM_CONCEPTS[data_tables[0]]
+    assert edata.n_vars == sum(VANILLA_NUM_CONCEPTS[data_table] for data_table in data_tables)
     assert edata.r.shape[2] == num_intervals
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0)
 
@@ -837,6 +847,147 @@ def test_setup_variables_illegal_argument_types(
 
 
 @pytest.mark.parametrize(
+    "edata, backend_handle, data_tables, data_field_to_keep, interval_length_number, interval_length_unit, num_intervals, enrich_var_with_feature_info, expected_error",
+    [
+        (
+            "wrong_type",
+            None,
+            ["drug_exposure"],
+            ["is_present"],
+            1,
+            "day",
+            4,
+            False,
+            "Expected edata to be of type EHRData.",
+        ),
+        (
+            None,
+            "wrong_type",
+            ["drug_exposure"],
+            ["is_present"],
+            1,
+            "day",
+            4,
+            False,
+            "Expected backend_handle to be of type DuckDBPyConnection.",
+        ),
+        (
+            None,
+            None,
+            123,
+            ["is_present"],
+            1,
+            "day",
+            4,
+            False,
+            "Expected data_tables to be a string or Sequence.",
+        ),
+        (
+            None,
+            None,
+            ["drug_exposure"],
+            123,
+            1,
+            "day",
+            4,
+            False,
+            "Expected data_field_to_keep to be a string, Sequence, or dict, but is <class 'int'>",
+        ),
+        (
+            None,
+            None,
+            ["drug_exposure", "condition_occurrence"],
+            ["is_present"],
+            1,
+            "day",
+            4,
+            False,
+            "data_field_to_keep must be a dictionary if more than one data table is used.",
+        ),
+        (
+            None,
+            None,
+            ["drug_exposure"],
+            {"drug_exposure": 123},
+            1,
+            "day",
+            4,
+            False,
+            "data_field_to_keep values must be a string or Sequence.",
+        ),
+        (
+            None,
+            None,
+            ["drug_exposure"],
+            ["is_present"],
+            "wrong_type",
+            "day",
+            4,
+            False,
+            "Expected interval_length_number to be an integer.",
+        ),
+        (
+            None,
+            None,
+            ["drug_exposure"],
+            ["value_as_number"],
+            1,
+            123,
+            4,
+            False,
+            "Expected interval_length_unit to be a string.",
+        ),
+        (
+            None,
+            None,
+            ["drug_exposure"],
+            ["is_present"],
+            1,
+            "day",
+            "wrong_type",
+            False,
+            "Expected num_intervals to be an integer.",
+        ),
+        (
+            None,
+            None,
+            ["drug_exposure"],
+            ["is_present"],
+            1,
+            "day",
+            123,
+            "wrong_type",
+            "Expected enrich_var_with_feature_info to be a boolean.",
+        ),
+    ],
+)
+def test_setup_interval_variables_illegal_argument_types(
+    omop_connection_vanilla,
+    edata,
+    backend_handle,
+    data_tables,
+    data_field_to_keep,
+    interval_length_number,
+    interval_length_unit,
+    num_intervals,
+    enrich_var_with_feature_info,
+    expected_error,
+):
+    con = omop_connection_vanilla
+    with pytest.raises(TypeError, match=expected_error):
+        ed.io.omop.setup_interval_variables(
+            edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
+            backend_handle=backend_handle or con,
+            data_tables=data_tables,
+            data_field_to_keep=data_field_to_keep,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            enrich_var_with_feature_info=enrich_var_with_feature_info,
+        )
+
+
+@pytest.mark.parametrize(
     "edata, backend_handle, data_tables, data_field_to_keep, interval_length_number, interval_length_unit, num_intervals, enrich_var_with_feature_info, enrich_var_with_unit_info, expected_error",
     [
         (
@@ -893,6 +1044,61 @@ def test_setup_variables_illegal_argument_values(
         )
 
 
+@pytest.mark.parametrize(
+    "edata, backend_handle, data_tables, data_field_to_keep, interval_length_number, interval_length_unit, num_intervals, enrich_var_with_feature_info, expected_error",
+    [
+        (
+            None,
+            None,
+            ["drug_exposuree"],
+            ["is_present"],
+            1,
+            "day",
+            4,
+            False,
+            re.escape(
+                "data_tables must be a subset of ['drug_exposure', 'condition_occurrence', 'procedure_occurrence', 'device_exposure', 'drug_era', 'dose_era', 'condition_era', 'episode']."
+            ),
+        ),
+        (
+            None,
+            None,
+            ["drug_exposure", "condition_occurrence"],
+            {"drug_exposure": "is_present"},
+            1,
+            "day",
+            4,
+            False,
+            "data_field_to_keep keys must be equal to data_tables.",
+        ),
+    ],
+)
+def test_setup_interval_variables_illegal_argument_values(
+    omop_connection_vanilla,
+    edata,
+    backend_handle,
+    data_tables,
+    data_field_to_keep,
+    interval_length_number,
+    interval_length_unit,
+    num_intervals,
+    enrich_var_with_feature_info,
+    expected_error,
+):
+    con = omop_connection_vanilla
+    with pytest.raises(ValueError, match=expected_error):
+        ed.io.omop.setup_interval_variables(
+            edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
+            backend_handle=backend_handle or con,
+            data_tables=data_tables,
+            data_field_to_keep=data_field_to_keep,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            enrich_var_with_feature_info=enrich_var_with_feature_info,
+        )
+
+
 def test_capital_letters(omop_connection_capital_letters):
     # test capital letters both in table names and column names
     con = omop_connection_capital_letters
@@ -920,7 +1126,7 @@ def test_capital_letters(omop_connection_capital_letters):
     assert "MEASUREMENT_ID" not in measurement_columns
 
 
-def test_empty_observation(omop_connection_empty_observation, caplog):
+def test_setup_variables_empty_observation(omop_connection_empty_observation, caplog):
     con = omop_connection_empty_observation
     edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person")
     edata = ed.io.omop.setup_variables(
@@ -935,7 +1141,26 @@ def test_empty_observation(omop_connection_empty_observation, caplog):
         enrich_var_with_unit_info=False,
     )
     assert edata.shape == (1, 0)
-    assert "No data found in observation. Returning edata without additional variables." in caplog.text
+    assert "No data found in observation. Returning edata without data of observation." in caplog.text
+    assert "No data found in any of the data tables. Returning edata without data." in caplog.text
+
+
+def test_setup_interval_variables_empty_observation(omop_connection_empty_observation, caplog):
+    con = omop_connection_empty_observation
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["is_present"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=1,
+        enrich_var_with_feature_info=False,
+    )
+    assert edata.shape == (1, 0)
+    assert "No data found in drug_exposure. Returning edata without data of drug_exposure." in caplog.text
+    assert "No data found in any of the data tables. Returning edata without data." in caplog.text
 
 
 def test_multiple_units(omop_connection_multiple_units, caplog):
