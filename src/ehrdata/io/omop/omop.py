@@ -222,6 +222,21 @@ def setup_obs(
     Returns
     -------
     An EHRData object with populated .obs field.
+
+    Example
+    -------
+
+    >>> import ehrdata as ed
+    >>> import duckdb
+    >>> con_gi = duckdb.connect(database=":memory:", read_only=False)
+    >>> ed.dt.gibleed_omop(
+    ...     con_gi,
+    ... )
+    >>> edata_gi = ed.io.omop.setup_obs(
+    >>>     con_gi,
+    >>>     observation_table="person_observation_period",
+    >>> )
+    >>> edata_gi
     """
     _check_valid_backend_handle(backend_handle)
     _check_valid_observation_table(observation_table)
@@ -306,6 +321,33 @@ def setup_variables(
     Returns
     -------
     An EHRData object with populated .r and .var field.
+
+    Example
+    -------
+    >>> import ehrdata as ed
+    >>> import duckdb
+    >>> con_gi = duckdb.connect(database=":memory:", read_only=False)
+    >>> ed.dt.gibleed_omop(
+    ...     con_gi,
+    ... )
+    >>> edata_gi = ed.io.omop.setup_obs(
+    >>>     con_gi,
+    >>>     observation_table="person_observation_period",
+    >>> )
+    >>> edata_gi = ed.io.omop.setup_variables(
+    >>>     edata=edata_gi,
+    >>>     backend_handle=con_gi,
+    >>>     data_tables=["observation", "measurement"],
+    >>>     data_field_to_keep={"observation": "observation_source_value", "measurement": "is_present"},
+    >>>     interval_length_number=20,
+    >>>     interval_length_unit="day",
+    >>>     num_intervals=20,
+    >>>     concept_ids="all",
+    >>>     aggregation_strategy="last",
+    >>>     enrich_var_with_feature_info=True,
+    >>>     enrich_var_with_unit_info=True,
+    >>> )
+    >>> edata_gi
     """
     from ehrdata import EHRData
 
@@ -493,6 +535,32 @@ def setup_interval_variables(
     Returns
     -------
     An EHRData object with populated .r and .var field.
+
+    Example
+    -------
+    >>> import ehrdata as ed
+    >>> import duckdb
+    >>> con_gi = duckdb.connect(database=":memory:", read_only=False)
+    >>> ed.dt.gibleed_omop(
+    ...     con_gi,
+    ... )
+    >>> edata_gi = ed.io.omop.setup_obs(
+    >>>     con_gi,
+    >>>     observation_table="person_observation_period",
+    >>> )
+    >>> edata_gi = ed.io.omop.setup_interval_variables(
+    >>>     edata=edata_gi,
+    >>>     backend_handle=con_gi,
+    >>>     data_tables=["drug_exposure", "condition_occurrence"],
+    >>>     data_field_to_keep={"drug_exposure": "is_present", "condition_occurrence": "is_present"},
+    >>>     interval_length_number=20,
+    >>>     interval_length_unit="day",
+    >>>     num_intervals=20,
+    >>>     concept_ids="all",
+    >>>     aggregation_strategy="last",
+    >>>     enrich_var_with_feature_info=True,
+    >>> )
+    >>> edata_gi
     """
     from ehrdata import EHRData
 
