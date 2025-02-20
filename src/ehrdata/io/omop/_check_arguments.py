@@ -71,19 +71,19 @@ def _check_valid_interval_variable_data_tables(data_tables) -> Sequence:
     return data_tables
 
 
-def _check_valid_data_field_to_keep(data_field_to_keep, data_tables) -> dict:
+def _check_valid_data_field_to_keep(data_field_to_keep, data_tables) -> dict[str, Sequence[str]]:
     valid_type = False
     if isinstance(data_field_to_keep, str):
         valid_type = True
         if len(data_tables) > 1:
-            raise ValueError("data_field_to_keep must be a dictionary if more than one data table is used.")
+            raise TypeError("data_field_to_keep must be a dictionary if more than one data table is used.")
         else:
             data_field_to_keep = {data_tables[0]: [data_field_to_keep]}
 
     if isinstance(data_field_to_keep, Sequence):
         valid_type = True
         if len(data_tables) > 1:
-            raise ValueError("data_field_to_keep must be a dictionary if more than one data table is used.")
+            raise TypeError("data_field_to_keep must be a dictionary if more than one data table is used.")
         else:
             data_field_to_keep = {data_tables[0]: data_field_to_keep}
 

@@ -255,7 +255,7 @@ def setup_variables(
     backend_handle: duckdb.duckdb.DuckDBPyConnection,
     data_tables: Sequence[Literal["measurement", "observation", "specimen"]]
     | Literal["measurement", "observation", "specimen"],
-    data_field_to_keep: str | Sequence[str],
+    data_field_to_keep: str | Sequence[str] | dict[str, str | Sequence[str]],
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
@@ -331,7 +331,7 @@ def setup_variables(
     # if isinstance(data_field_to_keep, Sequence):
     #     data_field_to_keep = list(data_field_to_keep) + ["unit_concept_id", "unit_source_value"]
     # elif isinstance(data_field_to_keep, dict):
-    data_field_to_keep = {k: v + ["unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()}
+    data_field_to_keep = {k: list(v) + ["unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()}
     # else:
     #     raise ValueError
 

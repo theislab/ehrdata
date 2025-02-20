@@ -161,6 +161,40 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
             ["is_present"],
             VANILLA_IS_PRESENT_START,
         ),
+        (
+            ["measurement", "observation", "specimen"],
+            {
+                "measurement": "value_as_number",
+                "observation": "is_present",
+                "specimen": "quantity",
+            },
+            [
+                [
+                    [np.nan, np.nan, np.nan, np.nan],
+                    [18.0, np.nan, np.nan, np.nan],
+                    [1.0, np.nan, np.nan, np.nan],
+                    [1.0, np.nan, np.nan, np.nan],
+                    [0.5, np.nan, np.nan, np.nan],
+                    [1.5, np.nan, np.nan, np.nan],
+                ],
+                [
+                    [np.nan, np.nan, np.nan, np.nan],
+                    [20.0, np.nan, np.nan, np.nan],
+                    [1.0, np.nan, np.nan, np.nan],
+                    [1.0, np.nan, np.nan, np.nan],
+                    [0.5, np.nan, np.nan, np.nan],
+                    [1.5, np.nan, np.nan, np.nan],
+                ],
+                [
+                    [np.nan, np.nan, np.nan, np.nan],
+                    [22.0, np.nan, np.nan, np.nan],
+                    [1.0, np.nan, np.nan, np.nan],
+                    [1.0, np.nan, np.nan, np.nan],
+                    [0.5, np.nan, np.nan, np.nan],
+                    [1.5, np.nan, np.nan, np.nan],
+                ],
+            ],
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -197,7 +231,7 @@ def test_setup_variables(
 
     assert isinstance(edata, ed.EHRData)
     assert edata.n_obs == VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY[observation_table]
-    assert edata.n_vars == VANILLA_NUM_CONCEPTS[data_tables[0]]
+    assert edata.n_vars == sum(VANILLA_NUM_CONCEPTS[data_table] for data_table in data_tables)
     assert edata.r.shape[2] == num_intervals
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0) + (
         VAR_DIM_UNIT_INFO if enrich_var_with_unit_info else 0
@@ -691,6 +725,30 @@ def test_setup_interval_type_variables(
         (
             None,
             None,
+            ["measurement", "observation"],
+            ["value_as_number"],
+            1,
+            "day",
+            4,
+            False,
+            False,
+            "data_field_to_keep must be a dictionary if more than one data table is used.",
+        ),
+        (
+            None,
+            None,
+            ["measurement"],
+            {"measurement": 123},
+            1,
+            "day",
+            4,
+            False,
+            False,
+            "data_field_to_keep values must be a string or Sequence.",
+        ),
+        (
+            None,
+            None,
             ["measurement"],
             ["value_as_number"],
             "wrong_type",
@@ -765,6 +823,63 @@ def test_setup_variables_illegal_argument_types(
 ):
     con = omop_connection_vanilla
     with pytest.raises(TypeError, match=expected_error):
+        ed.io.omop.setup_variables(
+            edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
+            backend_handle=backend_handle or con,
+            data_tables=data_tables,
+            data_field_to_keep=data_field_to_keep,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            enrich_var_with_feature_info=enrich_var_with_feature_info,
+            enrich_var_with_unit_info=enrich_var_with_unit_info,
+        )
+
+
+@pytest.mark.parametrize(
+    "edata, backend_handle, data_tables, data_field_to_keep, interval_length_number, interval_length_unit, num_intervals, enrich_var_with_feature_info, enrich_var_with_unit_info, expected_error",
+    [
+        (
+            None,
+            None,
+            ["measurementt"],
+            ["value_as_number"],
+            1,
+            "day",
+            4,
+            False,
+            False,
+            re.escape("data_tables must be a subset of ['measurement', 'observation', 'specimen']."),
+        ),
+        (
+            None,
+            None,
+            ["measurement", "observation"],
+            {"measurement": "value_as_number"},
+            1,
+            "day",
+            4,
+            False,
+            False,
+            "data_field_to_keep keys must be equal to data_tables.",
+        ),
+    ],
+)
+def test_setup_variables_illegal_argument_values(
+    omop_connection_vanilla,
+    edata,
+    backend_handle,
+    data_tables,
+    data_field_to_keep,
+    interval_length_number,
+    interval_length_unit,
+    num_intervals,
+    enrich_var_with_feature_info,
+    enrich_var_with_unit_info,
+    expected_error,
+):
+    con = omop_connection_vanilla
+    with pytest.raises(ValueError, match=expected_error):
         ed.io.omop.setup_variables(
             edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
             backend_handle=backend_handle or con,
