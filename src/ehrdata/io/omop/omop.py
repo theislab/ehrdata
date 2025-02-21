@@ -272,8 +272,10 @@ def setup_variables(
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
-    concept_ids: Literal["all"] | Sequence = "all",
-    aggregation_strategy: str = "last",
+    concept_ids: Literal["all"] | Sequence[int] = "all",
+    aggregation_strategy: Literal[
+        "last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"
+    ] = "last",
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
     instantiate_tensor: bool = True,
@@ -282,8 +284,8 @@ def setup_variables(
 
     This function sets up the variables for the EHRData object.
     It will fail if there is more than one `unit_concept_id` per feature.
-    Writes a unit report of the features to `edata.uns["unit_report_<data_tables>"]`.
-    Writes the setup arguments into `edata.uns["omop_io_variable_setup"]`.
+    Writes a unit report of the features to `edata.uns['unit_report_<data_tables>']`.
+    Writes the setup arguments into `edata.uns['omop_io_variable_setup']`.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
     This table is instantiated into `edata.r` if `instantiate_tensor` is set to `True`;
@@ -299,16 +301,14 @@ def setup_variables(
         The table to be used. Only a single table can be used.
     data_field_to_keep
         The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".  Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval. Should be a dictionary to specify the data fields to keep per table if multiple data tables are used. For example, if data_tables=["measurement", "observation"], data_field_to_keep={"measurement": "value_as_number", "observation": "value_as_number"}.
-    start_time
-        Starting time for values to be included.
     interval_length_number
         Numeric value of the length of one interval.
     interval_length_unit
-        Unit belonging to the interval length.
+        Unit of the interval length, need to be the units of :class:`~pandas.Timedelta`.
     num_intervals
         Number of intervals.
     concept_ids
-        Concept IDs to use from this data table. If not specified, 'all' are used.
+        Concept IDs to use from the data table(s). If not specified, `'all'` are used.
     aggregation_strategy
         Strategy to use when aggregating multiple data points within one interval.
     enrich_var_with_feature_info
@@ -492,8 +492,10 @@ def setup_interval_variables(
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
-    concept_ids: Literal["all"] | Sequence = "all",
-    aggregation_strategy: str = "last",
+    concept_ids: Literal["all"] | Sequence[int] = "all",
+    aggregation_strategy: Literal[
+        "last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"
+    ] = "last",
     enrich_var_with_feature_info: bool = False,
     keep_date: Literal["start", "end", "interval"] = "start",
     instantiate_tensor: bool = True,
@@ -517,16 +519,14 @@ def setup_interval_variables(
         The table to be used. Only a single table can be used.
     data_field_to_keep
         The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".  Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval. If multiple data tables are used, this should be a dictionary to specify the data fields to keep per table. For example, if `data_tables=["measurement", "observation"]`, `data_field_to_keep={"measurement": "value_as_number", "observation": "value_as_number"}`.
-    start_time
-        Starting time for values to be included.
     interval_length_number
         Numeric value of the length of one interval.
     interval_length_unit
-        Unit belonging to the interval length.
+        Unit of the interval length, need to be the units of :class:`~pandas.Timedelta`.
     num_intervals
         Number of intervals.
     concept_ids
-        Concept IDs to use from this data table. If not specified, `'all'` are used.
+        Concept IDs to use from the data table(s). If not specified, `'all'` are used.
     aggregation_strategy
         Strategy to use when aggregating multiple data points within one interval.
     enrich_var_with_feature_info
