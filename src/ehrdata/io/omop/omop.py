@@ -282,8 +282,12 @@ def setup_variables(
 ):
     """Setup the variables.
 
-    This function sets up the variables for the EHRData object.
-    It will fail if there is more than one `unit_concept_id` per feature.
+    This function extracts selected tables of a data-point character from the OMOP CDM into an EHRData object.
+
+    The distinct `concept_id` s encountered in the selected tables form the variables in the EHRData object.
+    The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
+
+    It will fail if there is more than one `unit_concept_id` per variable.
     Writes a unit report of the features to `edata.uns['unit_report_<data_tables>']`.
     Writes the setup arguments into `edata.uns['omop_io_variable_setup']`.
 
@@ -298,9 +302,9 @@ def setup_variables(
     edata
         The EHRData object to which the variables should be added.
     data_tables
-        The table to be used. Only a single table can be used.
+        The tables to be used.
     data_field_to_keep
-        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".  Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval. Should be a dictionary to specify the data fields to keep per table if multiple data tables are used. For example, if data_tables=["measurement", "observation"], data_field_to_keep={"measurement": "value_as_number", "observation": "value_as_number"}.
+        The CDM Field in the data tables to be kept. Can be e.g. `'value_as_number'` or `'value_as_concept_id'`.  Importantly, can be `'is_present'` to have a one-hot encoding of the presence of the feature in a patient in an interval. Should be a dictionary to specify the data fields to keep per table if multiple data tables are used. For example, if `data_tables=['measurement', 'observation]`, `data_field_to_keep={'measurement': 'value_as_number', 'observation': 'value_as_number'}`.
     interval_length_number
         Numeric value of the length of one interval.
     interval_length_unit
@@ -308,13 +312,13 @@ def setup_variables(
     num_intervals
         Number of intervals.
     concept_ids
-        Concept IDs to use from the data table(s). If not specified, `'all'` are used.
+        Concept IDs to use from the data tables. If not specified, `'all'` are used.
     aggregation_strategy
         Strategy to use when aggregating multiple data points within one interval.
     enrich_var_with_feature_info
         Whether to enrich the var table with feature information. If a `concept_id` is not found in the concept table, the feature information will be `NaN`.
     enrich_var_with_unit_info
-        Whether to enrich the var table with unit information. Raises an Error if multiple units per feature are found for at least one feature. For entire missing data points, the units are ignored. For observed data points with missing unit information (`NULL` in either `unit_concept_id` or `unit_source_value`), the value `NULL`/`NaN` is considered a single unit.
+        Whether to enrich the var table with unit information. Raises an Error if multiple units per feature are found for at least one feature. For entire missing data points, the units are ignored. For observed data points with missing unit information (`NULL` in either `'unit_concept_id'` or `'unit_source_value'`), the value `NULL`/`NaN` is considered a single unit.
     instantiate_tensor
         Whether to instantiate the tensor into the `.r` field of the EHRData object.
 
@@ -502,7 +506,11 @@ def setup_interval_variables(
 ):
     """Setup the interval variables
 
-    This function sets up the variables that are stored as interval in OMOP for the EHRData object.
+    This function extracts selected tables of a time-span character from the OMOP CDM into an EHRData object.
+
+    The distinct `concept_id` s encountered in the selected tables form the variables in the EHRData object.
+    The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
+
     In contrast to `setup_variables`, tables without unit unformation can be present here. Hence, this function will not verify that a single unit per feature (=`concept_id`) is used. Also, it will not write a unit report. Should this be relevant for your work, please do open an issue on https://github.com/theislab/ehrdata.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
@@ -516,9 +524,9 @@ def setup_interval_variables(
     edata
         The EHRData object to which the variables should be added.
     data_tables
-        The table to be used. Only a single table can be used.
+        The tables to be used.
     data_field_to_keep
-        The CDM Field in the data table to be kept. Can be e.g. "value_as_number" or "value_as_concept_id".  Importantly, can be "is_present" to have a one-hot encoding of the presence of the feature in a patient in an interval. If multiple data tables are used, this should be a dictionary to specify the data fields to keep per table. For example, if `data_tables=["measurement", "observation"]`, `data_field_to_keep={"measurement": "value_as_number", "observation": "value_as_number"}`.
+        The CDM Field in the data tables to be kept. Can be e.g. `'value_as_number'` or `'value_as_concept_id'`.  Importantly, can be `'is_present'` to have a one-hot encoding of the presence of the feature in a patient in an interval. Should be a dictionary to specify the data fields to keep per table if multiple data tables are used. For example, if `data_tables=['measurement', 'observation]`, `data_field_to_keep={'measurement': 'value_as_number', 'observation': 'value_as_number'}`.
     interval_length_number
         Numeric value of the length of one interval.
     interval_length_unit
@@ -526,12 +534,12 @@ def setup_interval_variables(
     num_intervals
         Number of intervals.
     concept_ids
-        Concept IDs to use from the data table(s). If not specified, `'all'` are used.
+        Concept IDs to use from the data tables. If not specified, `'all'` are used.
     aggregation_strategy
         Strategy to use when aggregating multiple data points within one interval.
     enrich_var_with_feature_info
         Whether to enrich the var table with feature information. If a `concept_id` is not found in the concept table, the feature information will be `NaN`.
-    date_type
+    keep_date
         Whether to keep the start or end date, or the interval span.
     instantiate_tensor
         Whether to instantiate the tensor into the `.r` field of the EHRData object.
