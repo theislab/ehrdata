@@ -304,7 +304,7 @@ def setup_variables(
     interval_length_number
         Numeric value of the length of one interval.
     interval_length_unit
-        Unit of the interval length, need to be the units of :class:`~pandas.Timedelta`.
+        Unit of the interval length, needs to be a unit of :class:`~pandas.Timedelta`.
     num_intervals
         Number of intervals.
     concept_ids
@@ -522,7 +522,7 @@ def setup_interval_variables(
     interval_length_number
         Numeric value of the length of one interval.
     interval_length_unit
-        Unit of the interval length, need to be the units of :class:`~pandas.Timedelta`.
+        Unit of the interval length, needs to be a unit of :class:`~pandas.Timedelta`.
     num_intervals
         Number of intervals.
     concept_ids
