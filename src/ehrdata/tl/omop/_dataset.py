@@ -13,10 +13,15 @@ torch = lazy_import_torch()
 
 
 class EHRDataset(torch.utils.data.Dataset):
+    # TODO: data tables should also accept interval-style tables
+    # TODO: implement for multiple data tables
+    # TODO: test for multiple data tables
     def __init__(
         self,
         con: DuckDBPyConnection,
         edata,
+        data_tables: Sequence[Literal["measurement", "observation", "specimen"]]
+        | Literal["measurement", "observation", "specimen"],
         batch_size: int = 10,
         target: Literal["mortality"] = "mortality",
         datetime: bool = True,
@@ -52,15 +57,16 @@ class EHRDataset(torch.utils.data.Dataset):
         super().__init__()
         self.con = con
         self.edata = edata
+        self.data_tables = data_tables
         self.target = target
         self.datetime = datetime
         self.idxs = idxs
 
         self.n_timesteps = con.execute(
-            "SELECT COUNT(DISTINCT interval_step) FROM long_person_timestamp_feature_value"
+            f"SELECT COUNT(DISTINCT interval_step) FROM long_person_timestamp_feature_value_{self.data_tables[0]}"
         ).fetchone()[0]
         self.n_variables = con.execute(
-            "SELECT COUNT(DISTINCT data_table_concept_id) FROM long_person_timestamp_feature_value"
+            f"SELECT COUNT(DISTINCT data_table_concept_id) FROM long_person_timestamp_feature_value_{self.data_tables[0]}"
         ).fetchone()[0]
 
     def __len__(self):
@@ -70,15 +76,13 @@ class EHRDataset(torch.utils.data.Dataset):
             where_clause = ""
         query = f"""
             SELECT COUNT(DISTINCT person_id)
-            FROM long_person_timestamp_feature_value
+            FROM long_person_timestamp_feature_value_{self.data_tables[0]}
             {where_clause}
         """
         return self.con.execute(query).fetchone()[0]
 
     def __getitem__(self, person_index):
-        person_id_query = (
-            f"SELECT DISTINCT person_id FROM long_person_timestamp_feature_value WHERE person_index = {person_index}"
-        )
+        person_id_query = f"SELECT DISTINCT person_id FROM long_person_timestamp_feature_value_{self.data_tables[0]} WHERE person_index = {person_index}"
         person_id = self.con.execute(person_id_query).fetchone()[0]
         where_clause = f"WHERE person_index = {person_index}"
 
@@ -87,7 +91,7 @@ class EHRDataset(torch.utils.data.Dataset):
 
         query = f"""
             SELECT person_index, data_table_concept_id, interval_step, COALESCE(CAST(value_as_number AS DOUBLE), 'NaN') AS value_as_number
-            FROM long_person_timestamp_feature_value
+            FROM long_person_timestamp_feature_value_{self.data_tables[0]}
             {where_clause}
         """
 

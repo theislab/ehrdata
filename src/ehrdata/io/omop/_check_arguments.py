@@ -71,11 +71,36 @@ def _check_valid_interval_variable_data_tables(data_tables) -> Sequence:
     return data_tables
 
 
-def _check_valid_data_field_to_keep(data_field_to_keep) -> Sequence:
+def _check_valid_data_field_to_keep(data_field_to_keep, data_tables) -> dict[str, Sequence[str]]:
+    valid_type = False
     if isinstance(data_field_to_keep, str):
-        data_field_to_keep = [data_field_to_keep]
-    if not isinstance(data_field_to_keep, Sequence):
-        raise TypeError("Expected data_field_to_keep to be a string or Sequence.")
+        valid_type = True
+        if len(data_tables) > 1:
+            raise TypeError("data_field_to_keep must be a dictionary if more than one data table is used.")
+        else:
+            data_field_to_keep = {data_tables[0]: [data_field_to_keep]}
+
+    if isinstance(data_field_to_keep, Sequence):
+        valid_type = True
+        if len(data_tables) > 1:
+            raise TypeError("data_field_to_keep must be a dictionary if more than one data table is used.")
+        else:
+            data_field_to_keep = {data_tables[0]: data_field_to_keep}
+
+    if isinstance(data_field_to_keep, dict):
+        valid_type = True
+        if not set(data_field_to_keep.keys()) == set(data_tables):
+            raise ValueError("data_field_to_keep keys must be equal to data_tables.")
+        for key, value in data_field_to_keep.items():
+            if isinstance(value, str):
+                data_field_to_keep[key] = [value]
+            if not isinstance(value, Sequence):
+                raise TypeError("data_field_to_keep values must be a string or Sequence.")
+    if not valid_type:
+        raise TypeError(
+            f"Expected data_field_to_keep to be a string, Sequence, or dict, but is {type(data_field_to_keep)}"
+        )
+
     return data_field_to_keep
 
 
