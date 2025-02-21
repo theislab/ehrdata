@@ -285,7 +285,7 @@ def setup_variables(
     Writes a unit report of the features to `edata.uns["unit_report_<data_tables>"]`.
     Writes the setup arguments into `edata.uns["omop_io_variable_setup"]`.
 
-    Stores a table named `long_person_timestamp_feature_value` in long format in the RDBMS.
+    Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
     This table is instantiated into `edata.r` if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
 
@@ -502,6 +502,10 @@ def setup_interval_variables(
 
     This function sets up the variables that are stored as interval in OMOP for the EHRData object.
     In contrast to `setup_variables`, tables without unit unformation can be present here. Hence, this function will not verify that a single unit per feature (=`concept_id`) is used. Also, it will not write a unit report. Should this be relevant for your work, please do open an issue on https://github.com/theislab/ehrdata.
+
+    Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
+    This table is instantiated into `edata.r` if `instantiate_tensor` is set to `True`;
+    otherwise, the table is only stored in the RDBMS for later use.
 
     Parameters
     ----------
