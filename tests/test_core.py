@@ -58,26 +58,38 @@ def test_ehrdata_slice_2D():
     adata = EHRData(X=X, obs=obs, r=r, var=var)
     adata_sliced = adata[:2, :1]
 
+    assert adata_sliced.is_view
     assert adata_sliced.shape[0] == 2
     assert adata_sliced.shape[1] == 1
-    assert adata_sliced.layers[R_LAYER_KEY].shape == (2, 1, 2)
+    assert adata_sliced.r.shape == (2, 1, 2)
 
 
 def test_ehrdata_slice_3D():
     X = np.array([[1, 2], [3, 4], [5, 6]])
     obs = pd.DataFrame({"obs1": [1, 2, 3]})
     var = pd.DataFrame({"var1": [1, 2]})
+    t = pd.DataFrame({"t1": [1, 2]})
     r = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]])
 
-    adata = EHRData(X=X, obs=obs, r=r, var=var)
+    adata = EHRData(X=X, obs=obs, r=r, var=var, t=t)
     adata_sliced = adata[:2, :1, :1]
 
+    assert adata_sliced.is_view
     assert adata_sliced.shape[0] == 2
     assert adata_sliced.shape[1] == 1
-    assert adata_sliced.layers[R_LAYER_KEY].shape == (2, 1, 1)
-    assert adata_sliced.t.shape == (1, 0)
+    assert adata_sliced.r.shape == (2, 1, 1)
+    assert adata_sliced.t.shape == (1, 1)
 
 
 def test_copy():
     edata = EHRData()
     edata.copy()
+
+
+# TODO:
+# - test that r is an arrayview?
+# - test that t is a dataframeview?
+# - test multiple sliceing?
+# - allow explictly for r to be only a numpy array or dask array?
+# - test that r and t are aligned
+# - test repr
