@@ -49,11 +49,10 @@ class EHRData(AnnData):
             msg = f"`r` is both specified and already present in `layers[{R_LAYER_KEY}]`."
             raise ValueError(msg)
 
-        # Use existing r if present
         r = r if r is not None else r_existing
 
         # Type checking for r
-        if r is not None and not isinstance(r, (np.ndarray | "dask.array.Array")):  # type: ignore
+        if r is not None and not isinstance(r, (np.ndarray, "dask.array.Array")):  # type: ignore  # noqa: UP038
             msg = f"`r` must be numpy.ndarray or dask.array.Array, got {type(r)}"
             raise TypeError(msg)
 
@@ -184,7 +183,7 @@ class EHRData(AnnData):
     @r.setter
     def r(self, input: np.ndarray | None) -> None:
         # assert self.shape == input.shape
-
+        self.n_t = 0 if input is None else input.shape[2]
         if input is None:
             del self.r
         else:
