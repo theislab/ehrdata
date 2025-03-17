@@ -1,4 +1,6 @@
 from collections.abc import Sequence
+from functools import singledispatch
+import sqlite3
 
 import duckdb
 import pandas as pd
@@ -75,19 +77,21 @@ def _generate_timedeltas(interval_length_number: int, interval_length_unit: str,
     timedeltas_dataframe = pd.DataFrame(
         {
             "interval_start_offset": [
-                pd.to_timedelta(i * interval_length_number, interval_length_unit) for i in range(num_intervals)
+                pd.to_timedelta(i * interval_length_number, interval_length_unit) for i in range(num_intervals) # type: ignore
             ],
             "interval_end_offset": [
-                pd.to_timedelta(i * interval_length_number, interval_length_unit) for i in range(1, num_intervals + 1)
+                pd.to_timedelta(i * interval_length_number, interval_length_unit) for i in range(1, num_intervals + 1) # type: ignore
             ],
             "interval_step": list(range(num_intervals)),
         }
     )
     return timedeltas_dataframe
 
-
-def _write_timedeltas_to_db(
-    backend_handle: duckdb.duckdb.DuckDBPyConnection,
+@singledispatch
+def _write_timedeltas_to_db(backend_handle, timedeltas_dataframe,) -> None:
+    raise TypeError(f"Unsupported backend_handle type {type(backend_handle)}")
+def _(
+    backend_handle: duckdb.DuckDBPyConnection | sqlite3.Connection,
     timedeltas_dataframe,
 ) -> None:
     backend_handle.execute("DROP TABLE IF EXISTS timedeltas")
@@ -103,20 +107,67 @@ def _write_timedeltas_to_db(
     backend_handle.execute("INSERT INTO timedeltas SELECT * FROM timedeltas_dataframe")
 
 
-def _drop_timedeltas(backend_handle: duckdb.duckdb.DuckDBPyConnection):
+@_write_timedeltas_to_db.register(sqlite3.Connection)
+def _(
+    backend_handle: sqlite3.Connection,
+    timedeltas_dataframe) -> None:
+    backend_handle.execute("DROP TABLE IF EXISTS timedeltas")
+    backend_handle.execute(
+        """
+        CREATE TABLE timedeltas (
+            interval_start_offset TEXT,
+            interval_end_offset TEXT,
+            interval_step INTEGER
+        )
+        """
+    )
+
+
+
+def _drop_timedeltas(backend_handle: duckdb.DuckDBPyConnection):
     backend_handle.execute("DROP TABLE IF EXISTS timedeltas")
 
+@singledispatch
+def _generate_value_query(data_table: str, data_field_to_keep: Sequence, aggregation_strategy: str, backend_handle) -> str:
+    raise TypeError(f"Unsupported backend_handle type {type(backend_handle)}")
 
-def _generate_value_query(data_table: str, data_field_to_keep: Sequence, aggregation_strategy: str) -> str:
+@_generate_value_query.register(duckdb.DuckDBPyConnection)
+def _(backend_handle:duckdb.DuckDBPyConnection, data_table: str, data_field_to_keep: Sequence, aggregation_strategy: str) -> str:
     # is_present is 1 in all rows of the data_table; but need an aggregation operation, so use LAST
     is_present_query = "LAST(is_present) as is_present, "
     value_query = f"{', '.join([f'{aggregation_strategy}({column}) AS {column}' for column in data_field_to_keep])}"
 
     return is_present_query + value_query
 
+@_generate_value_query.register(sqlite3.Connection)
+def _(
+    backend_handle:sqlite3.Connection,
+    data_table: str,
+    data_field_to_keep: Sequence,
+    aggregation_strategy: str,
+) -> str:
+    if aggregation_strategy == "last":
+        agg_func = "(SELECT {col} FROM {table} ORDER BY rowid DESC LIMIT 1)"
+    elif aggregation_strategy == "first":
+        agg_func = "(SELECT {col} FROM {table} ORDER BY rowid ASC LIMIT 1)"
+    elif aggregation_strategy in ["mean", "std"]:
+        agg_func = "AVG({col})" if aggregation_strategy == "mean" else "STDDEV({col})"
+    elif aggregation_strategy == "median":
+        agg_func = "(SELECT {col} FROM {table} ORDER BY {col} LIMIT 1 OFFSET (SELECT COUNT(*) FROM {table}) / 2)"
+    elif aggregation_strategy == "mode":
+        agg_func = "(SELECT {col} FROM {table} GROUP BY {col} ORDER BY COUNT(*) DESC, {col} LIMIT 1)"
+    else:
+        agg_func = AGGREGATION_STRATEGY_KEY.get(aggregation_strategy, aggregation_strategy) + "({col})"
+
+    is_present_query = "(SELECT is_present FROM {table} ORDER BY rowid DESC LIMIT 1) AS is_present, "
+    value_query = ", ".join([agg_func.format(col=column, table=data_table) + f" AS {column}" for column in data_field_to_keep])
+
+    return is_present_query.format(table=data_table) + value_query
+
+
 
 def _write_long_time_interval_table(
-    backend_handle: duckdb.duckdb.DuckDBPyConnection,
+    backend_handle: duckdb.DuckDBPyConnection,
     time_defining_table: str,
     data_table: str,
     interval_length_number: int,
@@ -180,7 +231,7 @@ def _write_long_time_interval_table(
 
     if keep_date in ["timepoint", "start", "end"]:
         select_query = f"""
-        SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
+        SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query(backend_handle, "data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{DATA_TABLE_DATE_KEYS[keep_date][data_table]} BETWEEN lfi.interval_start AND lfi.interval_end \
         GROUP BY lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
@@ -188,7 +239,7 @@ def _write_long_time_interval_table(
 
     elif keep_date == "interval":
         select_query = f"""
-        SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
+        SELECT lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query(backend_handle, "data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy])} \
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id \
                 AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id \

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import duckdb
+import sqlite3
 
 from ehrdata.io.omop._queries import (
     AGGREGATION_STRATEGY_KEY,
@@ -26,8 +27,8 @@ VALID_KEEP_DATES = ["start", "end", "interval"]
 
 
 def _check_valid_backend_handle(backend_handle) -> None:
-    if not isinstance(backend_handle, duckdb.duckdb.DuckDBPyConnection):
-        raise TypeError("Expected backend_handle to be of type DuckDBPyConnection.")
+    if not (isinstance(backend_handle, duckdb.DuckDBPyConnection) or isinstance(backend_handle, sqlite3.Connection)):
+        raise TypeError("Expected backend_handle to be of type DuckDBPyConnection or sqlite3.Connection.")
 
 
 def _check_valid_observation_table(observation_table) -> None:
@@ -101,7 +102,7 @@ def _check_valid_data_field_to_keep(data_field_to_keep, data_tables) -> dict[str
             f"Expected data_field_to_keep to be a string, Sequence, or dict, but is {type(data_field_to_keep)}"
         )
 
-    return data_field_to_keep
+    return data_field_to_keep # type: ignore
 
 
 def _check_valid_interval_length_number(interval_length_number) -> None:

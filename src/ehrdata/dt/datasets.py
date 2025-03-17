@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-from duckdb.duckdb import DuckDBPyConnection
+from duckdb import DuckDBPyConnection
+import sqlite3
 
 from ehrdata.dt.dataloader import download
 from ehrdata.io.omop import setup_connection
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 def _setup_eunomia_datasets(
     data_url: str,
-    backend_handle: DuckDBPyConnection,
+    backend_handle: DuckDBPyConnection | sqlite3.Connection,
     data_path: Path | None = None,
     nested_omop_tables_folder: str = None,
     dataset_prefix: str = "",
@@ -41,7 +42,7 @@ def _setup_eunomia_datasets(
     )
 
 
-def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+def mimic_iv_omop(backend_handle: DuckDBPyConnection | sqlite3.Connection, data_path: Path | None = None) -> None:
     """Loads the MIMIC-IV demo data in the OMOP Common Data model.
 
     This function loads the MIMIC-IV demo dataset from its `physionet repository <https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel>`_.
@@ -82,7 +83,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
     )
 
 
-def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+def gibleed_omop(backend_handle: DuckDBPyConnection | sqlite3.Connection, data_path: Path | None = None) -> None:
     """Loads the GiBleed dataset in the OMOP Common Data model.
 
     This function loads the GIBleed dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>`_.
@@ -121,7 +122,7 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
     )
 
 
-def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+def synthea27nj_omop(backend_handle: DuckDBPyConnection | sqlite3.Connection, data_path: Path | None = None) -> None:
     """Loads the Synthea27Nj dataset in the OMOP Common Data model.
 
     This function loads the Synthea27Nj dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>`_.
@@ -159,7 +160,7 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
     )
 
 
-def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+def mimic_ii(backend_handle: DuckDBPyConnection | sqlite3.Connection, data_path: Path | None = None) -> None:
     """Loads the MIMIC2 dataset."""
     # TODO: replace mimic_ii as is in ehrapy with its dict-of-table return time - map variables to OMOP?
     raise NotImplementedError()
