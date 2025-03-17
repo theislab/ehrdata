@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Sequence
 
 import duckdb
-import sqlite3
 
 from ehrdata.io.omop._queries import (
     AGGREGATION_STRATEGY_KEY,
@@ -102,7 +102,7 @@ def _check_valid_data_field_to_keep(data_field_to_keep, data_tables) -> dict[str
             f"Expected data_field_to_keep to be a string, Sequence, or dict, but is {type(data_field_to_keep)}"
         )
 
-    return data_field_to_keep # type: ignore
+    return data_field_to_keep  # type: ignore
 
 
 def _check_valid_interval_length_number(interval_length_number) -> None:

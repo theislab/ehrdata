@@ -1,6 +1,6 @@
+import sqlite3
 from collections.abc import Sequence
 from functools import singledispatch
-import sqlite3
 
 import duckdb
 import pandas as pd
@@ -77,19 +77,27 @@ def _generate_timedeltas(interval_length_number: int, interval_length_unit: str,
     timedeltas_dataframe = pd.DataFrame(
         {
             "interval_start_offset": [
-                pd.to_timedelta(i * interval_length_number, interval_length_unit) for i in range(num_intervals) # type: ignore
+                pd.to_timedelta(i * interval_length_number, interval_length_unit)
+                for i in range(num_intervals)  # type: ignore
             ],
             "interval_end_offset": [
-                pd.to_timedelta(i * interval_length_number, interval_length_unit) for i in range(1, num_intervals + 1) # type: ignore
+                pd.to_timedelta(i * interval_length_number, interval_length_unit)
+                for i in range(1, num_intervals + 1)  # type: ignore
             ],
             "interval_step": list(range(num_intervals)),
         }
     )
     return timedeltas_dataframe
 
+
 @singledispatch
-def _write_timedeltas_to_db(backend_handle, timedeltas_dataframe,) -> None:
+def _write_timedeltas_to_db(
+    backend_handle,
+    timedeltas_dataframe,
+) -> None:
     raise TypeError(f"Unsupported backend_handle type {type(backend_handle)}")
+
+
 def _(
     backend_handle: duckdb.DuckDBPyConnection | sqlite3.Connection,
     timedeltas_dataframe,
@@ -108,9 +116,7 @@ def _(
 
 
 @_write_timedeltas_to_db.register(sqlite3.Connection)
-def _(
-    backend_handle: sqlite3.Connection,
-    timedeltas_dataframe) -> None:
+def _(backend_handle: sqlite3.Connection, timedeltas_dataframe) -> None:
     backend_handle.execute("DROP TABLE IF EXISTS timedeltas")
     backend_handle.execute(
         """
@@ -123,25 +129,31 @@ def _(
     )
 
 
-
 def _drop_timedeltas(backend_handle: duckdb.DuckDBPyConnection):
     backend_handle.execute("DROP TABLE IF EXISTS timedeltas")
 
+
 @singledispatch
-def _generate_value_query(data_table: str, data_field_to_keep: Sequence, aggregation_strategy: str, backend_handle) -> str:
+def _generate_value_query(
+    data_table: str, data_field_to_keep: Sequence, aggregation_strategy: str, backend_handle
+) -> str:
     raise TypeError(f"Unsupported backend_handle type {type(backend_handle)}")
 
+
 @_generate_value_query.register(duckdb.DuckDBPyConnection)
-def _(backend_handle:duckdb.DuckDBPyConnection, data_table: str, data_field_to_keep: Sequence, aggregation_strategy: str) -> str:
+def _(
+    backend_handle: duckdb.DuckDBPyConnection, data_table: str, data_field_to_keep: Sequence, aggregation_strategy: str
+) -> str:
     # is_present is 1 in all rows of the data_table; but need an aggregation operation, so use LAST
     is_present_query = "LAST(is_present) as is_present, "
     value_query = f"{', '.join([f'{aggregation_strategy}({column}) AS {column}' for column in data_field_to_keep])}"
 
     return is_present_query + value_query
 
+
 @_generate_value_query.register(sqlite3.Connection)
 def _(
-    backend_handle:sqlite3.Connection,
+    backend_handle: sqlite3.Connection,
     data_table: str,
     data_field_to_keep: Sequence,
     aggregation_strategy: str,
@@ -160,10 +172,11 @@ def _(
         agg_func = AGGREGATION_STRATEGY_KEY.get(aggregation_strategy, aggregation_strategy) + "({col})"
 
     is_present_query = "(SELECT is_present FROM {table} ORDER BY rowid DESC LIMIT 1) AS is_present, "
-    value_query = ", ".join([agg_func.format(col=column, table=data_table) + f" AS {column}" for column in data_field_to_keep])
+    value_query = ", ".join(
+        [agg_func.format(col=column, table=data_table) + f" AS {column}" for column in data_field_to_keep]
+    )
 
     return is_present_query.format(table=data_table) + value_query
-
 
 
 def _write_long_time_interval_table(

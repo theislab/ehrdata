@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -8,7 +9,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 from duckdb import DuckDBPyConnection
-import sqlite3
 
 from ehrdata.dt.dataloader import download
 from ehrdata.io.omop import setup_connection

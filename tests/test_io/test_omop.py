@@ -108,7 +108,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
             "observation_table must be one of ['person', 'person_cohort', 'person_observation_period', 'person_visit_occurrence']."
         ),
     ):
-        ed.io.omop.setup_obs(backend_handle=con, observation_table="perso") # type: ignore
+        ed.io.omop.setup_obs(backend_handle=con, observation_table="perso")  # type: ignore
 
 
 @pytest.mark.parametrize(

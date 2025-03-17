@@ -95,6 +95,7 @@ def _set_up_duckdb(path: Path, backend_handle: duckdb.DuckDBPyConnection, prefix
     logging.info(f"missing tables: {missing_tables}")
     logging.info(f"unused files: {unused_files}")
 
+
 def _set_up_sqlite(path: Path, backend_handle: sqlite3.Connection, prefix: str = "") -> None:
     """Create tables in the backend from the CSV files in the path from datasets in the OMOP Common Data model."""
     tables = _get_table_list()
@@ -126,7 +127,9 @@ def _set_up_sqlite(path: Path, backend_handle: sqlite3.Connection, prefix: str =
             )
 
             # write proper table
-            existing_tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table'", backend_handle)["name"].values
+            existing_tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table'", backend_handle)[
+                "name"
+            ].values
             if regular_omop_table_name in existing_tables:
                 logging.info(f"Table {regular_omop_table_name} already exists. Dropping and recreating...")
                 backend_handle.execute(f"DROP TABLE {regular_omop_table_name}")
@@ -144,6 +147,7 @@ def _set_up_sqlite(path: Path, backend_handle: sqlite3.Connection, prefix: str =
 
     logging.info(f"missing tables: {missing_tables}")
     logging.info(f"unused files: {unused_files}")
+
 
 def _collect_units_per_feature(backend_handle, data_table, unit_key="unit_concept_id") -> dict:
     query = f"""
@@ -168,12 +172,14 @@ def _check_one_unit_per_feature(backend_handle, data_table, unit_key="unit_conce
     # print(f"no units for features: {np.argwhere(num_units == 0)}")
     logging.warning(f"multiple units for features: {np.argwhere(num_units > 1)}")
 
+
 @singledispatch
 def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.DataFrame:
     raise ValueError("backend_handle must be a duckdb.DuckDBPyConnection or sqlite3.Connection")
 
+
 @_create_feature_unit_concept_id_report.register
-def _(backend_handle : duckdb.DuckDBPyConnection | sqlite3.Connection, data_table) -> pd.DataFrame:
+def _(backend_handle: duckdb.DuckDBPyConnection | sqlite3.Connection, data_table) -> pd.DataFrame:
     feature_units_concept = _collect_units_per_feature(backend_handle, data_table, unit_key="unit_concept_id")
     feature_units_long_format = []
     for feature, units in feature_units_concept.items():
@@ -227,7 +233,9 @@ def _create_enriched_var_with_unit_info(backend_handle, ds, var, unit_report) ->
     return feature_concept_id_unit_info_table
 
 
-def setup_connection(path: Path | str, backend_handle: duckdb.DuckDBPyConnection | sqlite3.Connection, prefix: str = "") -> None:
+def setup_connection(
+    path: Path | str, backend_handle: duckdb.DuckDBPyConnection | sqlite3.Connection, prefix: str = ""
+) -> None:
     """Setup a connection to the OMOP CDM database.
 
     This function sets up a connection to the OMOP CDM database.
@@ -250,10 +258,10 @@ def setup_connection(path: Path | str, backend_handle: duckdb.DuckDBPyConnection
     """
     print(f"Backend handle: {backend_handle}")
 
-    match (backend_handle):
-        case (duckdb.DuckDBPyConnection()):
+    match backend_handle:
+        case duckdb.DuckDBPyConnection():
             _set_up_duckdb(Path(path), backend_handle, prefix)
-        case (sqlite3.Connection()):
+        case sqlite3.Connection():
             _set_up_sqlite(Path(path), backend_handle, prefix)
         case _:
             raise ValueError("backend_handle must be a duckdb.DuckDBPyConnection or sqlite3.Connection")
@@ -323,13 +331,16 @@ def setup_obs(
 
     return EHRData(obs=obs, uns={"omop_io_observation_table": observation_table.split("person_")[-1]})
 
+
 @singledispatch
 def execute_query(backend_handle, query) -> pd.DataFrame:
-   raise ValueError(f"Backend handle {backend_handle} not supported.")
+    raise ValueError(f"Backend handle {backend_handle} not supported.")
+
 
 @execute_query.register(duckdb.DuckDBPyConnection)
 def _(backend_handle: duckdb.DuckDBPyConnection, query: str) -> pd.DataFrame:
     return backend_handle.execute(query).df()
+
 
 @execute_query.register(sqlite3.Connection)
 def _(backend_handle: sqlite3.Connection, query: str) -> pd.DataFrame:
@@ -474,8 +485,9 @@ def setup_variables(
         _check_one_unit_per_feature(backend_handle, data_table)
         unit_report = _create_feature_unit_concept_id_report(backend_handle, data_table=data_table)
 
-        var = execute_query(backend_handle,
-            f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_table}"
+        var = execute_query(
+            backend_handle,
+            f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_table}",
         )
 
         if enrich_var_with_feature_info or enrich_var_with_unit_info:
@@ -508,7 +520,7 @@ def setup_variables(
 
         if instantiate_tensor:
             ds = (
-                (execute_query(backend_handle,f"SELECT * FROM long_person_timestamp_feature_value_{data_table}"))
+                (execute_query(backend_handle, f"SELECT * FROM long_person_timestamp_feature_value_{data_table}"))
                 .set_index(["person_id", "data_table_concept_id", "interval_step"])
                 .to_xarray()
             )
@@ -737,24 +749,32 @@ def get_table(backend_handle, table_name):
     """Extract a table of an OMOP CDM Database."""
     raise ValueError(f"Backend handle {backend_handle} not supported.")
 
+
 @get_table.register(duckdb.DuckDBPyConnection)
 def _(db_instance: duckdb.DuckDBPyConnection, table_name: str) -> pd.DataFrame:
     """Extract a table of an OMOP CDM Database."""
     return _lowercase_column_names(db_instance.sql(f"SELECT * FROM {table_name}").df())
+
 
 @get_table.register(sqlite3.Connection)
 def _(db_instance: sqlite3.Connection, table_name: str) -> pd.DataFrame:
     """Extract a table of an OMOP CDM Database."""
     return _lowercase_column_names(pd.read_sql(f"SELECT * FROM {table_name}", db_instance))
 
+
 @singledispatch
 def _get_table_join(backend_handle, table1, table2, left_key="person_id", right_key="person_id"):
     """Extract a table of an OMOP CDM Database."""
     raise ValueError(f"Backend handle {backend_handle} not supported.")
 
+
 @_get_table_join.register(duckdb.DuckDBPyConnection)
 def _(
-    duckdb_instance: duckdb.DuckDBPyConnection, table1: str, table2: str, left_key: str = "person_id", right_key: str = "person_id"
+    duckdb_instance: duckdb.DuckDBPyConnection,
+    table1: str,
+    table2: str,
+    left_key: str = "person_id",
+    right_key: str = "person_id",
 ) -> pd.DataFrame:
     """Extract a table of an OMOP CDM Database."""
     return _lowercase_column_names(
@@ -766,8 +786,15 @@ def _(
         ).df()
     )
 
+
 @_get_table_join.register(sqlite3.Connection)
-def _(sqlite_instance : sqlite3.Connection, table1: str, table2: str, left_key: str = "person_id", right_key: str = "person_id") -> pd.DataFrame:
+def _(
+    sqlite_instance: sqlite3.Connection,
+    table1: str,
+    table2: str,
+    left_key: str = "person_id",
+    right_key: str = "person_id",
+) -> pd.DataFrame:
     """Extract a table of an OMOP CDM Database."""
     return _lowercase_column_names(
         pd.read_sql(
@@ -775,9 +802,10 @@ def _(sqlite_instance : sqlite3.Connection, table1: str, table2: str, left_key: 
         FROM {table1} as t1 \
         JOIN {table2} as t2 ON t1.{left_key} = t2.{right_key} \
         ",
-        sqlite_instance,
+            sqlite_instance,
         )
     )
+
 
 def _lowercase_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize all column names to lowercase."""
