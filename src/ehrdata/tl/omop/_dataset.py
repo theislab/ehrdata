@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
-from duckdb.duckdb import DuckDBPyConnection
+from duckdb import DuckDBPyConnection
 
 from ehrdata.core._optional_modules_import import lazy_import_torch
 from ehrdata.io.omop._queries import DATA_TABLE_DATE_KEYS
