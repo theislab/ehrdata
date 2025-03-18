@@ -12,18 +12,18 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
--   Expanded documentation
--   Bugfixes
--   Improved OMOP Extraction
+- Expanded documentation
+- Bugfixes
+- Improved OMOP Extraction
 
 ## [0.0.1] - 2024-11-04
 
 ### Added
 
--   Initial release
+- Initial release
 
 ## [Unreleased]
 
 ### Added
 
--   Basic tool, preprocessing and plotting functions
+- Basic tool, preprocessing and plotting functions
