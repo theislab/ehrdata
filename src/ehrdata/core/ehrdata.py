@@ -70,22 +70,20 @@ class EHRData(AnnData):
                 # Create empty X matching r's shape
                 X = np.nan * np.empty((r.shape[0], r.shape[1]))
 
-        # once here, verified a) r has shape[2] if exists. below will verify b) t has same shape as r[2]
-        self.n_t = 0 if r is None else r.shape[2]
-
         # Initialize AnnData with X
         super().__init__(X=X, **kwargs)
 
         # Set r after AnnData initialization
-        if r is not None:
-            self.layers[R_LAYER_KEY] = r
+        self.r = r
 
         # Handle t
+        # T, F
         if r is None and t is not None:
             msg = "`t` can only be specified if `r` is specified"
             raise ValueError(msg)
 
-        if t is not None:
+        # F, F
+        elif r is not None and t is not None:
             if not isinstance(t, pd.DataFrame):
                 msg = f"`t` must be pandas.DataFrame, got {type(t)}"
                 raise TypeError(msg)
@@ -95,6 +93,7 @@ class EHRData(AnnData):
                 raise ValueError(msg)
 
             self.t = t
+        # F, T || T, T
         else:
             # Default t with RangeIndex
             l = 1 if r is None or len(r.shape) <= 2 else r.shape[2]
@@ -179,11 +178,14 @@ class EHRData(AnnData):
             return self.layers.get(R_LAYER_KEY)
 
     # TODO: allow for r to be numpy and dask only?
-    # TODO: check that r and t are aligned
     @r.setter
     def r(self, input: np.ndarray | None) -> None:
-        # assert self.shape == input.shape
-        self.n_t = 0 if input is None else input.shape[2]
+        if input is not None and len(input.shape) != 3:
+            msg = f"`r` must be 3-dimensional, got shape {input.shape}"
+            raise ValueError(msg)
+
+        self._n_t = None if input is None else input.shape[2]
+
         if input is None:
             del self.r
         else:
@@ -192,6 +194,8 @@ class EHRData(AnnData):
     @r.deleter
     def r(self) -> None:
         self.layers.pop(R_LAYER_KEY, None)
+        self.t = None
+        self._n_t = None
 
     @property
     def t(self) -> pd.DataFrame | None:
@@ -200,25 +204,37 @@ class EHRData(AnnData):
 
     @t.setter
     def t(self, input: pd.DataFrame | None) -> None:
+        if input is None and self.r is not None:
+            raise ValueError("`t` cannot be None if `r` is not None")
         self._t = input
 
-    @t.deleter
-    def t(self) -> None:
-        del self._t
-
     @property
-    def n_t(self) -> int:
+    def n_t(self) -> int | None:
         """Number of time points."""
         return self._n_t
 
-    @n_t.setter
-    def n_t(self, input: int) -> None:
-        self._n_t = input
+    @property
+    def X(self):
+        """Data matrix."""
+        return super().X
+
+    @X.setter
+    def X(self, value):
+        # this is a bit hacky, but anndata checks its own shape to match the shape of X
+        n_t = self.n_t
+        self._n_t = None
+
+        super(EHRData, self.__class__).X.fset(self, value)
+
+        self._n_t = n_t
 
     @property
-    def shape(self) -> tuple[int, int, int]:
+    def shape(self) -> tuple[int, int] | tuple[int, int, int]:
         """Shape of data matrix (:attr:`n_obs`, :attr:`n_vars`)."""
-        return self.n_obs, self.n_vars, self.n_t
+        if not self.n_t:
+            return self.n_obs, self.n_vars
+        else:
+            return self.n_obs, self.n_vars, self.n_t
 
     def __repr__(self) -> str:
         parent_repr = super().__repr__()
@@ -237,10 +253,7 @@ class EHRData(AnnData):
                 line.replace(f"'{R_LAYER_KEY}', ", "")
             if self.r is not None and "n_obs × n_vars" in line:
                 line_splits = line.split("object with")
-                line = (
-                    line_splits[0]
-                    + f"object with n_obs × n_vars × n_t = {self.r.shape[0]} × {self.r.shape[1]} × {self.r.shape[2]}"
-                )
+                line = line_splits[0] + f"object with n_obs × n_vars × n_t = {self.n_obs} × {self.n_vars} × {self.n_t}"
             lines_ehrdata.append(line)
 
         if self.r is not None:

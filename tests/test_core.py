@@ -8,7 +8,12 @@ from ehrdata.core.constants import R_LAYER_KEY
 
 def test_ehrdata_init_vanilla_empty():
     edata = EHRData()
+    assert edata.X is None
     assert edata.r is None
+
+    assert edata.obs is not None
+    assert edata.var is not None
+    assert edata.t is not None
 
 
 def test_ehrdata_init_vanilla_X():
@@ -20,10 +25,15 @@ def test_ehrdata_init_vanilla_X():
     assert adata.X is not None
     assert adata.obs is not None
     assert adata.var is not None
+    assert adata.r is None
 
-    assert adata.shape[0] == 3
-    assert adata.shape[1] == 2
-    assert adata.shape[2] == 0
+    assert hasattr(adata, "t")
+    assert adata.t is not None
+
+    assert adata.shape == (3, 2)
+    assert adata.n_obs == 3
+    assert adata.n_vars == 2
+    assert adata.n_t is None
 
 
 def test_ehrdata_init_vanilla_r():
@@ -46,9 +56,10 @@ def test_ehrdata_init_vanilla_r():
     assert adata.var.shape == (2, 1)
     assert adata.layers[R_LAYER_KEY].shape == (3, 2, 2)
 
-    assert adata.shape[0] == 3
-    assert adata.shape[1] == 2
-    assert adata.shape[2] == 2
+    assert adata.shape == (3, 2, 2)
+    assert adata.n_obs == 3
+    assert adata.n_vars == 2
+    assert adata.n_t == 2
 
 
 def test_ehrdata_init_vanilla_X_and_r():
@@ -72,19 +83,20 @@ def test_ehrdata_init_vanilla_X_and_r():
     assert adata.var.shape == (2, 1)
     assert adata.layers[R_LAYER_KEY].shape == (3, 2, 2)
 
-    assert adata.shape[0] == 3
-    assert adata.shape[1] == 2
-    assert adata.shape[2] == 2
+    assert adata.shape == (3, 2, 2)
+    assert adata.n_obs == 3
+    assert adata.n_vars == 2
+    assert adata.n_t == 2
 
 
 def test_ehrdata_init_vanilla_r_add_X():
-    # X = np.array([[1, 2], [3, 4], [5, 6]])
+    X = np.array([[1, 2], [3, 4], [5, 6]])
     obs = pd.DataFrame({"obs1": [1, 2, 3]})
     var = pd.DataFrame({"var1": [1, 2]})
     r = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]])
 
     adata = EHRData(obs=obs, r=r, var=var)
-    # adata.X = X # TODO: now wrong shape of AnnData..?
+    adata.X = X  # TODO: now wrong shape of AnnData..?
     assert adata.X is not None
     assert adata.obs is not None
     assert adata.var is not None
@@ -99,9 +111,10 @@ def test_ehrdata_init_vanilla_r_add_X():
     assert adata.var.shape == (2, 1)
     assert adata.layers[R_LAYER_KEY].shape == (3, 2, 2)
 
-    assert adata.shape[0] == 3
-    assert adata.shape[1] == 2
-    assert adata.shape[2] == 2
+    assert adata.shape == (3, 2, 2)
+    assert adata.n_obs == 3
+    assert adata.n_vars == 2
+    assert adata.n_t == 2
 
 
 def test_ehrdata_init_vanilla_X_add_r():
@@ -126,9 +139,24 @@ def test_ehrdata_init_vanilla_X_add_r():
     assert adata.var.shape == (2, 1)
     assert adata.layers[R_LAYER_KEY].shape == (3, 2, 2)
 
-    assert adata.shape[0] == 3
-    assert adata.shape[1] == 2
-    assert adata.shape[2] == 2
+    assert adata.shape == (3, 2, 2)
+    assert adata.n_obs == 3
+    assert adata.n_vars == 2
+    assert adata.n_t == 2
+
+
+def test_ehrdata_init_fail_r_2D():
+    r = np.array([[1, 2], [3, 4]])
+    with pytest.raises(ValueError):
+        EHRData(r=r)
+
+
+def test_ehrdata_X_add_r_2D():
+    X = np.array([[1, 2], [3, 4]])
+    r = np.array([[1, 2], [3, 4]])
+    adata = EHRData(X=X)
+    with pytest.raises(ValueError):
+        adata.r = r
 
 
 def test_ehrdata_init_fail_X_and_r_mismatch():
@@ -171,6 +199,36 @@ def test_ehrdata_init_fail_r_and_t_mismatch():
 
     with pytest.raises(ValueError):
         EHRData(X=X, obs=obs, r=r, t=t, var=var)
+
+
+def test_ehrdata_del_r():
+    X = np.array([[1, 2], [3, 4], [5, 6]])
+    r = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]])
+    adata = EHRData(X=X, r=r)
+    del adata.r
+
+    assert adata.r is None
+    assert adata.t is None
+
+    assert adata.shape == (3, 2)
+    assert adata.n_obs == 3
+    assert adata.n_vars == 2
+    assert adata.n_t is None
+
+
+# def test_fail_set_t_invalid_shape():
+#     r = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]])
+#     t = pd.DataFrame({"t1": [1, 2, 3]})
+#     adata = EHRData(r=r)
+#     with pytest.raises(ValueError):
+#         adata.t = t
+
+
+def test_fail_set_t_to_None():
+    r = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]])
+    adata = EHRData(r=r)
+    with pytest.raises(ValueError):
+        adata.t = None
 
 
 def test_ehrdata_slice_2D_vanilla():
@@ -221,6 +279,8 @@ def test_copy():
 def test_repr():
     pass
 
+
+# TODO: test that r has shape 3
 
 # TODO:
 # - test that r is an arrayview?
