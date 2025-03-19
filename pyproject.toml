@@ -28,8 +28,11 @@ dependencies = [
   "anndata",
   "awkward",
   "duckdb",
+  "filelock",
   # for debug logging (referenced from the issue template)
   "lamin-utils",
+  "requests",
+  "rich",
   "session-info",
   "xarray",
 ]
