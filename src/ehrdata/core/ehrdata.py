@@ -262,7 +262,7 @@ class EHRData(AnnData):
 
     @property
     def shape(self) -> tuple[int, int] | tuple[int, int, int]:
-        """Shape of data matrix (:attr:`n_obs`, :attr:`n_vars`)."""
+        """Shape of data (`n_obs`, `n_vars`, `n_t`)."""
         if self.n_t is None:
             return self.n_obs, self.n_vars
         else:
