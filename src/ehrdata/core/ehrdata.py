@@ -43,6 +43,8 @@ class EHRData(AnnData):
         t: pd.DataFrame | None = None,
         **kwargs,
     ):
+        self._tidx = None
+
         # Check if r is already present in layers
         r_existing = kwargs.get("layers", {}).get(R_LAYER_KEY)
         if r is not None and r_existing is not None:
@@ -62,6 +64,8 @@ class EHRData(AnnData):
                 msg = f"`r` must be 3-dimensional, got shape {r.shape}"
                 raise ValueError(msg)
 
+            self._n_t = r.shape[2]
+
             if X is not None:
                 if X.shape[:2] != r.shape[:2]:
                     msg = f"Shape mismatch between X {X.shape} and r {r.shape}"
@@ -73,14 +77,16 @@ class EHRData(AnnData):
         # Initialize AnnData with X
         super().__init__(X=X, **kwargs)
 
-        # Set r after AnnData initialization
+        # Can set r only after AnnData initialization
         self.r = r
 
         # Handle t
+        if r is None and t is None:
+            self.t = pd.DataFrame([])
         # T, F
-        if r is None and t is not None:
-            msg = "`t` can only be specified if `r` is specified"
-            raise ValueError(msg)
+        elif r is None and t is not None:
+            self._n_t = len(t)
+            self.t = t
 
         # F, F
         elif r is not None and t is not None:
@@ -94,7 +100,7 @@ class EHRData(AnnData):
 
             self.t = t
         # F, T || T, T
-        else:
+        elif r is not None:
             # Default t with RangeIndex
             l = 1 if r is None or len(r.shape) <= 2 else r.shape[2]
             self.t = pd.DataFrame(index=pd.RangeIndex(l))
@@ -106,6 +112,7 @@ class EHRData(AnnData):
         *,
         r: np.ndarray | None = None,
         t: pd.DataFrame | None = None,
+        tidx: slice | None = None,
     ) -> EHRData:
         """Create an EHRData object from an AnnData object.
 
@@ -117,6 +124,8 @@ class EHRData(AnnData):
             3-Dimensional tensor, see :attr:`r`.
         t
             Time dataframe for describing third axis, see :attr:`t`.
+        tidx
+            A slice for the 3rd dimension :attr:`r`. Usually, this will be None here.
 
         Returns
         -------
@@ -128,7 +137,9 @@ class EHRData(AnnData):
             # use _init_as_view of adata, but don't subset since already sliced in __getitem__
             instance._init_as_view(adata, slice(None), slice(None))
             # The tidx is not part of AnnData, so we need to set it separately. Setting it is required for the getter of r
-            instance._tidx = adata._tidx
+            instance._tidx = tidx
+            # _n_t is not part of AnnData, so need to set it separately
+            instance._n_t = None if r is None else r.shape[2]
 
             # t is not part of AnnData, so we need to set it separately
             if t is not None:
@@ -152,7 +163,10 @@ class EHRData(AnnData):
                 filemode=adata.file._filemode,
             )
             # Set r and t directly for actual objects
-            if r is not None:
+            if r is None:
+                instance._n_t = 0
+            else:
+                instance._n_t = r.shape[2]
                 instance.layers[R_LAYER_KEY] = r
             if t is not None:
                 instance.t = t
@@ -183,8 +197,11 @@ class EHRData(AnnData):
         if input is not None and len(input.shape) != 3:
             msg = f"`r` must be 3-dimensional, got shape {input.shape}"
             raise ValueError(msg)
+        if input is not None and input.shape != self.shape:
+            msg = f"`r` must be of shape of EHRData {self.shape}, but is {input.shape}"
+            raise ValueError(msg)
 
-        self._n_t = None if input is None else input.shape[2]
+        self._n_t = 0 if input is None else input.shape[2]
 
         if input is None:
             del self.r
@@ -194,24 +211,39 @@ class EHRData(AnnData):
     @r.deleter
     def r(self) -> None:
         self.layers.pop(R_LAYER_KEY, None)
-        self.t = None
-        self._n_t = None
+        self._n_t = 0
+        self.t = pd.DataFrame([])
 
     @property
-    def t(self) -> pd.DataFrame | None:
+    def t(self) -> pd.DataFrame:
         """Time dataframe for describing third axis."""
         return self._t
 
     @t.setter
-    def t(self, input: pd.DataFrame | None) -> None:
-        if input is None and self.r is not None:
-            raise ValueError("`t` cannot be None if `r` is not None")
+    def t(self, input: pd.DataFrame) -> None:
+        if not isinstance(input, pd.DataFrame):
+            raise ValueError("Can only assign pd.DataFrame to t.")
+        if self.n_t is not None:
+            if len(input) != self.n_t:
+                raise ValueError(
+                    f"Length of passed value for t is {len(input)}, but this EHRData has shape: {self.shape}"
+                )
+
         self._t = input
+        self._n_t = len(input)
 
     @property
     def n_t(self) -> int | None:
         """Number of time points."""
         return self._n_t
+
+    @property
+    def _tidx(self) -> slice | None:
+        return self.__tidx
+
+    @_tidx.setter
+    def _tidx(self, input) -> None:
+        self.__tidx = input
 
     @property
     def X(self):
@@ -231,7 +263,7 @@ class EHRData(AnnData):
     @property
     def shape(self) -> tuple[int, int] | tuple[int, int, int]:
         """Shape of data matrix (:attr:`n_obs`, :attr:`n_vars`)."""
-        if not self.n_t:
+        if self.n_t is None:
             return self.n_obs, self.n_vars
         else:
             return self.n_obs, self.n_vars, self.n_t
@@ -285,10 +317,14 @@ class EHRData(AnnData):
         """
         oidx, vidx, tidx = self._unpack_index(index)
         adata_sliced = super().__getitem__((oidx, vidx))
-        adata_sliced._tidx = tidx
-        r_sliced = None if self.r is None else adata_sliced.layers[R_LAYER_KEY][:, :, tidx]
+
         t_sliced = None if self.t is None else self.t.iloc[tidx]
-        return EHRData.from_adata(adata=adata_sliced, r=r_sliced, t=t_sliced)
+
+        if self._tidx is not None:
+            tidx = self._resolve_slice(self._tidx, tidx, self._adata_ref.n_t)
+
+        r_sliced = None if self.r is None else adata_sliced.layers[R_LAYER_KEY][:, :, tidx]
+        return EHRData.from_adata(adata=adata_sliced, r=r_sliced, t=t_sliced, tidx=tidx)
 
     def _unpack_index(self, index: Index) -> tuple[Index1D, Index1D, Index1D]:
         if not isinstance(index, tuple):
@@ -308,4 +344,17 @@ class EHRData(AnnData):
             super().copy(),
             r=None if self.r is None else self.r.copy(),
             t=None if self.t is None else self.t.copy(),
+            tidx=self._tidx,
         )
+
+    def _resolve_slice(self, slice1, slice2, seq_length) -> slice:
+        """Combines two slices to produce a single equivalent slice."""
+        start1, stop1, step1 = slice1.indices(seq_length)
+        start2, stop2, step2 = slice2.indices(stop1 - start1)  # Limit second slice range to first slice's output
+
+        # Compute new start, stop, and step
+        new_start = start1 + start2 * step1
+        new_stop = start1 + stop2 * step1 if stop2 is not None else None
+        new_step = step1 * step2  # Combine steps
+
+        return slice(new_start, new_stop, new_step)

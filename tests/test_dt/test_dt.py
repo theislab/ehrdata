@@ -87,7 +87,7 @@ def test_physionet2012_arguments():
         aggregation_strategy="first",
         drop_samples=None,
     )
-    assert edata.shape == (12000, 37)
+    assert edata.shape == (12000, 37, 24)
 
     assert edata.r.shape == (12000, 37, 24)
     assert edata.obs.shape == (12000, 10)

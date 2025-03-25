@@ -318,6 +318,9 @@ def physionet2012(
     t = xa["interval_step"].to_dataframe()
     r = xa["Value"].values
 
+    obs.index = obs.index.astype(str)
+    var.index = var.index.astype(str)
+
     edata = EHRData(r=r, obs=obs, var=var, t=t)
 
     return edata[~edata.obs.index.isin(drop_samples or [])]
