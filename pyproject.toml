@@ -62,8 +62,7 @@ optional-dependencies.ehrapy = [
   "ehrapy",
 ]
 optional-dependencies.lamin = [
-  "bionty",
-  "lamindb>=1",
+  "lamindb[bionty,jupyter]",
   "omop",
   "rich",
 ]
