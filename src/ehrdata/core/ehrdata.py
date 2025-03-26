@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 from anndata._core.access import ElementRef
-from anndata._core.views import DataFrameView, as_view
+from anndata._core.views import DataFrameView, _resolve_idx, as_view
 
 from ehrdata.core.constants import R_LAYER_KEY
 from ehrdata.core.index import _subset
@@ -187,7 +187,7 @@ class EHRData(AnnData):
                     ),
                     ElementRef(self, "layers", (R_LAYER_KEY,)),
                 )
-                return r
+                return r  # ß.reshape(self.n_obs, self.n_vars, self.n_t)
         else:
             return self.layers.get(R_LAYER_KEY)
 
@@ -320,8 +320,16 @@ class EHRData(AnnData):
 
         t_sliced = None if self.t is None else self.t.iloc[tidx]
 
+        if self._tidx is None:
+            # the input tidx might be of various kinds, and we want to store
+            # a resolved version in AnnData style
+            tidx = _resolve_idx(slice(None), tidx, self.n_t)
         if self._tidx is not None:
-            tidx = self._resolve_slice(self._tidx, tidx, self._adata_ref.n_t)
+            tidx = _resolve_idx(self._tidx, tidx, self._adata_ref.n_t)
+
+        # if tidx is an integer, numpy's automatic dimension reduction by drops an axis
+        if isinstance(tidx, (int | np.integer)):
+            tidx = slice(tidx, tidx + 1)
 
         r_sliced = None if self.r is None else adata_sliced.layers[R_LAYER_KEY][:, :, tidx]
         return EHRData.from_adata(adata=adata_sliced, r=r_sliced, t=t_sliced, tidx=tidx)
@@ -347,14 +355,45 @@ class EHRData(AnnData):
             tidx=self._tidx,
         )
 
-    def _resolve_slice(self, slice1, slice2, seq_length) -> slice:
-        """Combines two slices to produce a single equivalent slice."""
-        start1, stop1, step1 = slice1.indices(seq_length)
-        start2, stop2, step2 = slice2.indices(stop1 - start1)  # Limit second slice range to first slice's output
+    # def _resolve_slice(self, slice1, slice2, seq_length) -> slice:
+    #     """Combines two slices to produce a single equivalent slice."""
+    #     start1, stop1, step1 = slice1.indices(seq_length)
+    #     start2, stop2, step2 = slice2.indices(stop1 - start1)  # Limit second slice range to first slice's output
 
-        # Compute new start, stop, and step
-        new_start = start1 + start2 * step1
-        new_stop = start1 + stop2 * step1 if stop2 is not None else None
-        new_step = step1 * step2  # Combine steps
+    #     # Compute new start, stop, and step
+    #     new_start = start1 + start2 * step1
+    #     new_stop = start1 + stop2 * step1 if stop2 is not None else None
+    #     new_step = step1 * step2  # Combine steps
 
-        return slice(new_start, new_stop, new_step)
+    #     return slice(new_start, new_stop, new_step)
+
+    # def _resolve_index(
+    #     self, ind1: slice | Sequence[int | bool] | None, ind2: slice | Sequence[int | bool] | None, seq_length: int
+    # ) -> np.ndarray | slice:
+    #     """Resolves two indices (boolean, slices, or integer indices) into one final index."""
+    #     # Convert None to a full slice
+    #     if ind1 is None:
+    #         ind1 = slice(None)
+    #     if ind2 is None:
+    #         ind2 = slice(None)
+
+    #     # Convert slices to actual arrays of indices
+    #     if isinstance(ind1, slice):
+    #         ind1 = np.arange(seq_length)[ind1]
+    #     if isinstance(ind2, slice):
+    #         ind2 = np.arange(len(ind1))[ind2]  # ind1 has already narrowed the range
+
+    #     # Convert boolean masks to integer indices
+    #     if (isinstance(ind1, np.ndarray) and ind1.dtype == bool) or (
+    #         isinstance(ind1, Sequence) and type(ind1[0]) == bool
+    #     ):
+    #         ind1 = np.where(ind1)[0]
+    #     if (isinstance(ind2, np.ndarray) and ind2.dtype == bool) or (
+    #         isinstance(ind1, Sequence) and type(ind1[0]) == bool
+    #     ):
+    #         ind2 = np.where(ind2)[0]
+
+    #     # Merge the two indices correctly
+    #     resolved_index = np.array(ind1)[ind2]  # Apply ind2 on ind1
+
+    #     return resolved_index
