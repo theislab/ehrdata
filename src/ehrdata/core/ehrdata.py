@@ -5,11 +5,9 @@ from typing import TYPE_CHECKING, TypeAlias
 import numpy as np
 import pandas as pd
 from anndata import AnnData
-from anndata._core.access import ElementRef
-from anndata._core.views import DataFrameView, _resolve_idx, as_view
+from anndata._core.views import DataFrameView, _resolve_idx
 
 from ehrdata.core.constants import R_LAYER_KEY
-from ehrdata.core.index import _subset
 
 if TYPE_CHECKING:
     from anndata._core.index import Index as ADIndex
@@ -83,12 +81,11 @@ class EHRData(AnnData):
         # Handle t
         if r is None and t is None:
             self.t = pd.DataFrame([])
-        # T, F
+
         elif r is None and t is not None:
             self._n_t = len(t)
             self.t = t
 
-        # F, F
         elif r is not None and t is not None:
             if not isinstance(t, pd.DataFrame):
                 msg = f"`t` must be pandas.DataFrame, got {type(t)}"
@@ -99,7 +96,7 @@ class EHRData(AnnData):
                 raise ValueError(msg)
 
             self.t = t
-        # F, T || T, T
+
         elif r is not None:
             # Default t with RangeIndex
             l = 1 if r is None or len(r.shape) <= 2 else r.shape[2]
@@ -180,14 +177,7 @@ class EHRData(AnnData):
             if self._adata_ref.layers.get(R_LAYER_KEY) is None:
                 return None
             else:
-                r = as_view(
-                    _subset(
-                        self._adata_ref.layers.get(R_LAYER_KEY),
-                        (self._oidx, self._vidx, self._tidx if self._tidx is not None else slice(None)),
-                    ),
-                    ElementRef(self, "layers", (R_LAYER_KEY,)),
-                )
-                return r  # ß.reshape(self.n_obs, self.n_vars, self.n_t)
+                return self.layers.get(R_LAYER_KEY)[:, :, self._tidx]
         else:
             return self.layers.get(R_LAYER_KEY)
 
@@ -281,8 +271,15 @@ class EHRData(AnnData):
         # Filter out R_LAYER_KEY from layers line because it's a special layer called r
         lines_ehrdata = []
         for line in lines_anndata:
-            if line == f"    layers: '{R_LAYER_KEY}'":
-                line.replace(f"'{R_LAYER_KEY}', ", "")
+            if "layers:" in line and R_LAYER_KEY in line:
+                # Handle case where r_layer is the only layer
+                if line == f"    layers: '{R_LAYER_KEY}'":
+                    # Skip this line completely
+                    continue
+                # Handle case where r_layer is among other layers
+                line = line.replace(f"'{R_LAYER_KEY}', ", "")
+                line = line.replace(f", '{R_LAYER_KEY}'", "")
+
             if self.r is not None and "n_obs × n_vars" in line:
                 line_splits = line.split("object with")
                 line = line_splits[0] + f"object with n_obs × n_vars × n_t = {self.n_obs} × {self.n_vars} × {self.n_t}"
@@ -354,46 +351,3 @@ class EHRData(AnnData):
             t=None if self.t is None else self.t.copy(),
             tidx=self._tidx,
         )
-
-    # def _resolve_slice(self, slice1, slice2, seq_length) -> slice:
-    #     """Combines two slices to produce a single equivalent slice."""
-    #     start1, stop1, step1 = slice1.indices(seq_length)
-    #     start2, stop2, step2 = slice2.indices(stop1 - start1)  # Limit second slice range to first slice's output
-
-    #     # Compute new start, stop, and step
-    #     new_start = start1 + start2 * step1
-    #     new_stop = start1 + stop2 * step1 if stop2 is not None else None
-    #     new_step = step1 * step2  # Combine steps
-
-    #     return slice(new_start, new_stop, new_step)
-
-    # def _resolve_index(
-    #     self, ind1: slice | Sequence[int | bool] | None, ind2: slice | Sequence[int | bool] | None, seq_length: int
-    # ) -> np.ndarray | slice:
-    #     """Resolves two indices (boolean, slices, or integer indices) into one final index."""
-    #     # Convert None to a full slice
-    #     if ind1 is None:
-    #         ind1 = slice(None)
-    #     if ind2 is None:
-    #         ind2 = slice(None)
-
-    #     # Convert slices to actual arrays of indices
-    #     if isinstance(ind1, slice):
-    #         ind1 = np.arange(seq_length)[ind1]
-    #     if isinstance(ind2, slice):
-    #         ind2 = np.arange(len(ind1))[ind2]  # ind1 has already narrowed the range
-
-    #     # Convert boolean masks to integer indices
-    #     if (isinstance(ind1, np.ndarray) and ind1.dtype == bool) or (
-    #         isinstance(ind1, Sequence) and type(ind1[0]) == bool
-    #     ):
-    #         ind1 = np.where(ind1)[0]
-    #     if (isinstance(ind2, np.ndarray) and ind2.dtype == bool) or (
-    #         isinstance(ind1, Sequence) and type(ind1[0]) == bool
-    #     ):
-    #         ind2 = np.where(ind2)[0]
-
-    #     # Merge the two indices correctly
-    #     resolved_index = np.array(ind1)[ind2]  # Apply ind2 on ind1
-
-    #     return resolved_index
