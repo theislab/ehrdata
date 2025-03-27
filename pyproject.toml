@@ -62,8 +62,7 @@ optional-dependencies.ehrapy = [
   "ehrapy",
 ]
 optional-dependencies.lamin = [
-  "bionty",
-  "lamindb>=1",
+  "lamindb[bionty,jupyter]",
   "omop",
   "rich",
 ]
@@ -143,6 +142,10 @@ testpaths = [ "tests" ]
 xfail_strict = true
 addopts = [
   "--import-mode=importlib", # allow using test files with same name
+  "-m not slow",
+]
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
 
 [tool.coverage.run]
