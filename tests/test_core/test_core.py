@@ -50,13 +50,10 @@ def test_ehrdata_init_vanilla_X(X_32):
 
     assert edata.r is None
 
-    assert hasattr(edata, "obs")
     assert edata.obs.shape == (3, 0)
 
-    assert hasattr(edata, "var")
     assert edata.var.shape == (2, 0)
 
-    assert hasattr(edata, "t")
     assert edata.t.shape == (0, 0)
 
 
@@ -68,13 +65,10 @@ def test_ehrdata_init_vanilla_r(r_322):
     assert edata.layers[R_LAYER_KEY] is not None
     assert edata.layers[R_LAYER_KEY].shape == (3, 2, 2)
 
-    assert hasattr(edata, "obs")
     assert edata.obs.shape == (3, 0)
 
-    assert hasattr(edata, "var")
     assert edata.var.shape == (2, 0)
 
-    assert hasattr(edata, "t")
     assert edata.t.shape == (2, 0)
 
 
@@ -318,7 +312,6 @@ def test_ehrdata_subset_slice_3D_repeated(edata_333):
 
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (1, 1, 1))
-    assert hasattr(edata_sliced, "r")
     assert edata_sliced.r.shape == (1, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
 
@@ -390,7 +383,6 @@ def test_ehrdata_subset_boolindex_repeated(edata_333):
 
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (1, 1, 1))
-    assert hasattr(edata_sliced, "r")
     assert edata_sliced.r.shape == (1, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
 
@@ -418,7 +410,6 @@ def test_ehrdata_subset_numberindex_repeated(edata_333):
 
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (1, 1, 1))
-    assert hasattr(edata_sliced, "r")
     assert edata_sliced.r.shape == (1, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
 
