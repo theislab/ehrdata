@@ -152,7 +152,7 @@ class EHRData(AnnData):
                 msg = f"`t` must be pandas.DataFrame, got {type(t)}"
                 raise TypeError(msg)
 
-            if r is not None and len(t) != r.shape[2]:
+            if len(t) != r.shape[2]:
                 msg = f"Shape mismatch between r's third dimension {r.shape[2]} and t {len(t)}"
                 raise ValueError(msg)
 

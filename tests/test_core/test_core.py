@@ -7,7 +7,7 @@ from ehrdata import EHRData
 from ehrdata.core.constants import R_LAYER_KEY
 
 
-def _shape_test(edata: EHRData, shape: tuple[int, int, int]):
+def _assert_shape_matches(edata: EHRData, shape: tuple[int, int, int]):
     assert edata.shape == shape
 
     assert isinstance(edata.obs, pd.DataFrame)
@@ -36,18 +36,11 @@ def _assert_fields_are_view(edata: EHRData):
 def test_ehrdata_init_vanilla_empty():
     edata = EHRData()
 
-    _shape_test(edata, (0, 0, 0))
-
+    _assert_shape_matches(edata, (0, 0, 0))
     assert edata.X is None
     assert edata.r is None
-
-    assert hasattr(edata, "obs")
     assert edata.obs.shape == (0, 0)
-
-    assert hasattr(edata, "var")
     assert edata.var.shape == (0, 0)
-
-    assert hasattr(edata, "t")
     assert edata.t.shape == (0, 0)
 
 
