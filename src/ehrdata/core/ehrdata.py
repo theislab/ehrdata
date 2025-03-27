@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeAlias
+from collections.abc import Iterable, Mapping, Sequence
+from os import PathLike
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 import numpy as np
 import pandas as pd
@@ -23,28 +25,69 @@ class EHRData(AnnData):
 
     Parameters
     ----------
-    X
-        See :attr:`~anndata.AnnData.X`.
-    r
-        3-Dimensional tensor. See :attr:`r`.
-    t
-        Time dataframe for describing third axis. See :attr:`t`.
+        X
+            A #observations × #variables data matrix. A view of the data is used if the
+            data type matches, otherwise, a copy is made.
+        r
+            A #observations x #variables x #timesteps data array. A view of the data is used if the
+            data type matches, otherwise, a copy is made.
+        obs
+            Key-indexed one-dimensional observations annotation of length #observations.
+        var
+            Key-indexed one-dimensional variables annotation of length #variables.
+        t
+            Key-indexed one-dimensional time annotation of length #timesteps.
+        uns
+            Key-indexed unstructured annotation.
+        obsm
+            Key-indexed multi-dimensional observations annotation of length #observations.
+            If passing a :class:`~numpy.ndarray`, it needs to have a structured datatype.
+        varm
+            Key-indexed multi-dimensional variables annotation of length #variables.
+            If passing a :class:`~numpy.ndarray`, it needs to have a structured datatype.
+        layers
+            Key-indexed multi-dimensional arrays aligned to dimensions of `X`.
+        shape
+            Shape tuple (#observations, #variables). Can only be provided if `X` is `None`.
+        filename
+            Name of backing file. See :class:`h5py.File`.
+        filemode
+            Open mode of backing file. See :class:`h5py.File`.
     """
 
     _t: pd.DataFrame | None
 
     def __init__(
         self,
-        X=None,
-        r: np.ndarray | None = None,
+        X: np.ndarray | pd.DataFrame | None = None,
         *,
+        r: np.ndarray | None = None,
+        obs: pd.DataFrame | Mapping[str, Iterable[Any]] | None = None,
+        var: pd.DataFrame | Mapping[str, Iterable[Any]] | None = None,
         t: pd.DataFrame | None = None,
-        **kwargs,
+        uns: Mapping[str, Any] | None = None,
+        obsm: np.ndarray | Mapping[str, Sequence[Any]] | None = None,
+        varm: np.ndarray | Mapping[str, Sequence[Any]] | None = None,
+        layers: Mapping[str, np.ndarray] | None = None,
+        raw: Mapping[str, Any] | None = None,
+        dtype: np.dtype | type | str | None = None,
+        shape: tuple[int, int] | None = None,
+        filename: PathLike[str] | str | None = None,
+        filemode: Literal["r", "r+"] | None = None,
+        asview: bool = False,
+        obsp: np.ndarray | Mapping[str, Sequence[Any]] | None = None,
+        varp: np.ndarray | Mapping[str, Sequence[Any]] | None = None,
+        oidx: Index1D | None = None,
+        vidx: Index1D | None = None,
+        tidx: Index1D | None = None,
     ):
         self._tidx = None
 
         # Check if r is already present in layers
-        r_existing = kwargs.get("layers", {}).get(R_LAYER_KEY)
+        if layers is not None:
+            r_existing = layers.get(R_LAYER_KEY)
+        else:
+            r_existing = None
         if r is not None and r_existing is not None:
             msg = f"`r` is both specified and already present in `layers[{R_LAYER_KEY}]`."
             raise ValueError(msg)
@@ -72,11 +115,29 @@ class EHRData(AnnData):
                 # Create empty X matching r's shape
                 X = np.nan * np.empty((r.shape[0], r.shape[1]))
 
-        # Initialize AnnData with X
-        super().__init__(X=X, **kwargs)
+        super().__init__(
+            X=X,
+            obs=obs,
+            var=var,
+            uns=uns,
+            obsm=obsm,
+            varm=varm,
+            layers=layers,
+            raw=raw,
+            dtype=dtype,
+            shape=shape,
+            filename=filename,
+            filemode=filemode,
+            asview=asview,
+            obsp=obsp,
+            varp=varp,
+            oidx=oidx,
+            vidx=vidx,
+        )
 
-        # Can set r only after AnnData initialization
+        # Can set r, tidx only after AnnData initialization
         self.r = r
+        self._tidx = tidx
 
         # Handle t
         if r is None and t is None:
