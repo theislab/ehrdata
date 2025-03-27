@@ -331,6 +331,7 @@ class EHRData(AnnData):
 
         # Filter out R_LAYER_KEY from layers line because it's a special layer called r
         lines_ehrdata = []
+        position_of_t = 1
         for line in lines_anndata:
             if "layers:" in line and R_LAYER_KEY in line:
                 # Handle case where r_layer is the only layer
@@ -344,10 +345,16 @@ class EHRData(AnnData):
             if self.r is not None and "n_obs × n_vars" in line:
                 line_splits = line.split("object with")
                 line = line_splits[0] + f"object with n_obs × n_vars × n_t = {self.n_obs} × {self.n_vars} × {self.n_t}"
+
+            if "obs:" in line or "var:" in line:
+                position_of_t += 1
+
             lines_ehrdata.append(line)
 
-        if self.r is not None:
-            lines_ehrdata.insert(2, f"    t: {list(self.t.index.astype(str))}".replace("[", "").replace("]", ""))
+        if not self.t.empty:
+            lines_ehrdata.insert(
+                position_of_t, f"    t: {list(self.t.index.astype(str))}".replace("[", "").replace("]", "")
+            )
 
         # Add shape info only if X or r are present
         shape_info = []
