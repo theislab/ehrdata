@@ -46,7 +46,7 @@ def test_ehrdata_init_vanilla_empty():
 
 def test_ehrdata_init_vanilla_X(X_32):
     edata = EHRData(X=X_32)
-    _shape_test(edata, (3, 2, 0))
+    _assert_shape_matches(edata, (3, 2, 0))
 
     assert edata.r is None
 
@@ -62,7 +62,7 @@ def test_ehrdata_init_vanilla_X(X_32):
 
 def test_ehrdata_init_vanilla_r(r_322):
     edata = EHRData(r=r_322)
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
 
     assert edata.layers is not None
     assert edata.layers[R_LAYER_KEY] is not None
@@ -80,7 +80,7 @@ def test_ehrdata_init_vanilla_r(r_322):
 
 def test_ehrdata_init_vanilla_X_and_r(X_32, r_322):
     edata = EHRData(X=X_32, r=r_322)
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
 
     assert edata.layers is not None
     assert edata.r is not None
@@ -94,7 +94,7 @@ def test_ehrdata_init_vanilla_X_and_r(X_32, r_322):
 
 def test_ehrdata_init_vanilla_X_and_t(X_32, t_21):
     edata = EHRData(X=X_32, t=t_21)
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
 
     assert edata.layers is not None
     assert edata.r is None
@@ -107,7 +107,7 @@ def test_ehrdata_init_vanilla_X_and_t(X_32, t_21):
 
 def test_ehrdata_init_vanilla_X_and_r_and_t(X_32, r_322, t_21):
     edata = EHRData(X=X_32, r=r_322, t=t_21)
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
 
     assert edata.layers is not None
     assert edata.r is not None
@@ -124,17 +124,17 @@ def test_ehrdata_init_vanilla_X_and_r_and_t(X_32, r_322, t_21):
 #################################################################
 def test_ehrdata_init_vanilla_obs(obs_31):
     edata = EHRData(obs=obs_31)
-    _shape_test(edata, (3, 0, 0))
+    _assert_shape_matches(edata, (3, 0, 0))
 
 
 def test_ehrdata_init_vanilla_var(var_31):
     edata = EHRData(var=var_31)
-    _shape_test(edata, (0, 3, 0))
+    _assert_shape_matches(edata, (0, 3, 0))
 
 
 def test_ehrdata_init_vanilla_t(t_31):
     edata = EHRData(t=t_31)
-    _shape_test(edata, (0, 0, 3))
+    _assert_shape_matches(edata, (0, 0, 3))
 
 
 #################################################################
@@ -143,25 +143,25 @@ def test_ehrdata_init_vanilla_t(t_31):
 def test_ehrdata_init_r_assign_X_t(X_32, r_322, t_21):
     edata = EHRData(r=r_322)
     edata.X = X_32
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
     assert edata.t.shape == (2, 0)
 
     edata = EHRData(r=r_322)
     edata.t = t_21
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
     assert edata.t.shape == (2, 1)
 
     # for assignment of X and t, test both orders
     edata = EHRData(r=r_322)
     edata.X = X_32
     edata.t = t_21
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
     assert edata.t.shape == (2, 1)
 
     edata = EHRData(r=r_322)
     edata.t = t_21
     edata.X = X_32
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
     assert edata.t.shape == (2, 1)
 
 
@@ -189,7 +189,7 @@ def test_ehrdata_init_X_r_assign_t(X_32, r_322, t_21):
     edata = EHRData(X=X_32, r=r_322)
 
     edata.t = t_21
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
     assert edata.t.shape == (2, 1)
 
 
@@ -197,7 +197,7 @@ def test_ehrdata_init_X_t_assign_r(X_32, r_322, t_21):
     edata = EHRData(X=X_32, t=t_21)
 
     edata.r = r_322
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
     assert edata.t.shape == (2, 1)
 
 
@@ -205,7 +205,7 @@ def test_ehrdata_init_r_t_assign_X(X_32, r_322, t_21):
     edata = EHRData(r=r_322, t=t_21)
 
     edata.X = X_32
-    _shape_test(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2))
     assert edata.t.shape == (2, 1)
 
 
@@ -274,7 +274,7 @@ def test_ehrdata_del_r(X_32, r_322):
     assert edata.r is None
     assert edata.t.shape == (0, 0)
 
-    _shape_test(edata, (3, 2, 0))
+    _assert_shape_matches(edata, (3, 2, 0))
 
 
 #################################################################
@@ -285,7 +285,7 @@ def test_ehrdata_subset_slice_2D_vanilla(X_32, r_322, obs_31, var_21):
     edata_sliced = edata[:2, :1]
 
     assert edata_sliced.is_view
-    _shape_test(edata_sliced, (2, 1, 2))
+    _assert_shape_matches(edata_sliced, (2, 1, 2))
 
 
 def test_ehrdata_subset_slice_2D_repeated(X_32, r_322, obs_31, var_21):
@@ -294,7 +294,7 @@ def test_ehrdata_subset_slice_2D_repeated(X_32, r_322, obs_31, var_21):
     edata_sliced = edata_sliced[1:]
 
     _assert_fields_are_view(edata_sliced)
-    _shape_test(edata_sliced, (1, 2, 2))
+    _assert_shape_matches(edata_sliced, (1, 2, 2))
 
     assert np.array_equal(edata_sliced.X, X_32[2].reshape(-1, 2))
     assert np.array_equal(edata_sliced.r, r_322[2].reshape(-1, 2, 2))
@@ -305,7 +305,7 @@ def test_ehrdata_subset_slice_3D_vanilla(X_32, r_322, obs_31, var_21, t_21):
     edata_sliced = edata[:2, :1, :1]
 
     _assert_fields_are_view(edata_sliced)
-    _shape_test(edata_sliced, (2, 1, 1))
+    _assert_shape_matches(edata_sliced, (2, 1, 1))
 
     assert edata_sliced.r.shape == (2, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
@@ -317,7 +317,7 @@ def test_ehrdata_subset_slice_3D_repeated(edata_333):
     edata_sliced = edata_sliced[1:, 1:, 1:]
 
     _assert_fields_are_view(edata_sliced)
-    _shape_test(edata_sliced, (1, 1, 1))
+    _assert_shape_matches(edata_sliced, (1, 1, 1))
     assert hasattr(edata_sliced, "r")
     assert edata_sliced.r.shape == (1, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
@@ -332,23 +332,23 @@ def test_ehrdata_subset_obsvar_names_vanilla(edata_333, adata_33):
     edata = edata_333
     edata_a = edata[["obs1"]]
     _assert_fields_are_view(edata_a)
-    _shape_test(edata_a, (1, 3, 3))
+    _assert_shape_matches(edata_a, (1, 3, 3))
 
     edata_ab = edata[["obs1", "obs2"]]
     _assert_fields_are_view(edata_ab)
-    _shape_test(edata_ab, (2, 3, 3))
+    _assert_shape_matches(edata_ab, (2, 3, 3))
 
     edata_a = edata[:, ["var1"]]
     _assert_fields_are_view(edata_a)
-    _shape_test(edata_a, (3, 1, 3))
+    _assert_shape_matches(edata_a, (3, 1, 3))
 
     edata_ab = edata[:, ["var1", "var2"]]
     _assert_fields_are_view(edata_ab)
-    _shape_test(edata_ab, (3, 2, 3))
+    _assert_shape_matches(edata_ab, (3, 2, 3))
 
     edata_a = edata[["obs1", "obs2"], ["var1", "var2"]]
     _assert_fields_are_view(edata_a)
-    _shape_test(edata_a, (2, 2, 3))
+    _assert_shape_matches(edata_a, (2, 2, 3))
     assert edata_a.r.shape == (2, 2, 3)
 
 
@@ -358,7 +358,7 @@ def test_ehrdata_subset_obsvar_names_repeated(edata_333):
     edata_a = edata_ab[["obs3"]]
 
     _assert_fields_are_view(edata_a)
-    _shape_test(edata_a, (1, 3, 3))
+    _assert_shape_matches(edata_a, (1, 3, 3))
 
     assert np.array_equal(edata_a.r, edata.r[2, :, :].reshape(-1, 3, 3))
 
@@ -367,7 +367,7 @@ def test_ehrdata_subset_obsvar_names_repeated(edata_333):
     edata_a = edata_ab[:, ["var3"]]
 
     _assert_fields_are_view(edata_a)
-    _shape_test(edata_a, (3, 1, 3))
+    _assert_shape_matches(edata_a, (3, 1, 3))
 
     assert np.array_equal(edata_a.r, edata.r[:, 2, :].reshape(3, -1, 3))
 
@@ -377,7 +377,7 @@ def test_ehrdata_subset_boolindex_vanilla(edata_333):
     edata_sliced = edata[[False, True, True], [True, False, False], [True, False, False]]
 
     _assert_fields_are_view(edata_sliced)
-    _shape_test(edata_sliced, (2, 1, 1))
+    _assert_shape_matches(edata_sliced, (2, 1, 1))
 
     assert edata_sliced.r.shape == (2, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
@@ -389,7 +389,7 @@ def test_ehrdata_subset_boolindex_repeated(edata_333):
     edata_sliced = edata_sliced[[False, True], [False, True], [False, True]]
 
     _assert_fields_are_view(edata_sliced)
-    _shape_test(edata_sliced, (1, 1, 1))
+    _assert_shape_matches(edata_sliced, (1, 1, 1))
     assert hasattr(edata_sliced, "r")
     assert edata_sliced.r.shape == (1, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
@@ -405,7 +405,7 @@ def test_ehrdata_subset_numberindex_vanilla(edata_333):
     edata_sliced = edata[[1, 2], [1], [1]]
 
     _assert_fields_are_view(edata_sliced)
-    _shape_test(edata_sliced, (2, 1, 1))
+    _assert_shape_matches(edata_sliced, (2, 1, 1))
 
     assert edata_sliced.r.shape == (2, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
@@ -417,7 +417,7 @@ def test_ehrdata_subset_numberindex_repeated(edata_333):
     edata_sliced = edata_sliced[[1], [1], [1]]
 
     _assert_fields_are_view(edata_sliced)
-    _shape_test(edata_sliced, (1, 1, 1))
+    _assert_shape_matches(edata_sliced, (1, 1, 1))
     assert hasattr(edata_sliced, "r")
     assert edata_sliced.r.shape == (1, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
@@ -434,12 +434,12 @@ def test_ehrdata_subset_mixedindices(edata_333):
     edata_sliced = edata[["obs1", "obs2"], 1, [False, True, True]]
 
     _assert_fields_are_view(edata_sliced)
-    _shape_test(edata_sliced, (2, 1, 2))
+    _assert_shape_matches(edata_sliced, (2, 1, 2))
 
     edata_sliced = edata_sliced[np.array([False, True]), :, [1]]
 
     _assert_fields_are_view(edata_sliced)
-    _shape_test(edata_sliced, (1, 1, 1))
+    _assert_shape_matches(edata_sliced, (1, 1, 1))
 
 
 def test_copy(edata_333):
@@ -463,7 +463,7 @@ def test_copy_of_slice(edata_333):
     edata_sliced = edata[1:, 1:, 1:]
     edata_sliced_copy = edata_sliced.copy()
 
-    _shape_test(edata_sliced_copy, (2, 2, 2))
+    _assert_shape_matches(edata_sliced_copy, (2, 2, 2))
     assert isinstance(edata_sliced_copy.X, np.ndarray)
     assert isinstance(edata_sliced_copy.r, np.ndarray)
     assert isinstance(edata_sliced_copy.obs, pd.DataFrame)
@@ -479,14 +479,14 @@ def test_copy_of_obsvar_names(edata_333, adata_33):
     edata_obs_subset = edata[["obs1", "obs2"]]
     edata_obs_subset = edata_obs_subset.copy()
     assert not edata_obs_subset.is_view
-    _shape_test(edata_obs_subset, (2, 3, 3))
+    _assert_shape_matches(edata_obs_subset, (2, 3, 3))
 
     edata_var_subset = edata[:, ["var1", "var2"]]
     edata_var_subset = edata_var_subset.copy()
     assert not edata_var_subset.is_view
-    _shape_test(edata_var_subset, (3, 2, 3))
+    _assert_shape_matches(edata_var_subset, (3, 2, 3))
 
     edata_obsvar_subset = edata[["obs1"], ["var1", "var2"]]
     edata_obsvar_subset = edata_obsvar_subset.copy()
     assert not edata_obsvar_subset.is_view
-    _shape_test(edata_obsvar_subset, (1, 2, 3))
+    _assert_shape_matches(edata_obsvar_subset, (1, 2, 3))
