@@ -29,7 +29,7 @@ class EHRData(AnnData):
             A #observations × #variables data matrix. A view of the data is used if the
             data type matches, otherwise, a copy is made.
         r
-            A #observations x #variables x #timesteps data array. A view of the data is used if the
+            A #observations × #variables × #timesteps data array. A view of the data is used if the
             data type matches, otherwise, a copy is made.
         obs
             Key-indexed one-dimensional observations annotation of length #observations.
