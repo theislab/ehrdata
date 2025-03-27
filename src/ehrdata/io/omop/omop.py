@@ -259,6 +259,10 @@ def setup_obs(
         death = get_table(backend_handle, "death")
         obs = obs.merge(death, how="left", on="person_id")
 
+    # AnnData will make this conversion and raise a Warning.
+    # Since we have no reason for the RangeIndex, beyond it being introduced by the to_df function of the RDBMS, we can do it immediately and omit a confusing warning
+    obs.index = obs.index.astype(str)
+
     return EHRData(obs=obs, uns={"omop_io_observation_table": observation_table.split("person_")[-1]})
 
 
@@ -458,6 +462,8 @@ def setup_variables(
 
     t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
+    var.index = var.index.astype(str)
+
     edata = EHRData(r=r, obs=edata.obs, var=var, uns=edata.uns, t=t)
 
     for data_table in data_tables:
@@ -651,6 +657,8 @@ def setup_interval_variables(
         r = None
 
     t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
+
+    var.index = var.index.astype(str)
 
     edata = EHRData(r=r, obs=edata.obs, var=var, uns=edata.uns, t=t)
 
