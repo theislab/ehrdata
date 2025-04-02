@@ -1,22 +1,42 @@
 {
   "template": "https://github.com/scverse/cookiecutter-scverse",
-  "commit": "7dc638923b766ef7f76a3704b602a7623a77cfdc",
-  "checkout": null,
+  "commit": "94ef9fb6f9ad8cfe65a3d9575679c03c80c49cd1",
+  "checkout": "v0.5.0",
   "context": {
     "cookiecutter": {
       "project_name": "ehrdata",
       "package_name": "ehrdata",
-      "project_description": "A data structure for EHR data.",
-      "author_full_name": "Lukas Heumos",
-      "author_email": "lukas.heumos@posteo.net",
+      "project_description": "A Python package for EHR data",
+      "author_full_name": "Eljas Roellin, Lukas Heumos, Xinyue Zhang",
+      "author_email": "eljas.roellin@helmholtz-munich.de",
       "github_user": "theislab",
-      "project_repo": "https://github.com/theislab/ehrdata",
+      "github_repo": "ehrdata",
       "license": "Apache License Version 2.0",
+      "ide_integration": true,
       "_copy_without_render": [
-        ".github/workflows/**.yaml",
+        ".github/workflows/build.yaml",
+        ".github/workflows/test.yaml",
         "docs/_templates/autosummary/**.rst"
       ],
-      "_template": "https://github.com/scverse/cookiecutter-scverse"
+      "_exclude_on_template_update": [
+        "CHANGELOG.md",
+        "LICENSE",
+        "README.md",
+        "docs/api.md",
+        "docs/index.md",
+        "docs/notebooks/example.ipynb",
+        "docs/references.bib",
+        "docs/references.md",
+        "src/**",
+        "tests/**"
+      ],
+      "_render_devdocs": false,
+      "_jinja2_env_vars": {
+        "lstrip_blocks": true,
+        "trim_blocks": true
+      },
+      "_template": "https://github.com/scverse/cookiecutter-scverse",
+      "_commit": "94ef9fb6f9ad8cfe65a3d9575679c03c80c49cd1"
     }
   },
   "directory": null
