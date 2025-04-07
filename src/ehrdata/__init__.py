@@ -1,7 +1,8 @@
 from importlib.metadata import version
 
-from . import pl, pp, tl
+from . import dt, io, pl, tl
+from .core import EHRData
 
-__all__ = ["pl", "pp", "tl"]
+__all__ = ["EHRData", "dt", "io", "tl", "pl"]
 
 __version__ = version("ehrdata")

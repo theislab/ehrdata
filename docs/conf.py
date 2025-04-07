@@ -1,14 +1,22 @@
 # Configuration file for the Sphinx documentation builder.
 
+
 # This file only contains a selection of the most common options. For a full
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
+
+from __future__ import annotations
 
 # -- Path setup --------------------------------------------------------------
 import sys
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
+
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "extensions"))
@@ -59,6 +67,8 @@ extensions = [
     "sphinx.ext.mathjax",
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinxext.opengraph",
+    "scanpydoc.elegant_typehints",
+    "scanpydoc.definition_list_typed_field",
     *[p.stem for p in (HERE / "extensions").glob("*.py")],
 ]
 
@@ -93,9 +103,15 @@ source_suffix = {
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
-    "anndata": ("https://anndata.readthedocs.io/en/stable/", None),
-    "scanpy": ("https://scanpy.readthedocs.io/en/stable/", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
+    "anndata": ("https://anndata.readthedocs.io/en/stable", None),
+    "h5py": ("https://docs.h5py.org/en/latest", None),
+    "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
+    "numpy": ("https://numpy.org/doc/stable", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy", None),
+    "pandas": ("https://pandas.pydata.org/docs", None),
+    "zarr": ("https://zarr.readthedocs.io/en/stable", None),
+    "vitessce": ("https://python-docs.vitessce.io", None),
+    "lamin": ("https://docs.lamin.ai", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -124,8 +140,20 @@ html_theme_options = {
 
 pygments_style = "default"
 
+# If building the documentation fails because of a missing link that is outside your control,
+# you can add an exception to this list:
 nitpick_ignore = [
-    # If building the documentation fails because of a missing link that is outside your control,
-    # you can add an exception to this list.
-    #     ("py:class", "igraph.Graph"),
+    ("py:class", "types.EllipsisType"),
+    # https://github.com/duckdb/duckdb-web/issues/3806
+    ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
+    # Is documented as a py:attribute instead
+    ("py:class", "numpy.int64"),
+    # For now not in public facing API
+    ("py:class", "awkward.highlevel.Array"),
 ]
+
+# Redirect broken parameter annotation classes
+qualname_overrides = {
+    "zarr._storage.store.Store": "zarr.storage.MemoryStore",
+    "lnschema_core.models.Artifact": "lamindb.Artifact",
+}

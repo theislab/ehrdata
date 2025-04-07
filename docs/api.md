@@ -1,15 +1,44 @@
 # API
 
-## Preprocessing
+## EHRData
 
 ```{eval-rst}
-.. module:: ehrdata.pp
+.. module:: ehrdata
+
+.. autosummary::
+    :toctree: generated
+
+    EHRData
+```
+
+## Input-Output
+
+```{eval-rst}
+.. module:: ehrdata.io
 .. currentmodule:: ehrdata
 
 .. autosummary::
     :toctree: generated
 
-    pp.basic_preproc
+    io.omop.setup_connection
+    io.omop.setup_obs
+    io.omop.setup_variables
+    io.omop.setup_interval_variables
+```
+
+## Datasets
+
+```{eval-rst}
+.. module:: ehrdata.dt
+.. currentmodule:: ehrdata
+
+.. autosummary::
+    :toctree: generated
+
+    dt.mimic_iv_omop
+    dt.gibleed_omop
+    dt.synthea27nj_omop
+    dt.physionet2012
 ```
 
 ## Tools
@@ -21,7 +50,7 @@
 .. autosummary::
     :toctree: generated
 
-    tl.basic_tool
+    tl.omop.EHRDataset
 ```
 
 ## Plotting
@@ -33,6 +62,5 @@
 .. autosummary::
     :toctree: generated
 
-    pl.basic_plot
-    pl.BasicClass
+    pl.vitessce.gen_config
 ```
