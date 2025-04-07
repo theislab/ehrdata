@@ -67,13 +67,12 @@ to integrate the changes into yours.
 While the [pre-commit.ci][] is useful, we strongly encourage installing and running pre-commit locally first to understand its usage.
 
 Finally, most editors have an _autoformat on save_ feature.
-Consider enabling this option for [ruff][ruff-editors] and [prettier][prettier-editors].
+Consider enabling this option for [ruff][ruff-editors] and [biome][biome-editors].
 
 [pre-commit]: https://pre-commit.com/
 [pre-commit.ci]: https://pre-commit.ci/
 [ruff-editors]: https://docs.astral.sh/ruff/integrations/
-
-[prettier-editors]: https://prettier.io/docs/en/editors.html
+[biome-editors]: https://biomejs.dev/guides/integrate-in-editor/
 
 (writing-tests)=
 
@@ -196,8 +195,8 @@ please check out [this feature request][issue-render-notebooks] in the `cookiecu
 ::::{group-tab} Hatch
 
 ```bash
-hatch docs:build
-hatch docs:open
+hatch run docs:build
+hatch run docs:open
 ```
 
 ::::
