@@ -5,12 +5,11 @@ def create_single_option_widget(title_text: str, options: list[str]):
     """Create a single-option selection widget (RadioButtons).
 
     Args:
-        title_text (str): The title displayed above the radio buttons.
-        options (list[str]): List of strings representing the radio button options.
-        default_value (str): The default selected value.
+        title_text: The title displayed above the radio buttons.
+        options: List of strings representing the radio button options.
+        default_value: The default selected value.
 
-    Returns
-    -------
+    Returns:
         tuple: A VBox containing the UI elements and the RadioButtons widget.
     """
     title = widgets.HTML(f"<h3>{title_text}</h3>")
@@ -25,11 +24,10 @@ def create_multiple_options_widget(title_text: str, options: list[str]):
     """Create a multiple-option selection widget (SelectMultiple).
 
     Args:
-        title_text (str): The title displayed above the selection box.
-        options (list[str]): List of strings representing the options.
+        title_text: The title displayed above the selection box.
+        options: List of strings representing the options.
 
-    Returns
-    -------
+    Returns:
         tuple: A VBox containing the UI elements and the SelectMultiple widget.
     """
     title = widgets.HTML(f"<h3 style='color: #333; font-family: Arial, sans-serif;'>{title_text}</h3>")

@@ -6,6 +6,7 @@ import ehrdata as ed
 def test_ehrdataset_vanilla(omop_connection_vanilla):
     num_intervals = 3
     batch_size = 2
+
     con = omop_connection_vanilla
 
     edata = ed.io.omop.setup_obs(con, observation_table="person_observation_period", death_table=True)
@@ -22,9 +23,7 @@ def test_ehrdataset_vanilla(omop_connection_vanilla):
         instantiate_tensor=False,
     )
 
-    ehr_dataset = ed.tl.omop.EHRDataset(
-        con, edata, data_tables=["measurement"], batch_size=batch_size, datetime=False, idxs=None
-    )
+    ehr_dataset = ed.tl.omop.EHRDataset(con, edata, data_tables=["measurement"], datetime=False, idxs=None)
     assert isinstance(ehr_dataset, torch.utils.data.Dataset)
     single_item = next(iter(ehr_dataset))
     assert single_item[0].shape == (2, num_intervals)

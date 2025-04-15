@@ -6,14 +6,12 @@ from typing import Literal
 def get_table_catalog_dict(version: Literal["5.4"] = "5.4"):
     """Get the table catalog dictionary of the OMOP CDM.
 
-    Parameters
-    ----------
-    version
-        The version of the OMOP CDM. Currently, only 5.4 is supported.
+    Args:
+        version:
+            The version of the OMOP CDM. Currently, only 5.4 is supported.
 
-    Returns
-    -------
-        Dictionary: a dictionary of the table catalog. The key is the category of the table, and the value is a list of table names
+    Returns:
+        A dictionary of the table catalog. The key is the category of the table, and the value is a list of table names.
     """
     table_catalog_dict = {}
     table_catalog_dict["Clinical data"] = [

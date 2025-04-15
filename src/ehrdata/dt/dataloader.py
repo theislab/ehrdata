@@ -23,7 +23,9 @@ def download(
 
     Args:
         url: URL to download.
-        download_path: Where the data should be downloaded to.
+        saving_path: Where the data should be downloaded to.
+        block_size: Download block size.
+        overwrite: Whether to overwrite existing data.
     """
     # note: tar.gz has to be before gz for the _remove_archive_extension function to remove the entire extension
     compression_formats = ["tar.gz", "zip", "tar", "gz", "bz", "xz"]

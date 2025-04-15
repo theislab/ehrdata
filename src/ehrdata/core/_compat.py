@@ -1,4 +1,4 @@
-def lazy_import_torch():
+def lazy_import_torch() -> None:
     try:
         import torch
 
