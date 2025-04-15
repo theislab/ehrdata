@@ -180,18 +180,13 @@ def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefi
     It checks the capitalization of the 'person' table, and assumes the same capitalization style is used for all other tables.
 
 
-    Parameters
-    ----------
-    path
-        The path to the folder containing the CSV files.
-    backend_handle
-        The backend handle to the database.
-    prefix
-        The prefix to be removed from the CSV filenames.
+    Args:
+        path: The path to the folder containing the CSV files.
+        backend_handle: The backend handle to the database.
+        prefix: The prefix to be removed from the CSV filenames.
 
     Returns:
-    -------
-    An EHRData object with populated .uns["omop_table_capitalization"] field.
+        An EHRData object with populated .uns["omop_table_capitalization"] field.
 
     """
     _set_up_duckdb(Path(path), backend_handle, prefix)
