@@ -21,6 +21,7 @@ class EHRDataset(torch.utils.data.Dataset):
         self,
         con: DuckDBPyConnection,
         edata: EHRData,
+        *,
         data_tables: Sequence[Literal["measurement", "observation", "specimen"]],
         target: Literal["mortality"] = "mortality",
         datetime: bool = True,
