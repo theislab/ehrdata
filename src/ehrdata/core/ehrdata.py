@@ -33,13 +33,13 @@ class EHRData(AnnData):
         t: Key-indexed one-dimensional time annotation of length #timesteps.
         uns: Key-indexed unstructured annotation.
         obsm: Key-indexed multi-dimensional observations annotation of length #observations.
-            If passing a numpy.ndarray, it needs to have a structured datatype.
+            If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
         varm: Key-indexed multi-dimensional variables annotation of length #variables.
-            If passing a numpy.ndarray, it needs to have a structured datatype.
+            If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
         layers: Key-indexed multi-dimensional arrays aligned to dimensions of `X`.
         shape: Shape tuple (#observations, #variables). Can only be provided if `X` is None.
-        filename: Name of backing file. See h5py.File.
-        filemode: Open mode of backing file. See h5py.File.
+        filename: Name of backing file. See :class:`h5py.File`.
+        filemode: Open mode of backing file. See :class:`h5py.File`.
     """
 
     _t: pd.DataFrame | None
