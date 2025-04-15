@@ -6,13 +6,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from vitessce import AnnDataWrapper, VitessceConfig
-from vitessce import Component as cm
-
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from lamindb import Artifact
+    from vitessce import VitessceConfig
     from zarr.storage import Store
 
 
@@ -60,6 +58,9 @@ def gen_config(
         "obsType": obs_type,
         "featureType": feature_type,
     }
+
+    from vitessce import AnnDataWrapper, VitessceConfig
+    from vitessce import Component as cm
 
     wrapper = AnnDataWrapper(
         adata_path=path,
