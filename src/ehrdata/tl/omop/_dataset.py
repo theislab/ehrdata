@@ -3,7 +3,8 @@ from typing import TYPE_CHECKING, Literal
 
 from duckdb.duckdb import DuckDBPyConnection
 
-from ehrdata.core._optional_modules_import import lazy_import_torch
+from ehrdata import EHRData
+from ehrdata.core._compat import lazy_import_torch
 from ehrdata.io.omop._queries import DATA_TABLE_DATE_KEYS
 
 if TYPE_CHECKING:
@@ -19,40 +20,29 @@ class EHRDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         con: DuckDBPyConnection,
-        edata,
-        data_tables: Sequence[Literal["measurement", "observation", "specimen"]]
-        | Literal["measurement", "observation", "specimen"],
-        batch_size: int = 10,
+        edata: EHRData,
+        data_tables: Sequence[Literal["measurement", "observation", "specimen"]],
         target: Literal["mortality"] = "mortality",
         datetime: bool = True,
         idxs: Sequence[int] | None = None,
     ) -> None:
-        """Return a torch.utils.data.Dataset object for EHR data.
+        """:class:`~torch.utils.data.Dataset` for EHRData.
 
-        This function builds a torch.utils.data.Dataset object for EHR data. The EHR data is assumed to be in the OMOP CDM format.
-        It is a Dataset structure for the tensor in ehrdata.r, in a suitable format for pytorch.utils.data.DataLoader.
+        This function builds a :class:`~torch.utils.data.Dataset` for EHRData. The EHRData is assumed to be in the OMOP CDM format.
+        It is a Dataset structure for the tensor in ehrdata.r, in a suitable format for :class:`~pytorch.utils.data.DataLoader`.
         This allows to stream the data in batches from the RDBMS, not requiring to load the entire dataset in memory.
 
-        Parameters
-        ----------
-        con
-            The connection to the database.
-        edata
-            The EHRData object.
-        batch_size
-            The batch size.
-        target
-            The target variable to be used.
-        datetime
-            If True, use datetime, if False, use date.
-        idxs
-            The indices of the patients to be used, can be used to include only a subset of the data, for e.g. train-test splits.
-            The observation table to be used.
+        Args:
+            con: The connection to the database.
+            edata: The EHRData object.
+            data_tables: The OMOP data tables to extract.
+            target: The target variable to be used.
+            datetime: If True, use datetime, if False, use date.
+            idxs: The indices of the patients to be used, can be used to include only a
+                subset of the data, for e.g. train-test splits.
 
-        Returns
-        -------
-        EHRDataset
-            A torch.utils.data.Dataset object of the .r tensor in ehrdata.
+        Returns:
+            A :class:`torch.utils.data.Dataset` object of the .r tensor in EhrData.
         """
         super().__init__()
         self.con = con

@@ -44,25 +44,19 @@ def _setup_eunomia_datasets(
 def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the MIMIC-IV demo data in the OMOP Common Data model.
 
-    This function loads the MIMIC-IV demo dataset from its `physionet repository <https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel>`_.
+    Loads the MIMIC-IV demo dataset from its `physionet repository <https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel>`_.
     See also this link for more details.
 
     DOI https://doi.org/10.13026/2d25-8g07.
 
-    Parameters
-    ----------
-    backend_handle
-        A handle to the backend which shall be used. Only duckdb connection supported at the moment.
-    data_path
-        Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+    Args:
+        backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+        data_path: Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
 
-    Returns
-    -------
-    Returns nothing, adds the tables to the backend via the handle.
+    Returns:
+        Nothing. Adds the tables to the backend via the handle.
 
-    Examples
-    --------
-        >>> import ehrapy as ep
+    Examples:
         >>> import ehrdata as ed
         >>> import duckdb
         >>> con = duckdb.connect()
@@ -85,23 +79,17 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
 def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the GiBleed dataset in the OMOP Common Data model.
 
-    This function loads the GIBleed dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>`_.
+    Loads the GIBleed dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>`_.
     More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/GiBleed.
 
-    Parameters
-    ----------
-    backend_handle
-        A handle to the backend which shall be used. Only duckdb connection supported at the moment.
-    data_path
-        Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+    Args:
+        backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+        data_path: Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
 
-    Returns
-    -------
-    Returns nothing, adds the tables to the backend via the handle.
+    Returns:
+        Nothing. Adds the tables to the backend via the handle.
 
-    Examples
-    --------
-        >>> import ehrapy as ep
+    Examples:
         >>> import ehrdata as ed
         >>> import duckdb
         >>> con = duckdb.connect()
@@ -127,19 +115,14 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
     This function loads the Synthea27Nj dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>`_.
     More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/Synthea27Nj.
 
-    Parameters
-    ----------
-    backend_handle
-        A handle to the backend which shall be used. Only duckdb connection supported at the moment.
-    data_path
-        Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+    Args:
+        backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+        data_path: Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
 
-    Returns
-    -------
-    Returns nothing, adds the tables to the backend via the handle.
+    Returns:
+        Nothing. Adds the tables to the backend via the handle.
 
-    Examples
-    --------
+    Examples:
         >>> import ehrapy as ep
         >>> import ehrdata as ed
         >>> import duckdb
@@ -196,27 +179,22 @@ def physionet2012(
     A simple deviation is that the tensor in ehrdata is of shape n_obs x n_vars x n_intervals (with defaults, 3000x37x48) while the tensor in PyPOTS is of shape n_obs x n_intervals x n_vars (3000x48x37).
     The tensor stored in .r is hence also fully compatible with the PyPOTS package, as the .r tensor of EHRData objects generally is.
 
-    Parameters
-    ----------
-    data_path
-        Path to the raw data. If the path exists, the data is loaded from there. Else, the data is downloaded.
-    interval_length_number
-        Numeric value of the length of one interval.
-    interval_length_unit
-        Unit belonging to the interval length.
-    num_intervals
-        Number of intervals.
-    aggregation_strategy
-        Aggregation strategy for the time series data when multiple measurements for a person's parameter within a time interval is available. Available are 'first' and 'last', as used in `pd.DataFrame.drop_duplicates <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.drop_duplicates.html>`_.
-    drop_samples
-        Samples to drop from the dataset (indicate their RecordID).
+    Args:
+       data_path: Path to the raw data. If the path exists, the data is loaded from there.
+           Else, the data is downloaded.
+       interval_length_number: Numeric value of the length of one interval.
+       interval_length_unit: Unit belonging to the interval length.
+       num_intervals: Number of intervals.
+       aggregation_strategy: Aggregation strategy for the time series data when multiple
+           measurements for a person's parameter within a time interval is available.
+           Available are 'first' and 'last', as used in pandas.DataFrame.drop_duplicates.
+       drop_samples: Samples to drop from the dataset (indicate their RecordID).
 
-    Returns
-    -------
-    Returns a the processed physionet2012 dataset in an EHRData object. The raw data is also downloaded, stored and available under the data_path.
+    Returns:
+        Returns a the processed physionet2012 dataset in an EHRData object.
+        The raw data is also downloaded, stored and available under the ``data_path``.
 
-    Examples
-    --------
+    Examples:
         >>> import ehrapy as ep
         >>> import ehrdata as ed
         >>> edata = ed.dt.physionet_2012()

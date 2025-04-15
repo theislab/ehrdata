@@ -189,7 +189,7 @@ def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefi
     prefix
         The prefix to be removed from the CSV filenames.
 
-    Returns
+    Returns:
     -------
     An EHRData object with populated .uns["omop_table_capitalization"] field.
 
@@ -202,41 +202,34 @@ def setup_obs(
     observation_table: Literal["person", "person_cohort", "person_observation_period", "person_visit_occurrence"],
     death_table: bool = False,
 ):
-    """Setup the observation table.
+    """Setup the observation table for EHRData object.
 
-    This function sets up the observation table for the EHRData object.
     For this, a table from the OMOP CDM which represents the "observed unit" via an id should be selected.
     A unit can be a person, or the data of a person together with either the information from cohort, observation_period, or visit_occurrence.
     Notice a single person can have multiple of the latter, and as such can appear multiple times.
     For `"person_cohort"`, the `subject_id` of the cohort is considered to be the `person_id` for a join.
 
-    Parameters
-    ----------
-    backend_handle
-        The backend handle to the database.
-    observation_table
-        The observation table to be used.
-    death_table
-        Whether to include the `death` table. The `observation_table` created will be left joined with the `death` table as the right table.
+    Args:
+        backend_handle: The backend handle to the database.
+        observation_table: The observation table to be used.
+        death_table: Whether to include the `death` table.
+            The `observation_table` created will be left joined with the `death` table as the right table.
 
-    Returns
-    -------
-    An EHRData object with populated `.obs` field.
+    Returns:
+            An :class:`~ehrdata.EHRData` object with populated `.obs` field.
 
-    Example
-    -------
-
-    >>> import ehrdata as ed
-    >>> import duckdb
-    >>> con_gi = duckdb.connect(database=":memory:", read_only=False)
-    >>> ed.dt.gibleed_omop(
-    ...     con_gi,
-    ... )
-    >>> edata_gi = ed.io.omop.setup_obs(
-    >>>     con_gi,
-    >>>     observation_table="person_observation_period",
-    >>> )
-    >>> edata_gi
+    Examples:
+        >>> import ehrdata as ed
+        >>> import duckdb
+        >>> con_gi = duckdb.connect(database=":memory:", read_only=False)
+        >>> ed.dt.gibleed_omop(
+        ...     con_gi,
+        ... )
+        >>> edata_gi = ed.io.omop.setup_obs(
+        >>>     con_gi,
+        >>>     observation_table="person_observation_period",
+        >>> )
+        >>> edata_gi
     """
     _check_valid_backend_handle(backend_handle)
     _check_valid_observation_table(observation_table)
@@ -284,11 +277,9 @@ def setup_variables(
     enrich_var_with_unit_info: bool = False,
     instantiate_tensor: bool = True,
 ):
-    """Setup the variables.
+    """Extracts selected tables of a data-point character from the OMOP CDM..
 
-    This function extracts selected tables of a data-point character from the OMOP CDM into an EHRData object.
-
-    The distinct `concept_id` s encountered in the selected tables form the variables in the EHRData object.
+    The distinct `concept_id` is encountered in the selected tables form the variables in the EHRData object.
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
     It will fail if there is more than one `unit_concept_id` per variable.
@@ -299,63 +290,59 @@ def setup_variables(
     This table is instantiated into `edata.r` if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
 
-    Parameters
-    ----------
-    backend_handle
-        The backend handle to the database.
-    edata
-        The EHRData object to which the variables should be added.
-    data_tables
-        The tables to be used.
-    data_field_to_keep
-        The CDM Field in the data tables to be kept. Can be e.g. `'value_as_number'` or `'value_as_concept_id'`.  Importantly, can be `'is_present'` to have a one-hot encoding of the presence of the feature in a patient in an interval. Should be a dictionary to specify the data fields to keep per table if multiple data tables are used. For example, if `data_tables=['measurement', 'observation]`, `data_field_to_keep={'measurement': 'value_as_number', 'observation': 'value_as_number'}`.
-    interval_length_number
-        Numeric value of the length of one interval.
-    interval_length_unit
-        Unit of the interval length, needs to be a unit of :class:`~pandas.Timedelta`.
-    num_intervals
-        Number of intervals.
-    concept_ids
-        Concept IDs to use from the data tables. If not specified, `'all'` are used.
-    aggregation_strategy
-        Strategy to use when aggregating multiple data points within one interval.
-    enrich_var_with_feature_info
-        Whether to enrich the var table with feature information. If a `concept_id` is not found in the concept table, the feature information will be `NaN`.
-    enrich_var_with_unit_info
-        Whether to enrich the var table with unit information. Raises an Error if multiple units per feature are found for at least one feature. For entire missing data points, the units are ignored. For observed data points with missing unit information (`NULL` in either `'unit_concept_id'` or `'unit_source_value'`), the value `NULL`/`NaN` is considered a single unit.
-    instantiate_tensor
-        Whether to instantiate the tensor into the `.r` field of the EHRData object.
+    Args:
+        backend_handle: The backend handle to the database.
+        edata: The EHRData object to which the variables should be added.
+        data_tables: The tables to be used.
+        data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
+            'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
+            to have a one-hot encoding of the presence of the feature in a patient in an
+            interval. Should be a dictionary to specify the data fields to keep per table
+            if multiple data tables are used. For example, if data_tables=['measurement',
+            'observation'], data_field_to_keep={'measurement': 'value_as_number',
+            'observation': 'value_as_number'}.
+        interval_length_number: Numeric value of the length of one interval.
+        interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
+        num_intervals: Number of intervals.
+        concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
+        aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
+        enrich_var_with_feature_info: Whether to enrich the var table with feature
+            information. If a concept_id is not found in the concept table, the feature tinformation will be NaN.
+        enrich_var_with_unit_info: Whether to enrich the var table with unit information.
+            Raises an Error if multiple units per feature are found for at least one
+            feature. For entire missing data points, the units are ignored. For observed
+            data points with missing unit information (NULL in either 'unit_concept_id'
+            or 'unit_source_value'), the value NULL/NaN is considered a single unit.
+        instantiate_tensor: Whether to instantiate the tensor into the .r field of the EHRData object.
 
-    Returns
-    -------
-    An EHRData object with populated `.r` and `.var` field.
+    Returns:
+        An :class:`~ehrdata.EHRData` object with populated `.r` and `.var` field.
 
-    Example
-    -------
-    >>> import ehrdata as ed
-    >>> import duckdb
-    >>> con_gi = duckdb.connect(database=":memory:", read_only=False)
-    >>> ed.dt.gibleed_omop(
-    ...     con_gi,
-    ... )
-    >>> edata_gi = ed.io.omop.setup_obs(
-    >>>     con_gi,
-    >>>     observation_table="person_observation_period",
-    >>> )
-    >>> edata_gi = ed.io.omop.setup_variables(
-    >>>     edata=edata_gi,
-    >>>     backend_handle=con_gi,
-    >>>     data_tables=["observation", "measurement"],
-    >>>     data_field_to_keep={"observation": "observation_source_value", "measurement": "is_present"},
-    >>>     interval_length_number=20,
-    >>>     interval_length_unit="day",
-    >>>     num_intervals=20,
-    >>>     concept_ids="all",
-    >>>     aggregation_strategy="last",
-    >>>     enrich_var_with_feature_info=True,
-    >>>     enrich_var_with_unit_info=True,
-    >>> )
-    >>> edata_gi
+    Examples:
+        >>> import ehrdata as ed
+        >>> import duckdb
+        >>> con_gi = duckdb.connect(database=":memory:", read_only=False)
+        >>> ed.dt.gibleed_omop(
+        ...     con_gi,
+        ... )
+        >>> edata_gi = ed.io.omop.setup_obs(
+        >>>     con_gi,
+        >>>     observation_table="person_observation_period",
+        >>> )
+        >>> edata_gi = ed.io.omop.setup_variables(
+        >>>     edata=edata_gi,
+        >>>     backend_handle=con_gi,
+        >>>     data_tables=["observation", "measurement"],
+        >>>     data_field_to_keep={"observation": "observation_source_value", "measurement": "is_present"},
+        >>>     interval_length_number=20,
+        >>>     interval_length_unit="day",
+        >>>     num_intervals=20,
+        >>>     concept_ids="all",
+        >>>     aggregation_strategy="last",
+        >>>     enrich_var_with_feature_info=True,
+        >>>     enrich_var_with_unit_info=True,
+        >>> )
+        >>> edata_gi
     """
     from ehrdata import EHRData
 
@@ -510,9 +497,7 @@ def setup_interval_variables(
     keep_date: Literal["start", "end", "interval"] = "start",
     instantiate_tensor: bool = True,
 ):
-    """Setup the interval variables
-
-    This function extracts selected tables of a time-span character from the OMOP CDM into an EHRData object.
+    """Extracts selected tables of a time-span character from the OMOP CDM.
 
     The distinct `concept_id` s encountered in the selected tables form the variables in the EHRData object.
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
@@ -523,62 +508,54 @@ def setup_interval_variables(
     This table is instantiated into `edata.r` if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
 
-    Parameters
-    ----------
-    backend_handle
-        The backend handle to the database.
-    edata
-        The EHRData object to which the variables should be added.
-    data_tables
-        The tables to be used.
-    data_field_to_keep
-        The CDM Field in the data tables to be kept. Can be e.g. `'value_as_number'` or `'value_as_concept_id'`.  Importantly, can be `'is_present'` to have a one-hot encoding of the presence of the feature in a patient in an interval. Should be a dictionary to specify the data fields to keep per table if multiple data tables are used. For example, if `data_tables=['measurement', 'observation]`, `data_field_to_keep={'measurement': 'value_as_number', 'observation': 'value_as_number'}`.
-    interval_length_number
-        Numeric value of the length of one interval.
-    interval_length_unit
-        Unit of the interval length, needs to be a unit of :class:`~pandas.Timedelta`.
-    num_intervals
-        Number of intervals.
-    concept_ids
-        Concept IDs to use from the data tables. If not specified, `'all'` are used.
-    aggregation_strategy
-        Strategy to use when aggregating multiple data points within one interval.
-    enrich_var_with_feature_info
-        Whether to enrich the var table with feature information. If a `concept_id` is not found in the concept table, the feature information will be `NaN`.
-    keep_date
-        Whether to keep the start or end date, or the interval span.
-    instantiate_tensor
-        Whether to instantiate the tensor into the `.r` field of the EHRData object.
+    Args:
+       backend_handle: The backend handle to the database.
+       edata: The EHRData object to which the variables should be added.
+       data_tables: The tables to be used.
+       data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
+           'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
+           to have a one-hot encoding of the presence of the feature in a patient in an
+           interval. Should be a dictionary to specify the data fields to keep per table
+           if multiple data tables are used. For example, if data_tables=['measurement',
+           'observation'], data_field_to_keep={'measurement': 'value_as_number',
+           'observation': 'value_as_number'}.
+       interval_length_number: Numeric value of the length of one interval.
+       interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
+       num_intervals: Number of intervals.
+       concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
+       aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
+       enrich_var_with_feature_info: Whether to enrich the var table with feature
+           information. If a concept_id is not found in the concept table, the feature information will be NaN.
+       keep_date: Whether to keep the start or end date, or the interval span.
+       instantiate_tensor: Whether to instantiate the tensor into the .r field of the EHRData object.
 
-    Returns
-    -------
-    An EHRData object with populated `.r` and `.var` field.
+    Returns:
+        An EHRData object with populated `.r` and `.var` field.
 
-    Example
-    -------
-    >>> import ehrdata as ed
-    >>> import duckdb
-    >>> con_gi = duckdb.connect(database=":memory:", read_only=False)
-    >>> ed.dt.gibleed_omop(
-    ...     con_gi,
-    ... )
-    >>> edata_gi = ed.io.omop.setup_obs(
-    >>>     con_gi,
-    >>>     observation_table="person_observation_period",
-    >>> )
-    >>> edata_gi = ed.io.omop.setup_interval_variables(
-    >>>     edata=edata_gi,
-    >>>     backend_handle=con_gi,
-    >>>     data_tables=["drug_exposure", "condition_occurrence"],
-    >>>     data_field_to_keep={"drug_exposure": "is_present", "condition_occurrence": "is_present"},
-    >>>     interval_length_number=20,
-    >>>     interval_length_unit="day",
-    >>>     num_intervals=20,
-    >>>     concept_ids="all",
-    >>>     aggregation_strategy="last",
-    >>>     enrich_var_with_feature_info=True,
-    >>> )
-    >>> edata_gi
+    Examples:
+        >>> import ehrdata as ed
+        >>> import duckdb
+        >>> con_gi = duckdb.connect(database=":memory:", read_only=False)
+        >>> ed.dt.gibleed_omop(
+        ...     con_gi,
+        ... )
+        >>> edata_gi = ed.io.omop.setup_obs(
+        >>>     con_gi,
+        >>>     observation_table="person_observation_period",
+        >>> )
+        >>> edata_gi = ed.io.omop.setup_interval_variables(
+        >>>     edata=edata_gi,
+        >>>     backend_handle=con_gi,
+        >>>     data_tables=["drug_exposure", "condition_occurrence"],
+        >>>     data_field_to_keep={"drug_exposure": "is_present", "condition_occurrence": "is_present"},
+        >>>     interval_length_number=20,
+        >>>     interval_length_unit="day",
+        >>>     num_intervals=20,
+        >>>     concept_ids="all",
+        >>>     aggregation_strategy="last",
+        >>>     enrich_var_with_feature_info=True,
+        >>> )
+        >>> edata_gi
     """
     from ehrdata import EHRData
 

@@ -19,40 +19,27 @@ if TYPE_CHECKING:
 
 
 class EHRData(AnnData):
-    """EHRData object.
+    """Model two and three dimensional electronic health record data.
 
-    Inherits `__init__` parameters, methods, and properties from :class:`~anndata.AnnData`.
+    Extends :class:`~anndata.AnnData` to further support regular and irregular time-series data.
 
-    Parameters
-    ----------
-        X
-            A #observations × #variables data matrix. A view of the data is used if the
+    Args:
+        X: A #observations × #variables data matrix. A view of the data is used if the
             data type matches, otherwise, a copy is made.
-        r
-            A #observations × #variables × #timesteps data array. A view of the data is used if the
-            data type matches, otherwise, a copy is made.
-        obs
-            Key-indexed one-dimensional observations annotation of length #observations.
-        var
-            Key-indexed one-dimensional variables annotation of length #variables.
-        t
-            Key-indexed one-dimensional time annotation of length #timesteps.
-        uns
-            Key-indexed unstructured annotation.
-        obsm
-            Key-indexed multi-dimensional observations annotation of length #observations.
-            If passing a :class:`~numpy.ndarray`, it needs to have a structured datatype.
-        varm
-            Key-indexed multi-dimensional variables annotation of length #variables.
-            If passing a :class:`~numpy.ndarray`, it needs to have a structured datatype.
-        layers
-            Key-indexed multi-dimensional arrays aligned to dimensions of `X`.
-        shape
-            Shape tuple (#observations, #variables). Can only be provided if `X` is `None`.
-        filename
-            Name of backing file. See :class:`h5py.File`.
-        filemode
-            Open mode of backing file. See :class:`h5py.File`.
+        r: A #observations × #variables × #timesteps data array. A view of the data is used if
+            the data type matches, otherwise, a copy is made.
+        obs: Key-indexed one-dimensional observations annotation of length #observations.
+        var: Key-indexed one-dimensional variables annotation of length #variables.
+        t: Key-indexed one-dimensional time annotation of length #timesteps.
+        uns: Key-indexed unstructured annotation.
+        obsm: Key-indexed multi-dimensional observations annotation of length #observations.
+            If passing a numpy.ndarray, it needs to have a structured datatype.
+        varm: Key-indexed multi-dimensional variables annotation of length #variables.
+            If passing a numpy.ndarray, it needs to have a structured datatype.
+        layers: Key-indexed multi-dimensional arrays aligned to dimensions of `X`.
+        shape: Shape tuple (#observations, #variables). Can only be provided if `X` is None.
+        filename: Name of backing file. See h5py.File.
+        filemode: Open mode of backing file. See h5py.File.
     """
 
     _t: pd.DataFrame | None
@@ -174,20 +161,14 @@ class EHRData(AnnData):
     ) -> EHRData:
         """Create an EHRData object from an AnnData object.
 
-        Parameters
-        ----------
-        adata
-            Annotated data object.
-        r
-            3-Dimensional tensor, see :attr:`r`.
-        t
-            Time dataframe for describing third axis, see :attr:`t`.
-        tidx
-            A slice for the 3rd dimension :attr:`r`. Usually, this will be None here.
+        Args:
+            adata: Annotated data object.
+            r: 3-Dimensional tensor, see r attribute.
+            t: Time dataframe for describing third axis, see t attribute.
+            tidx: A slice for the 3rd dimension r. Usually, this will be None here.
 
-        Returns
-        -------
-        An EHRData object.
+        Returns:
+            An EHRData object extending the AnnData object.
         """
         instance = cls(shape=adata.shape)
 
@@ -371,14 +352,11 @@ class EHRData(AnnData):
     def __getitem__(self, index: Index | None) -> EHRData:
         """Slice the EHRData object along 1–3 axes.
 
-        Parameters
-        ----------
-        index
-            1D, 2D, or 3D index.
+        Args:
+            index: 1D, 2D, or 3D index.
 
-        Returns
-        -------
-        An EHRData view object.
+        Returns:
+            An EHRData view object.
         """
         oidx, vidx, tidx = self._unpack_index(index)
         adata_sliced = super().__getitem__((oidx, vidx))

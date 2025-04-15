@@ -27,32 +27,22 @@ def gen_config(
     obs_sets: Mapping[str, str] = MappingProxyType({"obs/gender_concept_id": "Gender Concept ID"}),
     obs_embeddings: Mapping[str, str] = MappingProxyType({"obsm/X_pca": "PCA"}),
 ) -> VitessceConfig:
-    r"""Generate a VitessceConfig for EHRData.
+    """Generate a VitessceConfig for EHRData.
 
-    Parameters
-    ----------
-    path
-        Path to the data’s Zarr store directory.
-    store
-        The data’s Zarr store or a path to it.
-    url
-        URL pointing to the data’s remote Zarr store.
-    artifact
-        Lamin artifact representing the data.
-    name
-        Name of the dataset.
-        If `None`, derived from `path`.
-    obs_sets
-        Mapping of observation set paths to names, e.g.
-        `{"obs/some_annotation": "My cool annotation"}`
-    obs_embeddings
-        Mapping of observation embedding paths to names, e.g.
-        `{"obsm/X_pca": "PCA"}`
+    Args:
+        path: Path to the data's Zarr store directory.
+        store: The data's Zarr store or a path to it.
+        url: URL pointing to the data's remote Zarr store.
+        artifact: Lamin artifact representing the data.
+        name: Name of the dataset. If None, derived from path.
+        obs_sets: Mapping of observation set paths to names, e.g.
+            {"obs/some_annotation": "My cool annotation"}
+        obs_embeddings: Mapping of observation embedding paths to names, e.g.
+            {"obsm/X_pca": "PCA"}
 
-    Returns
-    -------
-    A :doc:`Vitessce <vitessce:index>` configuration object.
-    Call .\ :meth:`~vitessce.config.VitessceConfig.widget` on it to display it.
+    Returns:
+        A :doc:`Vitessce <vitessce:index>` configuration object.
+        Call :meth:`~vitessce.config.VitessceConfig.widget` on it to display it.
     """
     obs_type = "person"
     feature_type = "variable"

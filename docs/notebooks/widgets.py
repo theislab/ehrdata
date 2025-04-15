@@ -9,7 +9,7 @@ def create_single_option_widget(title_text: str, options: list[str]):
         options (list[str]): List of strings representing the radio button options.
         default_value (str): The default selected value.
 
-    Returns
+    Returns:
     -------
         tuple: A VBox containing the UI elements and the RadioButtons widget.
     """
@@ -28,7 +28,7 @@ def create_multiple_options_widget(title_text: str, options: list[str]):
         title_text (str): The title displayed above the selection box.
         options (list[str]): List of strings representing the options.
 
-    Returns
+    Returns:
     -------
         tuple: A VBox containing the UI elements and the SelectMultiple widget.
     """
