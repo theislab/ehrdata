@@ -39,7 +39,7 @@ class EHRData(AnnData):
         layers: Key-indexed multi-dimensional arrays aligned to dimensions of `X`.
         shape: Shape tuple (#observations, #variables). Can only be provided if `X` is None.
         filename: Name of backing file. See :class:`h5py.File`.
-        filemode: Open mode of backing file. See :class:`h5py.File`.
+        filemode: Open mode of backing file. See :class:`h5py.File`c.
     """
 
     _t: pd.DataFrame | None
