@@ -10,7 +10,7 @@ from anndata import AnnData
 from anndata._core.views import DataFrameView, _resolve_idx
 from sparse import COO
 
-from ehrdata._types import RDataType, XDataType
+from ehrdata._types import DaskArray, RDataType, XDataType
 from ehrdata.core.constants import R_LAYER_KEY
 
 if TYPE_CHECKING:
@@ -84,7 +84,7 @@ class EHRData(AnnData):
         R = R if R is not None else R_existing
 
         # Type checking for r
-        if R is not None and not isinstance(R, (np.ndarray, COO, "dask.array.Array")):  # type: ignore  # noqa: UP038
+        if R is not None and not isinstance(R, (np.ndarray, COO, DaskArray)):  # type: ignore  # noqa: UP038
             msg = f"`R` must be numpy.ndarray, sparse.COO, or dask.array.Array, got {type(R)}"
             raise TypeError(msg)
 

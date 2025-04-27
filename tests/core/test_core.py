@@ -274,8 +274,11 @@ def test_ehrdata_del_r(X_numpy_32, R_numpy_322):
 #################################################################
 ### Test different types for R
 #################################################################
-
-# TODO
+@pytest.mark.parametrize("R_fixture_name", ["R_numpy_322", "R_sparse_322", "R_dask_322"])
+def test_ehrdata_R_data_types(R_fixture_name, request):
+    R = request.getfixturevalue(R_fixture_name)
+    edata = EHRData(R=R)
+    _assert_shape_matches(edata, (3, 2, 2))
 
 
 #################################################################
@@ -319,12 +322,12 @@ def test_ehrdata_subset_slice_3D_repeated(edata_333):
 
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (1, 1, 1))
-    assert edata_sliced.r.shape == (1, 1, 1)
+    assert edata_sliced.R.shape == (1, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
 
     # test that the true values are conserved
     assert np.array_equal(edata_sliced.X, edata.X[2, 2].reshape(-1, 1))
-    assert np.array_equal(edata_sliced.r, edata.r[2, 2, 2].reshape(-1, 1, 1))
+    assert np.array_equal(edata_sliced.R, edata.R[2, 2, 2].reshape(-1, 1, 1))
     assert np.array_equal(edata.t.iloc[2].values.reshape(-1, 1), edata_sliced.t.values)
 
 
@@ -349,7 +352,7 @@ def test_ehrdata_subset_obsvar_names_vanilla(edata_333, adata_33):
     edata_a = edata[["obs1", "obs2"], ["var1", "var2"]]
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (2, 2, 3))
-    assert edata_a.r.shape == (2, 2, 3)
+    assert edata_a.R.shape == (2, 2, 3)
 
 
 def test_ehrdata_subset_obsvar_names_repeated(edata_333):
@@ -360,7 +363,7 @@ def test_ehrdata_subset_obsvar_names_repeated(edata_333):
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (1, 3, 3))
 
-    assert np.array_equal(edata_a.r, edata.r[2, :, :].reshape(-1, 3, 3))
+    assert np.array_equal(edata_a.R, edata.R[2, :, :].reshape(-1, 3, 3))
 
     edata = edata_333
     edata_ab = edata[:, ["var2", "var3"]]
@@ -369,7 +372,7 @@ def test_ehrdata_subset_obsvar_names_repeated(edata_333):
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (3, 1, 3))
 
-    assert np.array_equal(edata_a.r, edata.r[:, 2, :].reshape(3, -1, 3))
+    assert np.array_equal(edata_a.R, edata.R[:, 2, :].reshape(3, -1, 3))
 
 
 def test_ehrdata_subset_boolindex_vanilla(edata_333):
@@ -379,7 +382,7 @@ def test_ehrdata_subset_boolindex_vanilla(edata_333):
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (2, 1, 1))
 
-    assert edata_sliced.r.shape == (2, 1, 1)
+    assert edata_sliced.R.shape == (2, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
 
 
@@ -390,12 +393,12 @@ def test_ehrdata_subset_boolindex_repeated(edata_333):
 
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (1, 1, 1))
-    assert edata_sliced.r.shape == (1, 1, 1)
+    assert edata_sliced.R.shape == (1, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
 
     # test that the true values are conserved
     assert np.array_equal(edata_sliced.X, edata.X[2, 2].reshape(-1, 1))
-    assert np.array_equal(edata_sliced.r, edata.r[2, 2, 2].reshape(-1, 1, 1))
+    assert np.array_equal(edata_sliced.R, edata.R[2, 2, 2].reshape(-1, 1, 1))
     assert np.array_equal(edata.t.iloc[2].values.reshape(-1, 1), edata_sliced.t.values)
 
 
@@ -406,7 +409,7 @@ def test_ehrdata_subset_numberindex_vanilla(edata_333):
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (2, 1, 1))
 
-    assert edata_sliced.r.shape == (2, 1, 1)
+    assert edata_sliced.R.shape == (2, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
 
 
@@ -417,12 +420,12 @@ def test_ehrdata_subset_numberindex_repeated(edata_333):
 
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (1, 1, 1))
-    assert edata_sliced.r.shape == (1, 1, 1)
+    assert edata_sliced.R.shape == (1, 1, 1)
     assert edata_sliced.t.shape == (1, 1)
 
     # test that the true values are conserved
     assert np.array_equal(edata_sliced.X, edata.X[2, 2].reshape(-1, 1))
-    assert np.array_equal(edata_sliced.r, edata.r[2, 2, 2].reshape(-1, 1, 1))
+    assert np.array_equal(edata_sliced.R, edata.R[2, 2, 2].reshape(-1, 1, 1))
     assert np.array_equal(edata.t.iloc[2].values.reshape(-1, 1), edata_sliced.t.values)
 
 
@@ -448,7 +451,7 @@ def test_copy(edata_333):
     edata_copy = edata.copy()
 
     assert isinstance(edata_copy.X, np.ndarray)
-    assert isinstance(edata_copy.r, np.ndarray)
+    assert isinstance(edata_copy.R, np.ndarray)
     assert isinstance(edata_copy.obs, pd.DataFrame)
     assert isinstance(edata_copy.var, pd.DataFrame)
     assert isinstance(edata_copy.t, pd.DataFrame)
@@ -463,7 +466,7 @@ def test_copy_of_slice(edata_333):
 
     _assert_shape_matches(edata_sliced_copy, (2, 2, 2))
     assert isinstance(edata_sliced_copy.X, np.ndarray)
-    assert isinstance(edata_sliced_copy.r, np.ndarray)
+    assert isinstance(edata_sliced_copy.R, np.ndarray)
     assert isinstance(edata_sliced_copy.obs, pd.DataFrame)
     assert isinstance(edata_sliced_copy.var, pd.DataFrame)
     assert isinstance(edata_sliced_copy.t, pd.DataFrame)

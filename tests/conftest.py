@@ -1,8 +1,10 @@
 import anndata as ad
+import dask.array as da
 import duckdb
 import numpy as np
 import pandas as pd
 import pytest
+import sparse as sp
 
 from ehrdata import EHRData
 from ehrdata.io.omop import setup_connection
@@ -21,6 +23,16 @@ def X_numpy_33():
 @pytest.fixture
 def R_numpy_322():
     return np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]])
+
+
+@pytest.fixture
+def R_sparse_322():
+    return sp.COO(np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]))
+
+
+@pytest.fixture
+def R_dask_322():
+    return da.from_array(np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]), chunks=(3, 2, 2))
 
 
 @pytest.fixture
