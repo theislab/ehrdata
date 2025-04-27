@@ -10,21 +10,20 @@ readme = "README.md"
 license = "Apache-2.0"
 maintainers = [
   { name = "Eljas Roellin", email = "eljas.roellin@helmholtz-munich.de" },
+  { name = "Lukas Heumos", email = "lukas.heumos@posteo.net" },
 ]
 authors = [
   { name = "Eljas Roellin, Lukas Heumos, Xinyue Zhang" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.14"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
   "anndata",
-  "awkward",
   "duckdb",
   "filelock",
   # for debug logging (referenced from the issue template)
@@ -32,6 +31,7 @@ dependencies = [
   "requests",
   "rich",
   "session-info2",
+  "sparse",
   "xarray",
 ]
 optional-dependencies.dev = [

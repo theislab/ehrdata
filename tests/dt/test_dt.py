@@ -48,7 +48,7 @@ def test_physionet2012():
     edata = ed.dt.physionet2012()
     assert edata.shape == (11988, 37)
 
-    assert edata.r.shape == (11988, 37, 48)
+    assert edata.R.shape == (11988, 37, 48)
     assert edata.obs.shape == (11988, 10)
     assert edata.var.shape == (37, 1)
 
@@ -75,8 +75,8 @@ def test_physionet2012():
     )
 
     # first entry c two different HR value
-    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 0].r.item(), 65)
-    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 28].r.item(), 68)
+    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 0].R.item(), 65)
+    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 28].R.item(), 68)
 
 
 def test_physionet2012_arguments():
@@ -89,6 +89,6 @@ def test_physionet2012_arguments():
     )
     assert edata.shape == (12000, 37, 24)
 
-    assert edata.r.shape == (12000, 37, 24)
+    assert edata.R.shape == (12000, 37, 24)
     assert edata.obs.shape == (12000, 10)
     assert edata.var.shape == (37, 1)

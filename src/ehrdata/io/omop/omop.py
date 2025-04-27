@@ -446,7 +446,7 @@ def setup_variables(
 
     var.index = var.index.astype(str)
 
-    edata = EHRData(r=r, obs=edata.obs, var=var, uns=edata.uns, t=t)
+    edata = EHRData(R=r, obs=edata.obs, var=var, uns=edata.uns, t=t)
 
     for data_table in data_tables:
         edata.uns[f"unit_report_{data_table}"] = unit_report_collector[data_table]
@@ -632,7 +632,7 @@ def setup_interval_variables(
 
     var.index = var.index.astype(str)
 
-    edata = EHRData(r=r, obs=edata.obs, var=var, uns=edata.uns, t=t)
+    edata = EHRData(R=r, obs=edata.obs, var=var, uns=edata.uns, t=t)
 
     return edata
 

@@ -9,22 +9,22 @@ from ehrdata.io.omop import setup_connection
 
 
 @pytest.fixture
-def X_32():
+def X_numpy_32():
     return np.arange(1, 7).reshape(3, 2)
 
 
 @pytest.fixture
-def X_33():
+def X_numpy_33():
     return np.arange(1, 10).reshape(3, 3)
 
 
 @pytest.fixture
-def r_322():
+def R_numpy_322():
     return np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]])
 
 
 @pytest.fixture
-def r_333():
+def R_numpy_333():
     return np.arange(1, 28).reshape(3, 3, 3)
 
 
@@ -59,13 +59,13 @@ def t_31():
 
 
 @pytest.fixture
-def edata_333(X_33, r_333, obs_31, var_31, t_31):
-    return EHRData(X=X_33, r=r_333, obs=obs_31, var=var_31, t=t_31)
+def edata_333(X_numpy_33, R_numpy_333, obs_31, var_31, t_31):
+    return EHRData(X=X_numpy_33, R=R_numpy_333, obs=obs_31, var=var_31, t=t_31)
 
 
 @pytest.fixture
-def adata_33(X_33, obs_31, var_31):
-    return ad.AnnData(X=X_33, obs=obs_31, var=var_31)
+def adata_33(X_numpy_33, obs_31, var_31):
+    return ad.AnnData(X=X_numpy_33, obs=obs_31, var=var_31)
 
 
 @pytest.fixture
