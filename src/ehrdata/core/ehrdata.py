@@ -39,6 +39,7 @@ class EHRData(AnnData):
         varm: Key-indexed multi-dimensional variables annotation of length #variables.
             If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
         layers: Key-indexed multi-dimensional arrays aligned to dimensions of `X`.
+        shape: Shape tuple (#observations, #variables). Can only be provided if `X` is None.
         filename: Name of backing file. See :class:`h5py.File`.
         filemode: Open mode of backing file. See :class:`h5py.File`.
     """
@@ -59,6 +60,7 @@ class EHRData(AnnData):
         layers: Mapping[str, np.ndarray] | None = None,
         raw: Mapping[str, Any] | None = None,
         dtype: np.dtype | type | str | None = None,
+        shape: tuple[int, int] | None = None,
         filename: PathLike[str] | str | None = None,
         filemode: Literal["r", "r+"] | None = None,
         asview: bool = False,
@@ -112,6 +114,7 @@ class EHRData(AnnData):
             layers=layers,
             raw=raw,
             dtype=dtype,
+            shape=shape,
             filename=filename,
             filemode=filemode,
             asview=asview,
