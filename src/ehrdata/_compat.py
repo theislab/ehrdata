@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     pass
 
 #############################
-# scipy sparse array comapt #
+# scipy sparse array compat #
 #############################
 
 
