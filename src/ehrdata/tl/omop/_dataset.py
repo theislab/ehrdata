@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Literal
 from duckdb.duckdb import DuckDBPyConnection
 
 from ehrdata import EHRData
-from ehrdata.core._compat import lazy_import_torch
+from ehrdata._compat import lazy_import_torch
 from ehrdata.io.omop._queries import DATA_TABLE_DATE_KEYS
 
 if TYPE_CHECKING:

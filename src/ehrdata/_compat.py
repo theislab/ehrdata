@@ -137,3 +137,14 @@ else:
         @staticmethod
         def __repr__():
             return "mock cupy.ndarray"
+
+
+def lazy_import_torch() -> None:
+    try:
+        import torch
+
+        return torch
+    except ImportError:
+        raise ImportError(
+            "The optional module 'torch' is not installed. Please install it using 'pip install ehrdata[torch]'."
+        ) from None

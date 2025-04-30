@@ -274,7 +274,8 @@ def test_ehrdata_del_r(X_numpy_32, R_numpy_322):
 #################################################################
 ### Test different types for R
 #################################################################
-@pytest.mark.parametrize("R_fixture_name", ["R_numpy_322", "R_sparse_322", "R_dask_322"])
+# "R_sparse_322" currently disabled as sparse.COO support in AnnData is not yet implemented
+@pytest.mark.parametrize("R_fixture_name", ["R_numpy_322", "R_dask_322"])
 def test_ehrdata_R_data_types(R_fixture_name, request):
     R = request.getfixturevalue(R_fixture_name)
     edata = EHRData(R=R)
