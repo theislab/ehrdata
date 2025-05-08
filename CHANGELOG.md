@@ -13,8 +13,12 @@ and this project adheres to [Semantic Versioning][].
 ### Added
 
 - Expanded documentation
-- Bugfixes
 - Improved OMOP Extraction
+- Support for [COO sparse matrices](https://github.com/pydata/sparse) for R
+
+### Breaking changes
+
+- Renamed `r` to `R`
 
 ## [0.0.1] - 2024-11-04
 

@@ -150,6 +150,13 @@ nitpick_ignore = [
     ("py:class", "numpy.int64"),
     # For now not in public facing API
     ("py:class", "awkward.highlevel.Array"),
+    ("py:class", "h5py._hl.dataset.Dataset"),
+    ("py:class", "zarr.core.Array"),
+    ("py:class", "ehrdata._compat.ZappyArray"),
+    ("py:class", "dask.array.core.Array"),
+    ("py:class", "anndata.compat.CupyArray"),
+    ("py:class", "anndata.compat.CupySparseMatrix"),
+    ("py:class", "sparse.numba_backend._coo.core.COO"),
 ]
 
 # Redirect broken parameter annotation classes
