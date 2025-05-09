@@ -21,13 +21,13 @@ def _setup_eunomia_datasets(
     data_url: str,
     backend_handle: DuckDBPyConnection,
     data_path: Path | None = None,
-    nested_omop_tables_folder: str = None,
+    nested_omop_tables_folder: str | None = None,
     dataset_prefix: str = "",
 ) -> None:
     """Loads the Eunomia datasets in the OMOP Common Data model."""
     download(
         data_url,
-        saving_path=data_path,
+        output_path=data_path,
     )
 
     if nested_omop_tables_folder:
@@ -198,7 +198,6 @@ def physionet2012(
         >>> import ehrapy as ep
         >>> import ehrdata as ed
         >>> edata = ed.dt.physionet_2012()
-        >>> edata
     """
     from ehrdata import EHRData
 
@@ -222,13 +221,15 @@ def physionet2012(
     for file_name in temp_data_set_names:
         download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}.tar.gz?download",
-            saving_path=data_path,
+            output_path=data_path,
+            output_file_name=f"{file_name}.tar.gz",
+            archive_format="gztar",
         )
 
     for file_name in outcome_file_names:
         download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}?download",
-            saving_path=data_path,
+            output_path=data_path,
         )
 
     static_features = ["Age", "Gender", "ICUType", "Height"]
@@ -239,7 +240,7 @@ def physionet2012(
 
         # each txt file is the data of a person, in long format
         # the columns in the txt files are: Time, Parameter, Value
-        for txt_file in (data_path / data_subset_dir).glob("*.txt"):
+        for txt_file in (data_path / f"{data_subset_dir}.tar").glob("*.txt"):
             person_long = pd.read_csv(txt_file)
             # drop the first row, which has the RecordID
             person_long = person_long.iloc[1:]

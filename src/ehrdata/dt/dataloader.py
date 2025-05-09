@@ -1,92 +1,170 @@
 from __future__ import annotations
 
-import logging
 import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
+from typing import Literal
+from zipfile import ZipFile
 
 import requests
 from filelock import FileLock
-
-# from rich import print
+from lamin_utils import logger
+from requests.exceptions import RequestException
 from rich.progress import Progress
 
 
 def download(
     url: str,
-    saving_path: Path | str,
+    archive_format: Literal["zip", "tar", "tar.gz", "tgz", "gztar"] | None = None,
+    output_file_name: str | None = None,
+    output_path: str | Path | None = None,
     block_size: int = 1024,
     overwrite: bool = False,
-) -> None:  # pragma: no cover
+    timeout: int = 30,
+    max_retries: int = 3,
+    retry_delay: int = 5,
+) -> None | Path:  # pragma: no cover
     """Downloads a file irrespective of format.
 
     Args:
         url: URL to download.
-        saving_path: Where the data should be downloaded to.
-        block_size: Download block size.
-        overwrite: Whether to overwrite existing data.
+        archive_format: The format if an archive file.
+        output_file_name: Name of the downloaded file.
+        output_path: Path to download/extract the files to. Defaults to 'OS tmpdir' if not specified.
+        block_size: Block size for downloads in bytes.
+        overwrite: Whether to overwrite existing files.
+        timeout: Request timeout in seconds.
+        max_retries: Maximum number of retry attempts.
+        retry_delay: Delay between retries in seconds.
     """
-    # note: tar.gz has to be before gz for the _remove_archive_extension function to remove the entire extension
-    compression_formats = ["tar.gz", "zip", "tar", "gz", "bz", "xz"]
-    raw_formats = ["csv", "txt", "parquet"]
+    # Handle URL query parameters like "?download"
+    if output_file_name is None:
+        # Extract filename from URL and strip query parameters
+        file_name = os.path.basename(url).split("?")[0]
+        output_file_name = file_name
 
-    saving_path = Path(saving_path)
-    # urls can end with "?download"
-    file_name = os.path.basename(url).split("?")[0]
-    suffix = file_name.split(".")[-1]
+    if output_path is None:
+        output_path = tempfile.gettempdir()
 
-    def _remove_archive_extension(file_path: str) -> str:
-        for ext in compression_formats:
-            # if the file path ends with extension, remove the extension and the dot before it (hence the -1)
-            if file_path.endswith(ext):
-                return file_path[: -len(ext) - 1]
-        return file_path
+    def _sanitize_file_name(file_name):
+        if os.name == "nt":
+            file_name = file_name.replace("?", "_").replace("*", "_")
+        return file_name
 
-    if suffix in raw_formats:
-        raw_data_saving_path = saving_path / file_name
-        path_to_check = raw_data_saving_path
-    elif suffix in compression_formats:
-        tmpdir = tempfile.mkdtemp()
-        raw_data_saving_path = Path(tmpdir) / file_name
-        path_to_check = saving_path / _remove_archive_extension(file_name)
-    else:
-        raise RuntimeError(f"Unknown file format: {suffix}")
-        return
+    download_to_path = Path(
+        _sanitize_file_name(
+            f"{output_path}{output_file_name}"
+            if str(output_path).endswith("/")
+            else f"{output_path}/{output_file_name}"
+        )
+    )
 
-    if path_to_check.exists():
-        info = f"File {path_to_check} already exists!"
-        if not overwrite:
-            logging.info(f"{info} Use downloaded dataset...")
-            return
-        else:
-            logging.info(f"{info} Overwriting...")
+    Path(output_path).mkdir(parents=True, exist_ok=True)
+    lock_path = f"{download_to_path}.lock"
 
-    logging.info(f"Downloading {file_name} from {url} to {raw_data_saving_path}")
+    with FileLock(lock_path, timeout=300):
+        if download_to_path.exists():
+            warning = f"File {download_to_path} already exists!"
+            if not overwrite:
+                logger.warning(warning)
+                return download_to_path
+            else:
+                logger.warning(warning)
 
-    lock_path = f"{raw_data_saving_path}.lock"
-    with FileLock(lock_path):
-        response = requests.get(url, stream=True)
-        total = int(response.headers.get("content-length", 0))
+        temp_file_name = f"{download_to_path}.part"
 
-        temp_file_name = f"{raw_data_saving_path}.part"
+        retry_count = 0
+        while retry_count <= max_retries:
+            try:
+                head_response = requests.head(url, timeout=timeout)
+                head_response.raise_for_status()
+                content_length = int(head_response.headers.get("content-length", 0))
 
-        with Progress(refresh_per_second=1500) as progress:
-            task = progress.add_task("[red]Downloading...", total=total)
-            with Path(temp_file_name).open("wb") as file:
-                for data in response.iter_content(block_size):
-                    file.write(data)
-                    progress.update(task, advance=block_size)
+                free_space = shutil.disk_usage(output_path).free
+                if content_length > free_space:
+                    raise OSError(
+                        f"Insufficient disk space. Need {content_length} bytes, but only {free_space} available."
+                    )
 
-            # force the progress bar to 100% at the end
-            progress.update(task, completed=total, refresh=True)
+                response = requests.get(url, stream=True)
+                response.raise_for_status()
+                total = int(response.headers.get("content-length", 0))
 
-            Path(temp_file_name).replace(raw_data_saving_path)
+                with Progress(refresh_per_second=5) as progress:
+                    task = progress.add_task("[red]Downloading...", total=total)
+                    with Path(temp_file_name).open("wb") as file:
+                        for data in response.iter_content(block_size):
+                            file.write(data)
+                            progress.update(task, advance=len(data))
+                        progress.update(task, completed=total, refresh=True)
 
-        if suffix in compression_formats:
-            shutil.unpack_archive(raw_data_saving_path, saving_path)
-            logging.info(
-                f"Extracted archive {file_name} from {raw_data_saving_path} to {saving_path / _remove_archive_extension(file_name)}"
-            )
+                Path(temp_file_name).replace(download_to_path)
 
-    Path(lock_path).unlink(missing_ok=True)
+                if archive_format:
+                    output_path = output_path or tempfile.gettempdir()
+                    shutil.unpack_archive(download_to_path, output_path, format=archive_format)
+                    download_to_path.unlink()
+                    list_of_paths = [
+                        path for path in Path(output_path).resolve().glob("*/") if not path.name.startswith(".")
+                    ]
+                    if list_of_paths:
+                        latest_path = max(list_of_paths, key=lambda path: path.stat().st_ctime)
+                        new_path = latest_path.parent / _remove_archive_extension(output_file_name)
+                        shutil.move(latest_path, new_path)
+                        return new_path
+                elif archive_format == "zip":
+                    with ZipFile(download_to_path, "r") as zip_obj:
+                        zip_obj.extractall(path=output_path)
+                    return Path(output_path)
+
+                return download_to_path
+
+            except (OSError, RequestException) as e:
+                retry_count += 1
+                if retry_count <= max_retries:
+                    logger.warning(
+                        f"Download attempt {retry_count}/{max_retries} failed: {str(e)}. Retrying in {retry_delay} seconds..."
+                    )
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"Download failed after {max_retries} attempts: {str(e)}")
+                    if Path(temp_file_name).exists():
+                        Path(temp_file_name).unlink(missing_ok=True)
+                    raise
+
+            except Exception as e:
+                logger.error(f"Download failed: {str(e)}")
+                if Path(temp_file_name).exists():
+                    Path(temp_file_name).unlink(missing_ok=True)
+                raise
+            finally:
+                if Path(temp_file_name).exists():
+                    Path(temp_file_name).unlink(missing_ok=True)
+                Path(lock_path).unlink(missing_ok=True)
+
+        return download_to_path
+
+
+def _remove_archive_extension(file_path: str) -> str:
+    return (
+        str(Path(file_path).with_suffix(""))
+        if any(
+            Path(file_path).suffix.endswith(ext)
+            for ext in [
+                ".zip",
+                ".tar",
+                ".tar.gz",
+                ".tgz",
+                "gz",
+                "bz",
+                "xz",
+                ".tar.bz2",
+                ".tbz2",
+                ".tar.xz",
+                ".txz",
+            ]
+        )
+        else file_path
+    )

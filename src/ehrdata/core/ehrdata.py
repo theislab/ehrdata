@@ -351,7 +351,7 @@ class EHRData(AnnData):
         return "\n".join(lines_ehrdata)
 
     def __getitem__(self, index: Index | None) -> EHRData:
-        """Slice the EHRData object along 1–3 axes.
+        """Slice the EHRData object along 1-3 axes.
 
         Args:
             index: 1D, 2D, or 3D index.
