@@ -222,14 +222,14 @@ def physionet2012(
         download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}.tar.gz?download",
             output_path=data_path,
-            archive_format="tar.gz",
+            archive_format="gztar",
         )
 
     for file_name in outcome_file_names:
         download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}?download",
             output_path=data_path,
-            archive_format="tar.gz",
+            archive_format="gztar",
         )
 
     static_features = ["Age", "Gender", "ICUType", "Height"]

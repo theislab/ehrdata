@@ -18,7 +18,7 @@ from rich.progress import Progress
 
 def download(
     url: str,
-    archive_format: Literal["zip", "tar", "tar.gz", "tgz"] | None = None,
+    archive_format: Literal["zip", "tar", "tar.gz", "tgz", "gztar"] | None = None,
     output_file_name: str | None = None,
     output_path: str | Path | None = None,
     block_size: int = 1024,
