@@ -21,13 +21,13 @@ def _setup_eunomia_datasets(
     data_url: str,
     backend_handle: DuckDBPyConnection,
     data_path: Path | None = None,
-    nested_omop_tables_folder: str = None,
+    nested_omop_tables_folder: str | None = None,
     dataset_prefix: str = "",
 ) -> None:
     """Loads the Eunomia datasets in the OMOP Common Data model."""
     download(
         data_url,
-        saving_path=data_path,
+        output_path=data_path,
     )
 
     if nested_omop_tables_folder:
@@ -198,7 +198,6 @@ def physionet2012(
         >>> import ehrapy as ep
         >>> import ehrdata as ed
         >>> edata = ed.dt.physionet_2012()
-        >>> edata
     """
     from ehrdata import EHRData
 
@@ -222,13 +221,13 @@ def physionet2012(
     for file_name in temp_data_set_names:
         download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}.tar.gz?download",
-            saving_path=data_path,
+            output_path=data_path,
         )
 
     for file_name in outcome_file_names:
         download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}?download",
-            saving_path=data_path,
+            output_path=data_path,
         )
 
     static_features = ["Age", "Gender", "ICUType", "Height"]
