@@ -222,6 +222,7 @@ def physionet2012(
         download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}.tar.gz?download",
             output_path=data_path,
+            output_file_name=f"{file_name}.tar.gz",
             archive_format="gztar",
         )
 
@@ -239,7 +240,7 @@ def physionet2012(
 
         # each txt file is the data of a person, in long format
         # the columns in the txt files are: Time, Parameter, Value
-        for txt_file in (data_path / data_subset_dir).glob("*.txt"):
+        for txt_file in (data_path / f"{data_subset_dir}.tar").glob("*.txt"):
             person_long = pd.read_csv(txt_file)
             # drop the first row, which has the RecordID
             person_long = person_long.iloc[1:]

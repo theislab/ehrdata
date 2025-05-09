@@ -12,7 +12,6 @@ import requests
 from filelock import FileLock
 from lamin_utils import logger
 from requests.exceptions import RequestException
-from rich import print
 from rich.progress import Progress
 
 
@@ -67,13 +66,12 @@ def download(
 
     with FileLock(lock_path, timeout=300):
         if download_to_path.exists():
-            warning = f"[bold red]File {download_to_path} already exists!"
+            warning = f"File {download_to_path} already exists!"
             if not overwrite:
-                print(warning)
-                logger.warning(f"File {download_to_path} already exists!")
+                logger.warning(warning)
                 return download_to_path
             else:
-                print(f"{warning} Overwriting...")
+                logger.warning(warning)
 
         temp_file_name = f"{download_to_path}.part"
 
