@@ -2,7 +2,7 @@ from typing import Literal, TypeAlias
 
 import numpy as np
 import scipy
-from anndata import abc
+from anndata.abc import CSCDataset, CSRDataset
 from anndata.compat import CupyArray, CupySparseMatrix, DaskArray, H5Array, H5Group, ZarrArray, ZarrGroup
 from numpy import ma
 from sparse import COO
@@ -24,8 +24,8 @@ XDataType: TypeAlias = (
     | H5Array
     | ZarrArray
     | ZappyArray
-    | abc.CSRDataset
-    | abc.CSCDataset
+    | CSRDataset
+    | CSCDataset
     | DaskArray
     | CupyArray
     | CupySparseMatrix
