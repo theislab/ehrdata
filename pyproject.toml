@@ -36,7 +36,7 @@ dependencies = [
 ]
 optional-dependencies.dev = [
   "pre-commit",
-  "twine>=4.0.2",
+  "twine",
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
