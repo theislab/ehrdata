@@ -165,7 +165,7 @@ class EHRData(AnnData):
 
         Args:
             adata: Annotated data object.
-            R: 3-Dimensional tensor, see r attribute.
+            R: 3-Dimensional tensor, see R attribute.
             t: Time dataframe for describing third axis, see t attribute.
             tidx: A slice for the 3rd dimension R. Usually, this will be None here.
 
