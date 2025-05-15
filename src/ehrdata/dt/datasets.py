@@ -53,6 +53,17 @@ def ehrdata_blobs(
         seasonality: Whether to add seasonal patterns to time series.
         irregular_sampling: Whether sampling intervals vary between observations.
         missing_values: Fraction of random missing values in time series.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.ehrdata_blobs(
+        ...     variable_length=True, time_shifts=True, seasonality=True, irregular_sampling=True
+        ... )
+
+    results in a dataset like:
+
+    .. image:: ../../docs/_static/tutorial_images/ehrdata_blobs.png
+       :alt: EHR data blobs visualization
     """
     rng = np.random.default_rng(random_state if isinstance(random_state, int) else None)
 
