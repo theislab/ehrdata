@@ -62,7 +62,7 @@ def ehrdata_blobs(
 
     results in a dataset like:
 
-    .. image:: ../../docs/_static/tutorial_images/ehrdata_blobs.png
+    .. image:: /_static/tutorial_images/ehrdata_blobs.png
        :alt: EHR data blobs visualization
     """
     rng = np.random.default_rng(random_state if isinstance(random_state, int) else None)

@@ -112,6 +112,7 @@ intersphinx_mapping = {
     "zarr": ("https://zarr.readthedocs.io/en/stable", None),
     "vitessce": ("https://python-docs.vitessce.io", None),
     "lamin": ("https://docs.lamin.ai", None),
+    "sparse": ("https://sparse.pydata.org/en/stable", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -125,7 +126,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "sphinx_book_theme"
+html_theme = "scanpydoc"
 html_static_path = ["_static"]
 html_css_files = ["css/custom.css"]
 
@@ -157,6 +158,7 @@ nitpick_ignore = [
     ("py:class", "anndata.compat.CupyArray"),
     ("py:class", "anndata.compat.CupySparseMatrix"),
     ("py:class", "sparse.numba_backend._coo.core.COO"),
+    ("py:class", "sparse._coo.core.COO"),
 ]
 
 # Redirect broken parameter annotation classes
