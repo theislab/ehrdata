@@ -98,7 +98,7 @@ def test_physionet2012_arguments():
 @pytest.mark.parametrize("sparse_param", [False])  # [False, True]
 def test_ehrdata_blobs(sparse_param):
     """Test the ehrdata_blobs function."""
-    edata = ed.dt.ehrdata_blobs(n_observations=100, n_variables=5, n_timepoints=10, sparse=sparse_param)
+    edata = ed.dt.ehrdata_blobs(n_observations=100, n_variables=5, base_timepoints=10, sparse=sparse_param)
 
     assert isinstance(edata, ed.EHRData)
 
@@ -136,12 +136,18 @@ def test_ehrdata_blobs(sparse_param):
     # Test t DataFrame
     assert isinstance(edata.t, pd.DataFrame)
     assert "timepoint" in edata.t.columns
-    assert edata.t.shape == (10, 1)
+    assert edata.t.shape == (10, 2)
 
 
 def test_ehrdata_blobs_distribution():
     edata = ed.dt.ehrdata_blobs(
-        n_observations=500, n_variables=10, n_centers=3, n_timepoints=15, cluster_std=0.5, sparse=False, random_state=42
+        n_observations=500,
+        n_variables=10,
+        n_centers=3,
+        base_timepoints=15,
+        cluster_std=0.5,
+        sparse=False,
+        random_state=42,
     )
 
     assert isinstance(edata, ed.EHRData)
@@ -177,4 +183,102 @@ def test_ehrdata_blobs_distribution():
 
     # Test that R at t=0 is close to X
     first_timepoint = edata.R[:, :, 0]
-    assert np.isclose(first_timepoint, edata.X, rtol=0.1, atol=0.1).mean() > 0.8
+    correlation = np.corrcoef(first_timepoint.flatten(), edata.X.flatten())[0, 1]
+    assert correlation > 0.5
+
+
+def test_ehrdata_ts_blobs_irregular():
+    edata = ed.dt.ehrdata_blobs(
+        n_observations=300,
+        n_variables=8,
+        n_centers=4,
+        base_timepoints=20,
+        cluster_std=0.5,
+        sparse=False,
+        variable_length=True,
+        time_shifts=True,
+        seasonality=True,
+        irregular_sampling=True,
+        missing_values=0.1,
+        random_state=42,
+    )
+
+    assert isinstance(edata, ed.EHRData)
+    assert edata.n_obs == 300
+    assert edata.n_vars == 8
+
+    # Check that time dimension exists and has more points than base_timepoints
+    assert edata.n_t > 20
+    assert "time_value" in edata.t.columns
+
+    # Test for irregular time sampling
+    time_values = edata.t["time_value"].values
+    time_diffs = np.diff(time_values)
+    # Time differences should have meaningful variation with irregular sampling
+    assert np.std(time_diffs) > 0.001
+
+    # Test for missing values in R
+    nan_count = np.isnan(edata.R).sum()
+    total_elements = np.prod(edata.R.shape)
+    missing_ratio = nan_count / total_elements
+    assert missing_ratio > 0.05
+
+    # Test for variable length time series
+    valid_counts = []
+    for i in range(edata.n_obs):
+        valid_count = np.sum(~np.isnan(edata.R[i, 0, :]))
+        valid_counts.append(valid_count)
+
+    valid_counts = np.array(valid_counts)
+    # Check for variation in time series lengths
+    assert np.std(valid_counts) > 0.5
+    assert np.max(valid_counts) > np.min(valid_counts)
+
+    # Test for time shifts
+    clusters = edata.obs["cluster"].astype(int).values
+
+    shift_detected = False
+    for cluster in np.unique(clusters):
+        cluster_mask = clusters == cluster
+        obs_indices = np.where(cluster_mask)[0]
+
+        if len(obs_indices) >= 2:
+            obs1 = obs_indices[0]
+            obs2 = obs_indices[1]
+
+            valid_times1 = np.where(~np.isnan(edata.R[obs1, 0, :]))[0]
+            valid_times2 = np.where(~np.isnan(edata.R[obs2, 0, :]))[0]
+
+            if len(valid_times1) > 0 and len(valid_times2) > 0:
+                first_time1 = valid_times1[0]
+                first_time2 = valid_times2[0]
+
+                if abs(first_time1 - first_time2) > 0:
+                    shift_detected = True
+                    break
+
+    assert shift_detected
+
+    # Test for seasonality
+    seasonal_pattern_found = False
+    for i in range(min(10, edata.n_obs)):  # Check first 10 observations max
+        for v in range(edata.n_vars):
+            values = edata.R[i, v, :]
+            valid_mask = ~np.isnan(values)
+
+            if np.sum(valid_mask) >= 10:  # Need at least 10 valid points
+                time_series = values[valid_mask]
+
+                # Look for patterns by checking if the time series is non-monotonic
+                # True seasonality will have ups and downs
+                diffs = np.diff(time_series)
+                sign_changes = np.sum((diffs[:-1] * diffs[1:]) < 0)
+
+                # If we have multiple sign changes, there's likely a pattern
+                if sign_changes >= 3:
+                    seasonal_pattern_found = True
+                    break
+        if seasonal_pattern_found:
+            break
+
+    assert seasonal_pattern_found

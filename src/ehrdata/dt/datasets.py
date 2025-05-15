@@ -27,36 +27,163 @@ def ehrdata_blobs(
     n_centers: int = 5,
     cluster_std: float = 1.0,
     n_observations: int = 1000,
-    n_timepoints: int = 100,
+    base_timepoints: int = 100,
     random_state: int | np.random.Generator = 0,
     sparse: bool = False,
     sparsity: float = 0.9,
+    variable_length: bool = False,
+    time_shifts: bool = False,
+    seasonality: bool = False,
+    irregular_sampling: bool = False,
+    missing_values: float = 0.0,
 ) -> EHRData:
-    """Generates an example dataset for tests and tutorials.
+    """Generates time series example dataset suited for alignment tasks.
 
     Args:
         n_variables: Dimension of feature space.
         n_centers: Number of cluster centers.
         cluster_std: Standard deviation of clusters.
         n_observations: Number of observations.
-        n_timepoints: Number of time points.
+        base_timepoints: Base number of time points (actual may vary per observation).
         random_state: Determines random number generation for dataset creation.
-        sparse: Whether to use sparse matrices (scipy.sparse.csr_matrix for X, sparse.COO for R).
-        sparsity: Target sparsity level (fraction of zeros) when sparse=True.
+        sparse: Whether to use sparse matrices.
+        sparsity: Target sparsity level when sparse=True.
+        variable_length: Whether observations have different time series lengths.
+        time_shifts: Whether to add time shifts between similar observations.
+        seasonality: Whether to add seasonal patterns to time series.
+        irregular_sampling: Whether sampling intervals vary between observations.
+        missing_values: Fraction of random missing values in time series.
     """
     rng = np.random.default_rng(random_state if isinstance(random_state, int) else None)
 
+    # Generate cluster centers and assignments
     centers = rng.normal(0, 5, size=(n_centers, n_variables))
     y = rng.integers(0, n_centers, size=n_observations)
 
+    # Generate base feature values (X)
     X = np.zeros((n_observations, n_variables))
-    for i in range(n_observations):
-        X[i] = centers[y[i]] + rng.normal(0, cluster_std, size=n_variables)
+    X = centers[y] + rng.normal(0, cluster_std, size=(n_observations, n_variables))
 
-    R = np.zeros((n_observations, n_variables, n_timepoints))
-    for t in range(n_timepoints):
-        time_factor = 0.5 + t / n_timepoints
-        R[:, :, t] = X + time_factor * rng.normal(0, cluster_std / 2, size=(n_observations, n_variables))
+    # Determine time series lengths for each observation
+    if variable_length:
+        # Vary length from 50% to 150% of base_timepoints
+        lengths = rng.integers(max(10, int(base_timepoints * 0.5)), int(base_timepoints * 1.5), size=n_observations)
+    else:
+        lengths = np.full(n_observations, base_timepoints)
+
+    max_length = int(lengths.max())
+
+    # Create time points for each observation (potentially irregular)
+    all_timepoints = []
+    for i in range(n_observations):
+        length = lengths[i]
+
+        if irregular_sampling:
+            # Create non-uniform time spacing
+            if time_shifts and i > 0:
+                # Add random shift for similar clusters
+                shift = rng.uniform(0, 0.3 * base_timepoints)
+                start = shift if y[i] == y[i - 1] else 0
+            else:
+                start = 0
+
+            # Irregular intervals with increasing spacing
+            intervals = rng.exponential(scale=1.0, size=length)
+            intervals = intervals / intervals.sum() * (max_length - start)
+            timepoints = np.cumsum(intervals) + start
+        else:
+            # Regular intervals
+            if time_shifts and i > 0:
+                # Add cluster-based shifts
+                shift = rng.uniform(0, 0.3 * base_timepoints) if y[i] == y[i - 1] else 0
+            else:
+                shift = 0
+
+            timepoints = np.linspace(shift, max_length + shift, length)
+
+        all_timepoints.append(timepoints)
+
+    # Create time index - use all unique timepoints from all observations
+    all_unique_times = np.unique(np.concatenate(all_timepoints))
+    all_unique_times.sort()
+
+    n_total_timepoints = len(all_unique_times)
+    t_index = pd.Index([str(i) for i in range(n_total_timepoints)])
+
+    # Create time DataFrame with actual time values
+    t_df = pd.DataFrame(
+        {
+            "timepoint": range(n_total_timepoints),
+            "time_value": all_unique_times,
+        },
+        index=t_index,
+    )
+
+    # Prepare 3D array to store all time series
+    R = np.zeros((n_observations, n_variables, n_total_timepoints))
+    R.fill(np.nan)
+
+    # Generate time series for each observation
+    for i in range(n_observations):
+        # Map this observation's time points to the global time index
+        obs_timepoints = all_timepoints[i]
+
+        # Find indices of these timepoints in the global time array
+        time_indices = np.searchsorted(all_unique_times, obs_timepoints)
+
+        # Generate patterns for this observation
+        for v in range(n_variables):
+            base_value = X[i, v]
+
+            # Time series with different patterns
+            time_series = np.zeros(len(time_indices))
+
+            # Add trend component (linear increase based on variable value)
+            trend = np.linspace(0, base_value * 0.5, len(time_indices))
+            time_series += trend
+
+            # Add seasonality if enabled
+            if seasonality:
+                freq = rng.uniform(3, 15)
+
+                # Phase shift based on cluster
+                phase = y[i] * np.pi / n_centers
+
+                # Amplitude based on variable value
+                amplitude = np.abs(base_value) * 0.3
+
+                # Add seasonal component
+                seasonal = amplitude * np.sin(freq * np.pi * np.arange(len(time_indices)) / len(time_indices) + phase)
+                time_series += seasonal
+
+            # Add noise increasing with time
+            for t_idx, t in enumerate(time_indices):
+                noise_scale = cluster_std / 2 * (0.5 + t / n_total_timepoints)
+                time_series[t_idx] += rng.normal(0, noise_scale)
+
+            time_series += base_value
+
+            R[i, v, time_indices] = time_series
+
+    # Add random missing values if requested
+    if missing_values > 0:
+        # Create a mask for random missing values (ignoring already missing values)
+        missing_mask = rng.random(R.shape) < missing_values
+        not_nan_mask = ~np.isnan(R)
+        R[missing_mask & not_nan_mask] = np.nan
+
+    # Ensure that X contains a snapshot of R at a common time index
+    # Use the middle timepoint if available for each observation
+    for i in range(n_observations):
+        valid_times = ~np.isnan(R[i, 0, :])
+        if np.any(valid_times):
+            # Find middle timepoint for this observation
+            valid_indices = np.where(valid_times)[0]
+            mid_idx = valid_indices[len(valid_indices) // 2]
+
+            # Update X to contain this snapshot
+            for v in range(n_variables):
+                X[i, v] = R[i, v, mid_idx]
 
     if sparse:
         mask_x = rng.random(X.shape) > sparsity
@@ -64,12 +191,18 @@ def ehrdata_blobs(
         data_x[~mask_x] = 0
         X = csr_matrix(data_x)
 
+        # For R, handle both NaN and sparsity
+        # First replace NaN with 0 where we're keeping values
         mask_r = rng.random(R.shape) > sparsity
-        coords = np.where(mask_r)
-        values = R[coords]
-        R = COO(coords, values, shape=R.shape)
+        R_copy = R.copy()
+        R_copy[np.isnan(R)] = 0
+        R_copy[~mask_r] = 0
 
-    t_df = pd.DataFrame({"timepoint": range(n_timepoints)}, index=pd.Index([str(i) for i in range(n_timepoints)]))
+        # Get coordinates and values for non-zero entries
+        coords = np.where(R_copy != 0)
+        values = R_copy[coords]
+
+        R = COO(coords, values, shape=R.shape)
 
     from ehrdata import EHRData
 
