@@ -53,6 +53,15 @@ def download(
             file_name = file_name.replace("?", "_").replace("*", "_")
         return file_name
 
+    # For archives, check if extraction directory already exists
+    if archive_format:
+        extraction_name = _remove_archive_extension(output_file_name)
+        extraction_path = Path(output_path) / extraction_name
+
+        if extraction_path.exists() and any(extraction_path.iterdir()) and not overwrite:
+            logger.info(f"Extracted content already exists at {extraction_path}, skipping download")
+            return extraction_path
+
     download_to_path = Path(
         _sanitize_file_name(
             f"{output_path}{output_file_name}"
