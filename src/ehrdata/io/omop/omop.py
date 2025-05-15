@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from duckdb.duckdb import DuckDBPyConnection
 
-from ehrdata._omop_utils import get_table_catalog_dict
+from ehrdata.io._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._check_arguments import (
     VALID_OBSERVATION_TABLES_JOIN,
     VALID_OBSERVATION_TABLES_SINGLE,

@@ -1,5 +1,6 @@
 import duckdb
 import numpy as np
+import pandas as pd
 import pytest
 
 import ehrdata as ed
@@ -92,3 +93,88 @@ def test_physionet2012_arguments():
     assert edata.R.shape == (12000, 37, 24)
     assert edata.obs.shape == (12000, 10)
     assert edata.var.shape == (37, 1)
+
+
+@pytest.mark.parametrize("sparse_param", [False])  # [False, True]
+def test_ehrdata_blobs(sparse_param):
+    """Test the ehrdata_blobs function."""
+    edata = ed.dt.ehrdata_blobs(n_observations=100, n_variables=5, n_timepoints=10, sparse=sparse_param)
+
+    assert isinstance(edata, ed.EHRData)
+
+    assert edata.shape == (100, 5, 10)
+    assert edata.n_obs == 100
+    assert edata.n_vars == 5
+    assert edata.n_t == 10
+
+    # Test X data
+    if not sparse_param:
+        assert isinstance(edata.X, np.ndarray)
+        assert edata.X.shape == (100, 5)
+    # else:
+    #     assert sparse.issparse(ehr_data.X)
+    #     assert ehr_data.X.shape == (100, 5)
+
+    # Test R data
+    if not sparse_param:
+        assert isinstance(edata.R, np.ndarray)
+        assert edata.R.shape == (100, 5, 10)
+    # else:
+    #     from sparse import COO
+    #     assert isinstance(ehr_data.R, COO)
+    #     assert ehr_data.R.shape == (100, 5, 10)
+
+    # Test obs DataFrame
+    assert isinstance(edata.obs, pd.DataFrame)
+    assert "cluster" in edata.obs.columns
+    assert edata.obs.shape == (100, 1)
+
+    # Test var DataFrame
+    assert isinstance(edata.var, pd.DataFrame)
+    assert edata.var.shape == (5, 0)
+
+    # Test t DataFrame
+    assert isinstance(edata.t, pd.DataFrame)
+    assert "timepoint" in edata.t.columns
+    assert edata.t.shape == (10, 1)
+
+
+def test_ehrdata_blobs_distribution():
+    edata = ed.dt.ehrdata_blobs(
+        n_observations=500, n_variables=10, n_centers=3, n_timepoints=15, cluster_std=0.5, sparse=False, random_state=42
+    )
+
+    assert isinstance(edata, ed.EHRData)
+    assert edata.shape == (500, 10, 15)
+
+    clusters = edata.obs["cluster"].astype(int).values
+
+    # Test cluster separation in X
+    for cluster_id in np.unique(clusters):
+        cluster_mask = clusters == cluster_id
+        cluster_points = edata.X[cluster_mask]
+
+        cluster_center = np.mean(cluster_points, axis=0)
+
+        # Calculate average distance to center
+        distances = np.linalg.norm(cluster_points - cluster_center, axis=1)
+        avg_distance = np.mean(distances)
+
+        # Check that points are reasonably clustered (average distance should be near cluster_std)
+        expected_distance = 0.5 * np.sqrt(10)  # cluster_std * sqrt(dimensions)
+        assert 0.3 * expected_distance < avg_distance < 3.0 * expected_distance
+
+    # Test time evolution in R
+    # Check that variation increases with time
+    time_variations = []
+    for t in range(edata.n_t):
+        time_slice = edata.R[:, :, t]
+        variation = np.std(time_slice)
+        time_variations.append(variation)
+
+    # Verify increasing variation trend
+    assert time_variations[-1] > time_variations[0]
+
+    # Test that R at t=0 is close to X
+    first_timepoint = edata.R[:, :, 0]
+    assert np.isclose(first_timepoint, edata.X, rtol=0.1, atol=0.1).mean() > 0.8

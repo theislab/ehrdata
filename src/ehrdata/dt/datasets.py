@@ -17,6 +17,71 @@ if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
+from scipy.sparse import csr_matrix
+from sparse import COO
+
+
+def ehrdata_blobs(
+    *,
+    n_variables: int = 11,
+    n_centers: int = 5,
+    cluster_std: float = 1.0,
+    n_observations: int = 1000,
+    n_timepoints: int = 100,
+    random_state: int | np.random.Generator = 0,
+    sparse: bool = False,
+    sparsity: float = 0.9,
+) -> EHRData:
+    """Generates an example dataset for tests and tutorials.
+
+    Args:
+        n_variables: Dimension of feature space.
+        n_centers: Number of cluster centers.
+        cluster_std: Standard deviation of clusters.
+        n_observations: Number of observations.
+        n_timepoints: Number of time points.
+        random_state: Determines random number generation for dataset creation.
+        sparse: Whether to use sparse matrices (scipy.sparse.csr_matrix for X, sparse.COO for R).
+        sparsity: Target sparsity level (fraction of zeros) when sparse=True.
+    """
+    rng = np.random.default_rng(random_state if isinstance(random_state, int) else None)
+
+    centers = rng.normal(0, 5, size=(n_centers, n_variables))
+    y = rng.integers(0, n_centers, size=n_observations)
+
+    X = np.zeros((n_observations, n_variables))
+    for i in range(n_observations):
+        X[i] = centers[y[i]] + rng.normal(0, cluster_std, size=n_variables)
+
+    R = np.zeros((n_observations, n_variables, n_timepoints))
+    for t in range(n_timepoints):
+        time_factor = 0.5 + t / n_timepoints
+        R[:, :, t] = X + time_factor * rng.normal(0, cluster_std / 2, size=(n_observations, n_variables))
+
+    if sparse:
+        mask_x = rng.random(X.shape) > sparsity
+        data_x = X.copy()
+        data_x[~mask_x] = 0
+        X = csr_matrix(data_x)
+
+        mask_r = rng.random(R.shape) > sparsity
+        coords = np.where(mask_r)
+        values = R[coords]
+        R = COO(coords, values, shape=R.shape)
+
+    t_df = pd.DataFrame({"timepoint": range(n_timepoints)}, index=pd.Index([str(i) for i in range(n_timepoints)]))
+
+    from ehrdata import EHRData
+
+    return EHRData(
+        X=X,
+        obs=pd.DataFrame({"cluster": y.astype(str)}, index=pd.Index([str(i) for i in range(n_observations)])),
+        var=pd.DataFrame(index=pd.Index([f"feature_{i}" for i in range(n_variables)])),
+        R=R,
+        t=t_df,
+    )
+
+
 def _setup_eunomia_datasets(
     data_url: str,
     backend_handle: DuckDBPyConnection,
@@ -45,7 +110,6 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
     """Loads the MIMIC-IV demo data in the OMOP Common Data model.
 
     Loads the MIMIC-IV demo dataset from its `physionet repository <https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel>`_.
-    See also this link for more details.
 
     DOI https://doi.org/10.13026/2d25-8g07.
 
