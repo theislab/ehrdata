@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning][].
 - Expanded documentation
 - Improved OMOP Extraction
 - Support for [COO sparse matrices](https://github.com/pydata/sparse) for R
+- A `ed.dt.ehrdata_blobs` test data generator function
 
 ### Breaking changes
 

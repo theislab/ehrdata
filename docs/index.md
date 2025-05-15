@@ -3,6 +3,7 @@
 ```
 
 ```{toctree}
+:caption: 'General'
 :hidden: true
 :maxdepth: 1
 
@@ -11,10 +12,12 @@ changelog.md
 contributing.md
 references.md
 
-notebooks/getting_started
-notebooks/tutorial_omop_visualization
-notebooks/omop_tables_tutorial
-notebooks/tutorial_time_series_with_pypots
-notebooks/omop_ml
-notebooks/physionet2012
+```
+
+```{toctree}
+:caption: 'Gallery'
+:hidden: true
+:maxdepth: 3
+
+tutorials/index
 ```

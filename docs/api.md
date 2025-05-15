@@ -1,67 +1,21 @@
 # API
 
-## EHRData
+Import the ehrdata API as follows:
 
-```{eval-rst}
-.. module:: ehrdata
-
-.. autosummary::
-    :toctree: generated
-
-    EHRData
+```python
+import ehrdata as ed
 ```
 
-## Input-Output
+```{toctree}
+:maxdepth: 1
 
-```{eval-rst}
-.. module:: ehrdata.io
-.. currentmodule:: ehrdata
-
-.. autosummary::
-    :toctree: generated
-
-    io.omop.setup_connection
-    io.omop.setup_obs
-    io.omop.setup_variables
-    io.omop.setup_interval_variables
+api/ehrdata_index
+api/datasets_index
+api/io_index
+api/tools_index
+api/plot_index
 ```
 
-## Datasets
-
 ```{eval-rst}
-.. module:: ehrdata.dt
 .. currentmodule:: ehrdata
-
-.. autosummary::
-    :toctree: generated
-
-    dt.ehrdata_blobs
-    dt.mimic_iv_omop
-    dt.gibleed_omop
-    dt.synthea27nj_omop
-    dt.physionet2012
-```
-
-## Tools
-
-```{eval-rst}
-.. module:: ehrdata.tl
-.. currentmodule:: ehrdata
-
-.. autosummary::
-    :toctree: generated
-
-    tl.omop.EHRDataset
-```
-
-## Plotting
-
-```{eval-rst}
-.. module:: ehrdata.pl
-.. currentmodule:: ehrdata
-
-.. autosummary::
-    :toctree: generated
-
-    pl.vitessce.gen_config
 ```
