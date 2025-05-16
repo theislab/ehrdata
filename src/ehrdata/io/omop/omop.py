@@ -120,17 +120,15 @@ def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.Dat
         if len(units) == 0:
             feature_units_long_format.append({"concept_id": feature, "no_units": True, "multiple_units": False})
         elif len(units) > 1:
-            feature_units_long_format.extend(
-                [
+            for unit in units:
+                feature_units_long_format.append(
                     {
                         "concept_id": feature,
                         "unit_concept_id": unit,
                         "no_units": False,
                         "multiple_units": True,
                     }
-                    for unit in units
-                ]
-            )
+                )
         else:
             feature_units_long_format.append(
                 {
