@@ -190,6 +190,7 @@ def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefi
 def setup_obs(
     backend_handle: duckdb.duckdb.DuckDBPyConnection,
     observation_table: Literal["person", "person_cohort", "person_observation_period", "person_visit_occurrence"],
+    *,
     death_table: bool = False,
 ):
     """Setup the observation table for EHRData object.
