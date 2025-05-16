@@ -12,7 +12,7 @@ def skip_member_handler(
     what: Literal["module", "class", "exception", "function", "method", "attribute", "property"],
     name: str,
     obj: object,
-    skip: bool,
+    skip: bool,  # noqa: FBT001
     options,
 ) -> bool | None:
     """Skip inherited members."""
