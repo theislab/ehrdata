@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import shutil
-from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-from duckdb.duckdb import DuckDBPyConnection
 
 from ehrdata.dt.dataloader import download
 from ehrdata.io.omop import setup_connection
 from ehrdata.io.omop._queries import _generate_timedeltas
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from duckdb.duckdb import DuckDBPyConnection
+
     from ehrdata import EHRData
 
 
@@ -104,7 +106,7 @@ def ehrdata_blobs(
             timepoints = np.cumsum(intervals) + start
         else:
             # Regular intervals
-            if time_shifts and i > 0:
+            if time_shifts and i > 0:  # noqa: SIM108
                 # Add cluster-based shifts
                 shift = rng.uniform(0, 0.3 * base_timepoints) if y[i] == y[i - 1] else 0
             else:

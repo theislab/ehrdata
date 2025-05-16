@@ -13,4 +13,5 @@ def __getattr__(name: str):
         from ._dataset import EHRDataset
 
         return EHRDataset
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+    msg = f"module '{__name__}' has no attribute '{name}'"
+    raise AttributeError(msg)

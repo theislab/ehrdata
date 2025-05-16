@@ -21,6 +21,7 @@ def download(
     output_file_name: str | None = None,
     output_path: str | Path | None = None,
     block_size: int = 1024,
+    *,
     overwrite: bool = False,
     timeout: int = 30,
     max_retries: int = 3,
@@ -42,7 +43,7 @@ def download(
     # Handle URL query parameters like "?download"
     if output_file_name is None:
         # Extract filename from URL and strip query parameters
-        file_name = os.path.basename(url).split("?")[0]
+        file_name = Path(url).name.split("?")[0]
         output_file_name = file_name
 
     if output_path is None:
@@ -93,9 +94,8 @@ def download(
 
                 free_space = shutil.disk_usage(output_path).free
                 if content_length > free_space:
-                    raise OSError(
-                        f"Insufficient disk space. Need {content_length} bytes, but only {free_space} available."
-                    )
+                    msg = f"Insufficient disk space. Need {content_length} bytes, but only {free_space} available."
+                    raise OSError(msg)
 
                 response = requests.get(url, stream=True)
                 response.raise_for_status()
@@ -134,17 +134,17 @@ def download(
                 retry_count += 1
                 if retry_count <= max_retries:
                     logger.warning(
-                        f"Download attempt {retry_count}/{max_retries} failed: {str(e)}. Retrying in {retry_delay} seconds..."
+                        f"Download attempt {retry_count}/{max_retries} failed: {e!s}. Retrying in {retry_delay} seconds..."
                     )
                     time.sleep(retry_delay)
                 else:
-                    logger.error(f"Download failed after {max_retries} attempts: {str(e)}")
+                    logger.error(f"Download failed after {max_retries} attempts: {e!s}")
                     if Path(temp_file_name).exists():
                         Path(temp_file_name).unlink(missing_ok=True)
                     raise
 
             except Exception as e:
-                logger.error(f"Download failed: {str(e)}")
+                logger.error(f"Download failed: {e!s}")
                 if Path(temp_file_name).exists():
                     Path(temp_file_name).unlink(missing_ok=True)
                 raise

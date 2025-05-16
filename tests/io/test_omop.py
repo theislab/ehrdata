@@ -55,7 +55,7 @@ VAR_DIM_UNIT_INFO = NUMBER_COLUMNS_CONCEPT_TABLE + NUMBER_COLUMNS_FEATURE_REPORT
 
 
 @pytest.mark.parametrize(
-    "observation_table, death_table, expected_length, expected_obs_num_columns",
+    ("observation_table", "death_table", "expected_length", "expected_obs_num_columns"),
     [
         ("person", False, 4, 18),
         ("person", True, 4, 24),
@@ -78,7 +78,7 @@ def test_setup_obs(omop_connection_vanilla, observation_table, death_table, expe
 
 
 @pytest.mark.parametrize(
-    "backend_handle, observation_table, death_table, expected_error",
+    ("backend_handle", "observation_table", "death_table", "expected_error"),
     [
         ("wrong_type", "person", False, "Expected backend_handle to be of type DuckDBPyConnection."),
         (None, 123, False, "Expected observation_table to be a string."),
@@ -117,7 +117,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
 )
 # test 1 field from table, and is_present encoding
 @pytest.mark.parametrize(
-    "data_tables,data_field_to_keep,target_r",
+    ("data_tables", "data_field_to_keep", "target_r"),
     [
         (
             ["measurement"],
@@ -246,7 +246,7 @@ def test_setup_variables(
 )
 # test 1 field from table, and is_present encoding, with start, end, and interval
 @pytest.mark.parametrize(
-    "data_tables,data_field_to_keep,keep_date,target_r",
+    ("data_tables", "data_field_to_keep", "keep_date", "target_r"),
     [
         (
             ["drug_exposure"],
@@ -682,7 +682,18 @@ def test_setup_interval_type_variables(
 
 
 @pytest.mark.parametrize(
-    "edata, backend_handle, data_tables, data_field_to_keep, interval_length_number, interval_length_unit, num_intervals, enrich_var_with_feature_info, enrich_var_with_unit_info, expected_error",
+    (
+        "edata",
+        "backend_handle",
+        "data_tables",
+        "data_field_to_keep",
+        "interval_length_number",
+        "interval_length_unit",
+        "num_intervals",
+        "enrich_var_with_feature_info",
+        "enrich_var_with_unit_info",
+        "expected_error",
+    ),
     [
         (
             "wrong_type",
@@ -847,7 +858,17 @@ def test_setup_variables_illegal_argument_types(
 
 
 @pytest.mark.parametrize(
-    "edata, backend_handle, data_tables, data_field_to_keep, interval_length_number, interval_length_unit, num_intervals, enrich_var_with_feature_info, expected_error",
+    (
+        "edata",
+        "backend_handle",
+        "data_tables",
+        "data_field_to_keep",
+        "interval_length_number",
+        "interval_length_unit",
+        "num_intervals",
+        "enrich_var_with_feature_info",
+        "expected_error",
+    ),
     [
         (
             "wrong_type",
@@ -988,7 +1009,18 @@ def test_setup_interval_variables_illegal_argument_types(
 
 
 @pytest.mark.parametrize(
-    "edata, backend_handle, data_tables, data_field_to_keep, interval_length_number, interval_length_unit, num_intervals, enrich_var_with_feature_info, enrich_var_with_unit_info, expected_error",
+    (
+        "edata",
+        "backend_handle",
+        "data_tables",
+        "data_field_to_keep",
+        "interval_length_number",
+        "interval_length_unit",
+        "num_intervals",
+        "enrich_var_with_feature_info",
+        "enrich_var_with_unit_info",
+        "expected_error",
+    ),
     [
         (
             None,
@@ -1045,7 +1077,17 @@ def test_setup_variables_illegal_argument_values(
 
 
 @pytest.mark.parametrize(
-    "edata, backend_handle, data_tables, data_field_to_keep, interval_length_number, interval_length_unit, num_intervals, enrich_var_with_feature_info, expected_error",
+    (
+        "edata",
+        "backend_handle",
+        "data_tables",
+        "data_field_to_keep",
+        "interval_length_number",
+        "interval_length_unit",
+        "num_intervals",
+        "enrich_var_with_feature_info",
+        "expected_error",
+    ),
     [
         (
             None,

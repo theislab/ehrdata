@@ -65,7 +65,7 @@ def gen_config(
     wrapper = AnnDataWrapper(
         adata_path=path,
         adata_url=url,
-        # vitessce is old and doesn’t deal with proper Paths
+        # vitessce is old and doesn't deal with proper Paths
         adata_store=str(store) if isinstance(store, Path) else store,
         adata_artifact=artifact,
         obs_set_paths=list(obs_sets.keys()),

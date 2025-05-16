@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
-from os import PathLike
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 import numpy as np
@@ -14,6 +12,9 @@ from ehrdata._types import DaskArray, RDataType, XDataType
 from ehrdata.core.constants import R_LAYER_KEY
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
+    from os import PathLike
+
     from anndata._core.index import Index as ADIndex
     from anndata._core.index import Index1D
 
@@ -73,10 +74,7 @@ class EHRData(AnnData):
         self._tidx = None
 
         # Check if r is already present in layers
-        if layers is not None:
-            R_existing = layers.get(R_LAYER_KEY)
-        else:
-            R_existing = None
+        R_existing = layers.get(R_LAYER_KEY) if layers is not None else None
         if R is not None and R_existing is not None:
             msg = f"`R` is both specified and already present in `layers[{R_LAYER_KEY}]`."
             raise ValueError(msg)
@@ -255,12 +253,11 @@ class EHRData(AnnData):
     @t.setter
     def t(self, input: pd.DataFrame) -> None:
         if not isinstance(input, pd.DataFrame):
-            raise ValueError("Can only assign pd.DataFrame to t.")
-        if self.n_t is not None:
-            if len(input) != self.n_t:
-                raise ValueError(
-                    f"Length of passed value for t is {len(input)}, but this EHRData has shape: {self.shape}"
-                )
+            msg = "Can only assign pd.DataFrame to t."
+            raise ValueError(msg)
+        if self.n_t is not None and len(input) != self.n_t:
+            msg = f"Length of passed value for t is {len(input)}, but this EHRData has shape: {self.shape}"
+            raise ValueError(msg)
 
         self._t = input
         self._n_t = len(input)
@@ -388,7 +385,8 @@ class EHRData(AnnData):
         elif len(index) == 1:
             return index[0], slice(None), slice(None)
         else:
-            raise IndexError("invalid number of indices")
+            msg = "invalid number of indices"
+            raise IndexError(msg)
 
     def copy(self) -> EHRData:
         """Returns a copy of the EHRData object."""
