@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -50,8 +51,8 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
     used_tables = []
     missing_tables = []
     unused_files = []
-    for file_path in Path(path).iterdir():
-        file_name_trunk = file_path.stem.lower()
+    for file_name in os.listdir(path):  # noqa: PTH208
+        file_name_trunk = file_name.split(".")[0].lower()
         regular_omop_table_name = file_name_trunk.replace(prefix, "")
 
         if regular_omop_table_name in tables:
@@ -60,7 +61,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
             dtype = {"measurement_source_value": str} if regular_omop_table_name == "measurement" else None
 
             # read raw csv as temporary table
-            temp_relation = backend_handle.read_csv(path / file_path, dtype=dtype)  # noqa: F841
+            temp_relation = backend_handle.read_csv(path / file_name, dtype=dtype)  # noqa: F841
             backend_handle.execute("CREATE OR REPLACE TABLE temp_table AS SELECT * FROM temp_relation")
 
             # make query to create table with lowercase column names
@@ -120,15 +121,17 @@ def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.Dat
         if len(units) == 0:
             feature_units_long_format.append({"concept_id": feature, "no_units": True, "multiple_units": False})
         elif len(units) > 1:
-            for unit in units:
-                feature_units_long_format.append(
+            feature_units_long_format.extend(
+                [
                     {
                         "concept_id": feature,
                         "unit_concept_id": unit,
                         "no_units": False,
                         "multiple_units": True,
                     }
-                )
+                    for unit in units
+                ]
+            )
         else:
             feature_units_long_format.append(
                 {
