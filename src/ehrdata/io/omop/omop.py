@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import logging
+import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
+import duckdb
 import numpy as np
 import pandas as pd
+from duckdb.duckdb import DuckDBPyConnection
 
 from ehrdata.io._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._check_arguments import (
@@ -29,17 +33,14 @@ from ehrdata.io.omop._check_arguments import (
 )
 from ehrdata.io.omop._queries import _write_long_time_interval_table
 
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    import duckdb
-    from duckdb.duckdb import DuckDBPyConnection
-
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
 
 def _get_table_list() -> list:
-    flat_table_list = [value for value_list in get_table_catalog_dict().values() for value in value_list]
+    flat_table_list = []
+    for _, value_list in get_table_catalog_dict().items():
+        for value in value_list:
+            flat_table_list.append(value)
     return flat_table_list
 
 
@@ -50,14 +51,17 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
     used_tables = []
     missing_tables = []
     unused_files = []
-    for file_name in Path(path).iterdir():
-        file_name_trunk = str(file_name).split(".")[0].lower()
+    for file_name in os.listdir(path):
+        file_name_trunk = file_name.split(".")[0].lower()
         regular_omop_table_name = file_name_trunk.replace(prefix, "")
 
         if regular_omop_table_name in tables:
             used_tables.append(regular_omop_table_name)
 
-            dtype = {"measurement_source_value": str} if regular_omop_table_name == "measurement" else None
+            if regular_omop_table_name == "measurement":
+                dtype = {"measurement_source_value": str}
+            else:
+                dtype = None
 
             # read raw csv as temporary table
             temp_relation = backend_handle.read_csv(path / file_name, dtype=dtype)  # noqa: F841
@@ -83,7 +87,9 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
         elif file_name_trunk != DOWNLOAD_VERIFICATION_TAG:
             unused_files.append(file_name)
 
-    missing_tables = [table for table in tables if table not in used_tables]
+    for table in tables:
+        if table not in used_tables:
+            missing_tables.append(table)
 
     logging.info(f"missing tables: {missing_tables}")
     logging.info(f"unused files: {unused_files}")
@@ -189,7 +195,6 @@ def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefi
 def setup_obs(
     backend_handle: duckdb.duckdb.DuckDBPyConnection,
     observation_table: Literal["person", "person_cohort", "person_observation_period", "person_visit_occurrence"],
-    *,
     death_table: bool = False,
 ):
     """Setup the observation table for EHRData object.
@@ -350,10 +355,9 @@ def setup_variables(
 
     time_defining_table = edata.uns.get("omop_io_observation_table", None)
     if time_defining_table is None:
-        msg = "The observation table must be set up first, use the `setup_obs` function."
-        raise ValueError(msg)
+        raise ValueError("The observation table must be set up first, use the `setup_obs` function.")
 
-    data_field_to_keep = {k: [*list(v), "unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()}
+    data_field_to_keep = {k: list(v) + ["unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()}
 
     var_collector = {}
     r_collector = {}
@@ -394,8 +398,7 @@ def setup_variables(
 
         if enrich_var_with_unit_info:
             if unit_report["multiple_units"].sum() > 0:
-                msg = "Multiple units per feature found. Enrichment with feature information not possible."
-                raise ValueError(msg)
+                raise ValueError("Multiple units per feature found. Enrichment with feature information not possible.")
             else:
                 var = pd.merge(
                     var,
@@ -434,7 +437,10 @@ def setup_variables(
 
     var = pd.concat(var_collector.values(), axis=0)
 
-    r = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
+    if instantiate_tensor:
+        r = np.concatenate(list(r_collector.values()), axis=1)
+    else:
+        r = None
 
     t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
@@ -562,8 +568,7 @@ def setup_interval_variables(
 
     time_defining_table = edata.uns.get("omop_io_observation_table", None)
     if time_defining_table is None:
-        msg = "The observation table must be set up first, use the `setup_obs` function."
-        raise ValueError(msg)
+        raise ValueError("The observation table must be set up first, use the `setup_obs` function.")
 
     var_collector = {}
     r_collector = {}
@@ -618,7 +623,10 @@ def setup_interval_variables(
 
     var = pd.concat(var_collector.values(), axis=0)
 
-    r = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
+    if instantiate_tensor:
+        r = np.concatenate(list(r_collector.values()), axis=1)
+    else:
+        r = None
 
     t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
