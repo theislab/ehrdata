@@ -40,10 +40,7 @@ DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
 
 def _get_table_list() -> list:
-    flat_table_list = []
-    for value_list in get_table_catalog_dict().values():
-        for value in value_list:
-            flat_table_list.append(value)
+    flat_table_list = [value for value_list in get_table_catalog_dict().values() for value in value_list]
     return flat_table_list
 
 
@@ -87,9 +84,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
         elif file_name_trunk != DOWNLOAD_VERIFICATION_TAG:
             unused_files.append(file_name)
 
-    for table in tables:
-        if table not in used_tables:
-            missing_tables.append(table)
+    missing_tables = [table for table in tables if table not in used_tables]
 
     logging.info(f"missing tables: {missing_tables}")
     logging.info(f"unused files: {unused_files}")
