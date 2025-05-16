@@ -51,8 +51,8 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
     used_tables = []
     missing_tables = []
     unused_files = []
-    for file_name in os.listdir(path):
-        file_name_trunk = file_name.split(".")[0].lower()
+    for file_path in Path(path).iterdir():
+        file_name_trunk = file_path.stem.lower()
         regular_omop_table_name = file_name_trunk.replace(prefix, "")
 
         if regular_omop_table_name in tables:
