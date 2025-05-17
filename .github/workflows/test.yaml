@@ -64,3 +64,5 @@ jobs:
         run: uvx hatch test --cover --python ${{ matrix.python }} -- -m "not junk"
       - name: Upload coverage
         uses: codecov/codecov-action@v4
+      - name: List contents of dataset cache
+        run: ls -lh ./ehrapy_data
