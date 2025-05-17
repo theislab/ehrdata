@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-from duckdb.duckdb import DuckDBPyConnection
 from lamin_utils import logger
 
 from ehrdata.dt.dataloader import download
