@@ -54,6 +54,6 @@ jobs:
           MPLBACKEND: agg
           PLATFORM: ${{ matrix.os }}
           DISPLAY: :42
-        run: uvx hatch test -- -m "not junk" --cover --python ${{ matrix.python }}
+        run: uvx hatch test --cover --python ${{ matrix.python }} -- -m "not junk"
       - name: Upload coverage
         uses: codecov/codecov-action@v4
