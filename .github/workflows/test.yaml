@@ -45,6 +45,13 @@ jobs:
         with:
           filter: blob:none
           fetch-depth: 0
+      - name: Cache datasets
+        uses: actions/cache@v3
+        with:
+          path: ./ehrapy_data
+          key: dataset-cache-${{ hashFiles('tests/dt/test_dt.py') }}
+          restore-keys: |
+            dataset-cache-
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
