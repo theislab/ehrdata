@@ -61,10 +61,7 @@ class EHRDataset(torch.utils.data.Dataset):
         ).fetchone()[0]
 
     def __len__(self):
-        if self.idxs:
-            where_clause = f"WHERE person_id IN ({','.join(str(_) for _ in self.idxs)})"
-        else:
-            where_clause = ""
+        where_clause = f"WHERE person_id IN ({','.join(str(_) for _ in self.idxs)})" if self.idxs else ""
         query = f"""
             SELECT COUNT(DISTINCT person_id)
             FROM long_person_timestamp_feature_value_{self.data_tables[0]}
@@ -97,7 +94,8 @@ class EHRDataset(torch.utils.data.Dataset):
         result.index_put_((feature_idx, step_idx), values)
 
         if self.target != "mortality":
-            raise NotImplementedError(f"Target {self.target} is not implemented")
+            msg = f"Target {self.target} is not implemented"
+            raise NotImplementedError(msg)
 
         # If person has an entry in the death table that is within visit_start_datetime and visit_end_datetime of the visit_occurrence table, report 1, else 0:
         # Left join ensures that for every patient, 0 or 1 is obtained

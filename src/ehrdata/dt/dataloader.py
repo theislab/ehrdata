@@ -19,6 +19,7 @@ def download(
     output_path: str | Path | None = None,
     archive_format: str | None = None,
     block_size: int = 1024,
+    *,
     overwrite: bool = False,
     timeout: int = 30,
     max_retries: int = 3,
@@ -59,7 +60,7 @@ def download(
     output_path = Path(output_path)
 
     # Handle URL query parameters like "?download"
-    url_file_name = os.path.basename(url).split("?")[0]
+    url_file_name = os.path.basename(url).split("?")[0]  # noqa: PTH119
     suffix = url_file_name.split(".")[-1]
 
     output_file_name = _sanitize_file_name(url_file_name) if output_file_name is None else output_file_name
@@ -73,7 +74,8 @@ def download(
         raw_data_output_path = Path(tmpdir) / output_file_name
         path_to_check = output_path / _remove_archive_extension(output_file_name)
     else:
-        raise RuntimeError(f"Unknown file format: {archive_format}")
+        msg = f"Unknown file format: {archive_format}"
+        raise RuntimeError(msg)
 
     lock_path = f"{path_to_check}.lock"
     with FileLock(lock_path, timeout=300):
@@ -98,9 +100,8 @@ def download(
                 free_space = shutil.disk_usage(output_path).free
 
                 if content_length > free_space:
-                    raise OSError(
-                        f"Insufficient disk space. Need {content_length} bytes, but only {free_space} available."
-                    )
+                    msg = f"Insufficient disk space. Need {content_length} bytes, but only {free_space} available."
+                    raise OSError(msg)
 
                 response = requests.get(url, stream=True)
                 response.raise_for_status()
@@ -128,17 +129,17 @@ def download(
                 retry_count += 1
                 if retry_count <= max_retries:
                     logger.warning(
-                        f"Download attempt {retry_count}/{max_retries} failed: {str(e)}. Retrying in {retry_delay} seconds..."
+                        f"Download attempt {retry_count}/{max_retries} failed: {e!s}. Retrying in {retry_delay} seconds..."
                     )
                     time.sleep(retry_delay)
                 else:
-                    logger.error(f"Download failed after {max_retries} attempts: {str(e)}")
+                    logger.error(f"Download failed after {max_retries} attempts: {e!s}")
                     if Path(temp_file_name).exists():
                         Path(temp_file_name).unlink(missing_ok=True)
                     raise
 
             except Exception as e:
-                logger.error(f"Download failed: {str(e)}")
+                logger.error(f"Download failed: {e!s}")
                 if Path(temp_file_name).exists():
                     Path(temp_file_name).unlink(missing_ok=True)
                 raise

@@ -6,7 +6,7 @@ import pytest
 import ehrdata as ed
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def duckdb_connection():
     """Fixture to create and return a DuckDB connection for testing."""
     con = duckdb.connect()

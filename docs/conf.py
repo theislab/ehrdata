@@ -11,10 +11,6 @@ import sys
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
 
 
 HERE = Path(__file__).parent

@@ -11,9 +11,6 @@ import numpy as np
 import pandas as pd
 import scipy
 
-if TYPE_CHECKING:
-    pass
-
 #############################
 # scipy sparse array compat #
 #############################
@@ -145,6 +142,5 @@ def lazy_import_torch() -> None:
 
         return torch
     except ImportError:
-        raise ImportError(
-            "The optional module 'torch' is not installed. Please install it using 'pip install ehrdata[torch]'."
-        ) from None
+        msg = "The optional module 'torch' is not installed. Please install it using 'pip install ehrdata[torch]'."
+        raise ImportError(msg) from None

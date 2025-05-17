@@ -8,7 +8,8 @@ from anndata.compat import Index
 
 @singledispatch
 def _subset(a, subset_idx):
-    raise NotImplementedError(f"Subsetting of type {type(a)} in field .r is not implemented.")
+    msg = f"Subsetting of type {type(a)} in field .r is not implemented."
+    raise NotImplementedError(msg)
 
 
 @_subset.register(np.ndarray)
