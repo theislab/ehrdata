@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 from duckdb.duckdb import DuckDBPyConnection
+from lamin_utils import logger
 
 from ehrdata.dt.dataloader import download
 from ehrdata.io.omop import setup_connection
@@ -240,6 +241,8 @@ def _setup_eunomia_datasets(
     )
 
     if nested_omop_tables_folder:
+        if len(list((data_path / nested_omop_tables_folder).glob("*.csv"))) > 0:
+            logger.info(f"Moving files from {data_path / nested_omop_tables_folder} to {data_path}")
         for file_path in (data_path / nested_omop_tables_folder).glob("*.csv"):
             shutil.move(file_path, data_path)
 
@@ -431,7 +434,7 @@ def physionet2012(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}.tar.gz?download",
             output_path=data_path,
             output_file_name=f"{file_name}.tar.gz",
-            archive_format="gztar",
+            archive_format="tar.gz",
         )
 
     for file_name in outcome_file_names:

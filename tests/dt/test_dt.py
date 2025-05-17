@@ -47,7 +47,7 @@ def test_synthea27nj_omop(tmp_path):
 @pytest.mark.slow
 def test_physionet2012():
     edata = ed.dt.physionet2012()
-    assert edata.shape == (11988, 37)
+    assert edata.shape == (11988, 37, 48)
 
     assert edata.R.shape == (11988, 37, 48)
     assert edata.obs.shape == (11988, 10)
