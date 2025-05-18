@@ -4,9 +4,9 @@ import os
 import shutil
 import tempfile
 import time
-from pathlib import Path
-from typing import Literal
-from zipfile import ZipFile
+from pathlib import Path, PurePath
+from typing import Literal, get_args
+from urllib.parse import urlparse
 
 import requests
 from filelock import FileLock
@@ -14,12 +14,15 @@ from lamin_utils import logger
 from requests.exceptions import RequestException
 from rich.progress import Progress
 
+COMPRESSION_FORMATS = Literal["tar.gz", "gztar", "zip", "tar", "gz", "bz", "xz"]
+COMPRESSION_FORMATS_LIST = list(get_args(COMPRESSION_FORMATS))
+
 
 def download(
     url: str,
-    archive_format: Literal["zip", "tar", "tar.gz", "tgz", "gztar"] | None = None,
     output_file_name: str | None = None,
     output_path: str | Path | None = None,
+    archive_format: COMPRESSION_FORMATS | None = None,
     block_size: int = 1024,
     *,
     overwrite: bool = False,
@@ -31,68 +34,70 @@ def download(
 
     Args:
         url: URL to download.
-        archive_format: The format if an archive file.
-        output_file_name: Name of the downloaded file.
-        output_path: Path to download/extract the files to. Defaults to 'OS tmpdir' if not specified.
+        output_file_name: Name of the file to download. If not specified, the file name will be inferred from the URL.
+        output_path: Path to download/extract the files to. Defaults to 'ehrapy_data/output_file_name' if not specified.
+        archive_format: Format of the archive to download. If not specified, the format will be inferred from the URL.
         block_size: Block size for downloads in bytes.
         overwrite: Whether to overwrite existing files.
         timeout: Request timeout in seconds.
-        max_retries: Maximum number of retry attempts.
+        max_retries: Maximum number of download retries.
         retry_delay: Delay between retries in seconds.
     """
-    # Handle URL query parameters like "?download"
-    if output_file_name is None:
-        # Extract filename from URL and strip query parameters
-        file_name = Path(url).name.split("?")[0]
-        output_file_name = file_name
+    raw_formats = ["csv", "txt", "parquet"]
 
-    if output_path is None:
-        output_path = tempfile.gettempdir()
-
-    def _sanitize_file_name(file_name):
+    def _sanitize_file_name(file_name: str) -> str:
         if os.name == "nt":
             file_name = file_name.replace("?", "_").replace("*", "_")
         return file_name
 
-    # For archives, check if extraction directory already exists
-    if archive_format:
-        extraction_name = _remove_archive_extension(output_file_name)
-        extraction_path = Path(output_path) / extraction_name
+    def _remove_archive_extension(file_name: str) -> str:
+        for ext in COMPRESSION_FORMATS_LIST:
+            if file_name.endswith(ext):
+                return file_name.removesuffix(ext).rstrip(".")
+        return file_name
 
-        if extraction_path.exists() and any(extraction_path.iterdir()) and not overwrite:
-            logger.info(f"Extracted content already exists at {extraction_path}, skipping download")
-            return extraction_path
+    if output_path is None:
+        output_path = tempfile.gettempdir()
 
-    download_to_path = Path(
-        _sanitize_file_name(
-            f"{output_path}{output_file_name}"
-            if str(output_path).endswith("/")
-            else f"{output_path}/{output_file_name}"
-        )
-    )
+    output_path = Path(output_path)
 
-    Path(output_path).mkdir(parents=True, exist_ok=True)
-    lock_path = f"{download_to_path}.lock"
+    url_file_name = PurePath(urlparse(url).path).name
+    suffix = url_file_name.split(".")[-1]
 
+    output_file_name = _sanitize_file_name(url_file_name) if output_file_name is None else output_file_name
+    archive_format = suffix if archive_format is None else archive_format
+
+    if archive_format in raw_formats:
+        raw_data_output_path = output_path / output_file_name
+        path_to_check = raw_data_output_path
+    elif archive_format in COMPRESSION_FORMATS_LIST:
+        tmpdir = tempfile.mkdtemp()
+        raw_data_output_path = Path(tmpdir) / output_file_name
+        path_to_check = output_path / _remove_archive_extension(output_file_name)
+    else:
+        msg = f"Unknown file format: {archive_format}"
+        raise RuntimeError(msg)
+
+    lock_path = f"{path_to_check}.lock"
     with FileLock(lock_path, timeout=300):
-        if download_to_path.exists():
-            warning = f"File {download_to_path} already exists!"
+        if path_to_check.exists():
+            warning = f"File {path_to_check} already exists!"
             if not overwrite:
-                logger.warning(warning)
-                return download_to_path
+                logger.warning(f"{warning} Using already downloaded dataset...")
+                return path_to_check
             else:
-                logger.warning(warning)
+                logger.warning(f"{warning} Overwriting...")
 
-        temp_file_name = f"{download_to_path}.part"
+        temp_file_name = f"{raw_data_output_path}.part"
 
         retry_count = 0
-        while retry_count <= max_retries:
+        while retry_count < max_retries:
             try:
                 head_response = requests.head(url, timeout=timeout)
                 head_response.raise_for_status()
                 content_length = int(head_response.headers.get("content-length", 0))
-
                 free_space = shutil.disk_usage(output_path).free
+
                 if content_length > free_space:
                     msg = f"Insufficient disk space. Need {content_length} bytes, but only {free_space} available."
                     raise OSError(msg)
@@ -109,26 +114,12 @@ def download(
                             progress.update(task, advance=len(data))
                         progress.update(task, completed=total, refresh=True)
 
-                Path(temp_file_name).replace(download_to_path)
+                Path(temp_file_name).replace(raw_data_output_path)
 
-                if archive_format:
-                    output_path = output_path or tempfile.gettempdir()
-                    shutil.unpack_archive(download_to_path, output_path, format=archive_format)
-                    download_to_path.unlink()
-                    list_of_paths = [
-                        path for path in Path(output_path).resolve().glob("*/") if not path.name.startswith(".")
-                    ]
-                    if list_of_paths:
-                        latest_path = max(list_of_paths, key=lambda path: path.stat().st_ctime)
-                        new_path = latest_path.parent / _remove_archive_extension(output_file_name)
-                        shutil.move(latest_path, new_path)
-                        return new_path
-                elif archive_format == "zip":
-                    with ZipFile(download_to_path, "r") as zip_obj:
-                        zip_obj.extractall(path=output_path)
-                    return Path(output_path)
+                if archive_format in COMPRESSION_FORMATS_LIST:
+                    shutil.unpack_archive(raw_data_output_path, output_path)
 
-                return download_to_path
+                return path_to_check
 
             except (OSError, RequestException) as e:
                 retry_count += 1
@@ -153,27 +144,4 @@ def download(
                     Path(temp_file_name).unlink(missing_ok=True)
                 Path(lock_path).unlink(missing_ok=True)
 
-        return download_to_path
-
-
-def _remove_archive_extension(file_path: str) -> str:
-    return (
-        str(Path(file_path).with_suffix(""))
-        if any(
-            Path(file_path).suffix.endswith(ext)
-            for ext in [
-                ".zip",
-                ".tar",
-                ".tar.gz",
-                ".tgz",
-                "gz",
-                "bz",
-                "xz",
-                ".tar.bz2",
-                ".tbz2",
-                ".tar.xz",
-                ".txz",
-            ]
-        )
-        else file_path
-    )
+        return path_to_check

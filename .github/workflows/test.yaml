@@ -43,8 +43,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          filter: blob:none
           fetch-depth: 0
+      - name: Cache datasets
+        uses: actions/cache@v3
+        with:
+          path: ./ehrapy_data
+          key: dataset-cache-${{ hashFiles('src/ehrdata/dt/dataloader.py', 'src/ehrdata/dt/datasets.py') }}
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -57,3 +61,5 @@ jobs:
         run: uvx hatch test --cover --python ${{ matrix.python }}
       - name: Upload coverage
         uses: codecov/codecov-action@v4
+      - name: List contents of dataset cache
+        run: ls -lh ./ehrapy_data
