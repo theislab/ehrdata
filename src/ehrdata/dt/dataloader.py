@@ -82,7 +82,7 @@ def download(
         if path_to_check.exists():
             warning = f"File {path_to_check} already exists!"
             if not overwrite:
-                logger.warning(f"{warning} Use downloaded dataset...")
+                logger.warning(f"{warning} Using already downloaded dataset...")
                 return path_to_check
             else:
                 logger.warning(f"{warning} Overwriting...")
