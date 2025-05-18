@@ -116,6 +116,9 @@ def download(
 
                 Path(temp_file_name).replace(raw_data_output_path)
 
+                if archive_format in COMPRESSION_FORMATS_LIST:
+                    shutil.unpack_archive(raw_data_output_path, output_path)
+
                 return path_to_check
 
             except (OSError, RequestException) as e:
