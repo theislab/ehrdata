@@ -232,7 +232,7 @@ def ehrdata_blobs(
 def _setup_eunomia_datasets(
     data_url: str,
     backend_handle: DuckDBPyConnection,
-    data_path: Path | None = None,
+    data_path: Path,
     nested_omop_tables_folder: str | None = None,
     dataset_prefix: str = "",
 ) -> None:
