@@ -87,7 +87,6 @@ def download(
             else:
                 logger.warning(f"{warning} Overwriting...")
 
-
         temp_file_name = f"{raw_data_output_path}.part"
 
         retry_count = 0
