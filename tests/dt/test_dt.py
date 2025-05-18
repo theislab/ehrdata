@@ -14,7 +14,6 @@ def duckdb_connection():
     con.close()
 
 
-@pytest.mark.slow
 def test_mimic_iv_omop():
     duckdb_connection = duckdb.connect()
     ed.dt.mimic_iv_omop(backend_handle=duckdb_connection)
@@ -24,7 +23,6 @@ def test_mimic_iv_omop():
     duckdb_connection.close()
 
 
-@pytest.mark.slow
 def test_gibleed_omop():
     duckdb_connection = duckdb.connect()
     ed.dt.gibleed_omop(backend_handle=duckdb_connection)
@@ -34,7 +32,6 @@ def test_gibleed_omop():
     duckdb_connection.close()
 
 
-@pytest.mark.slow
 def test_synthea27nj_omop():
     duckdb_connection = duckdb.connect()
     ed.dt.synthea27nj_omop(backend_handle=duckdb_connection)
@@ -44,7 +41,6 @@ def test_synthea27nj_omop():
     duckdb_connection.close()
 
 
-@pytest.mark.slow
 def test_physionet2012():
     edata = ed.dt.physionet2012()
     assert edata.shape == (11988, 37, 48)

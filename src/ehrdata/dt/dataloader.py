@@ -4,7 +4,9 @@ import os
 import shutil
 import tempfile
 import time
-from pathlib import Path
+from pathlib import Path, PurePath
+from typing import Literal, get_args
+from urllib.parse import urlparse
 
 import requests
 from filelock import FileLock
@@ -12,12 +14,15 @@ from lamin_utils import logger
 from requests.exceptions import RequestException
 from rich.progress import Progress
 
+COMPRESSION_FORMATS = Literal["tar.gz", "gztar", "zip", "tar", "gz", "bz", "xz"]
+COMPRESSION_FORMATS_LIST = list(get_args(COMPRESSION_FORMATS))
+
 
 def download(
     url: str,
     output_file_name: str | None = None,
     output_path: str | Path | None = None,
-    archive_format: str | None = None,
+    archive_format: COMPRESSION_FORMATS | None = None,
     block_size: int = 1024,
     *,
     overwrite: bool = False,
@@ -38,29 +43,25 @@ def download(
         max_retries: Maximum number of download retries.
         retry_delay: Delay between retries in seconds.
     """
-    # note: tar.gz has to be before gz for the _remove_archive_extension function to remove the entire extension
-    compression_formats = ["tar.gz", "gztar", "zip", "tar", "gz", "bz", "xz"]
     raw_formats = ["csv", "txt", "parquet"]
 
-    def _sanitize_file_name(file_name):
+    def _sanitize_file_name(file_name: str) -> str:
         if os.name == "nt":
             file_name = file_name.replace("?", "_").replace("*", "_")
         return file_name
 
-    def _remove_archive_extension(file_path: str) -> str:
-        for ext in compression_formats:
-            # if the file path ends with extension, remove the extension and the dot before it (hence the -1)
-            if file_path.endswith(ext):
-                return file_path[: -len(ext) - 1]
-        return file_path
+    def _remove_archive_extension(file_name: str) -> str:
+        for ext in COMPRESSION_FORMATS_LIST:
+            if file_name.endswith(ext):
+                return file_name.removesuffix(ext).rstrip(".")
+        return file_name
 
     if output_path is None:
         output_path = tempfile.gettempdir()
 
     output_path = Path(output_path)
 
-    # Handle URL query parameters like "?download"
-    url_file_name = os.path.basename(url).split("?")[0]  # noqa: PTH119
+    url_file_name = PurePath(urlparse(url).path).name
     suffix = url_file_name.split(".")[-1]
 
     output_file_name = _sanitize_file_name(url_file_name) if output_file_name is None else output_file_name
@@ -69,7 +70,7 @@ def download(
     if archive_format in raw_formats:
         raw_data_output_path = output_path / output_file_name
         path_to_check = raw_data_output_path
-    elif archive_format in compression_formats:
+    elif archive_format in COMPRESSION_FORMATS_LIST:
         tmpdir = tempfile.mkdtemp()
         raw_data_output_path = Path(tmpdir) / output_file_name
         path_to_check = output_path / _remove_archive_extension(output_file_name)
@@ -114,12 +115,6 @@ def download(
                         progress.update(task, completed=total, refresh=True)
 
                 Path(temp_file_name).replace(raw_data_output_path)
-
-                if archive_format in compression_formats:
-                    shutil.unpack_archive(raw_data_output_path, output_path)
-                    logger.info(
-                        f"Extracted archive {output_file_name} from {raw_data_output_path} to {output_path / _remove_archive_extension(output_file_name)}"
-                    )
 
                 return path_to_check
 
