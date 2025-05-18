@@ -49,8 +49,6 @@ jobs:
         with:
           path: ./ehrapy_data
           key: dataset-cache-${{ hashFiles('src/ehrdata/dt/dataloader.py', 'src/ehrdata/dt/datasets.py') }}
-          restore-keys: |
-            dataset-cache-
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
