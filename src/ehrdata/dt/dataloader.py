@@ -43,12 +43,7 @@ def download(
         max_retries: Maximum number of download retries.
         retry_delay: Delay between retries in seconds.
     """
-    raw_formats = [
-        "csv",
-        "txt",
-        "parquet",
-        "something to delete",
-    ]
+    raw_formats = ["csv", "txt", "parquet"]
 
     def _sanitize_file_name(file_name: str) -> str:
         if os.name == "nt":
