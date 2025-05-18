@@ -47,6 +47,7 @@ def download(
         "csv",
         "txt",
         "parquet",
+        "something to delete",
     ]
 
     def _sanitize_file_name(file_name: str) -> str:
