@@ -87,7 +87,6 @@ def download(
             else:
                 logger.warning(f"{warning} Overwriting...")
 
-        logger.info(f"Downloading {output_file_name} from {url} to {path_to_check}")
 
         temp_file_name = f"{raw_data_output_path}.part"
 
