@@ -24,6 +24,11 @@ if TYPE_CHECKING:
 class EHRData(AnnData):
     """Model two and three dimensional electronic health record data.
 
+    .. figure:: ../_static/tutorial_images/logo.png
+       :width: 260px
+       :align: right
+       :class: dark-light
+
     Extends :class:`~anndata.AnnData` to further support regular and irregular time-series data.
 
     Args:
