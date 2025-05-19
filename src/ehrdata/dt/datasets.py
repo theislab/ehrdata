@@ -363,6 +363,7 @@ def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) 
 
 def physionet2012(
     data_path: Path | None = None,
+    *,
     interval_length_number: int = 1,
     interval_length_unit: str = "h",
     num_intervals: int = 48,
@@ -384,13 +385,14 @@ def physionet2012(
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>`_.
 
-    If interval_length_number is 1, interval_length_unit is "h" (hour), and num_intervals is 48, this is equivalent to the `SAITS <https://arxiv.org/pdf/2202.08516>`_ preprocessing.
+    If interval_length_number is 1, interval_length_unit is "h" (hour), and num_intervals is 48, this is the same as the `SAITS <https://arxiv.org/pdf/2202.08516>`_ preprocessing.
     Truncated if a sample has more num_intervals steps; Padded if a sample has less than num_intervals steps.
     Further, by default the following 12 samples are dropped since they have no time series information at all: 147514, 142731, 145611, 140501, 155655, 143656, 156254, 150309,
     140936, 141264, 150649, 142998.
     Taken the defaults of interval_length_number, interval_length_unit, num_intervals, and drop_samples, the tensor stored in .r of edata is the same as when doing the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ preprocessing.
     A simple deviation is that the tensor in ehrdata is of shape n_obs x n_vars x n_intervals (with defaults, 3000x37x48) while the tensor in PyPOTS is of shape n_obs x n_intervals x n_vars (3000x48x37).
     The tensor stored in .r is hence also fully compatible with the PyPOTS package, as the .r tensor of EHRData objects generally is.
+    Note: In the original dataset, some missing values are encoded with a -1 for some entries ofthe variables 'DiasABP', 'NIDiasABP', and 'Weight'. Here, these are replaced with NaNs.
 
     Args:
        data_path: Path to the raw data. If the path exists, the data is loaded from there.
@@ -509,6 +511,10 @@ def physionet2012(
     var = xa["Parameter"].to_dataframe()
     t = xa["interval_step"].to_dataframe()
     r = xa["Value"].values
+
+    # Three time series variables in the original dataset ['DiasABP', 'NIDiasABP', 'Weight'] have -1 instead of NaN for some missing values
+    # No -1 value in the original dataset represents a valid measurement, so we can safely replace -1 with NaN
+    r[r == -1] = np.nan
 
     obs.index = obs.index.astype(str)
     var.index = var.index.astype(str)
