@@ -392,7 +392,7 @@ def physionet2012(
     Taken the defaults of interval_length_number, interval_length_unit, num_intervals, and drop_samples, the tensor stored in .r of edata is the same as when doing the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ preprocessing.
     A simple deviation is that the tensor in ehrdata is of shape n_obs x n_vars x n_intervals (with defaults, 3000x37x48) while the tensor in PyPOTS is of shape n_obs x n_intervals x n_vars (3000x48x37).
     The tensor stored in .r is hence also fully compatible with the PyPOTS package, as the .r tensor of EHRData objects generally is.
-    Note: In the original dataset, some missing values are encoded with a -1 for some entries ofthe variables 'DiasABP', 'NIDiasABP', and 'Weight'. Here, these are replaced with NaNs.
+    Note: In the original dataset, some missing values are encoded with a -1 for some entries of the variables 'DiasABP', 'NIDiasABP', and 'Weight'. Here, these are replaced with NaNs.
 
     Args:
        data_path: Path to the raw data. If the path exists, the data is loaded from there.
