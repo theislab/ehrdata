@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning][].
 - Improved OMOP Extraction
 - Support for [COO sparse matrices](https://github.com/pydata/sparse) for R
 - A `ed.dt.ehrdata_blobs` test data generator function
+- Replace -1 encoded missing values with nans in physionet2012 challenge data
 
 ### Breaking changes
 
