@@ -130,9 +130,9 @@ def test_ehrdata_blobs(sparse_param):
     assert edata.var.shape == (5, 0)
 
     # Test t DataFrame
-    assert isinstance(edata.t, pd.DataFrame)
-    assert "timepoint" in edata.t.columns
-    assert edata.t.shape == (10, 2)
+    assert isinstance(edata.tem, pd.DataFrame)
+    assert "timepoint" in edata.tem.columns
+    assert edata.tem.shape == (10, 2)
 
 
 def test_ehrdata_blobs_distribution():
@@ -205,10 +205,10 @@ def test_ehrdata_ts_blobs_irregular():
 
     # Check that time dimension exists and has more points than base_timepoints
     assert edata.n_t > 20
-    assert "time_value" in edata.t.columns
+    assert "time_value" in edata.tem.columns
 
     # Test for irregular time sampling
-    time_values = edata.t["time_value"].values
+    time_values = edata.tem["time_value"].values
     time_diffs = np.diff(time_values)
     # Time differences should have meaningful variation with irregular sampling
     assert np.std(time_diffs) > 0.001
