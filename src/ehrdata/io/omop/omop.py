@@ -439,11 +439,11 @@ def setup_variables(
 
     r = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
 
-    t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
+    tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
     var.index = var.index.astype(str)
 
-    edata = EHRData(R=r, obs=edata.obs, var=var, uns=edata.uns, t=t)
+    edata = EHRData(R=r, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
     for data_table in data_tables:
         edata.uns[f"unit_report_{data_table}"] = unit_report_collector[data_table]
@@ -623,11 +623,11 @@ def setup_interval_variables(
 
     r = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
 
-    t = pd.DataFrame({"interval_step": np.arange(num_intervals)})
+    tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
     var.index = var.index.astype(str)
 
-    edata = EHRData(R=r, obs=edata.obs, var=var, uns=edata.uns, t=t)
+    edata = EHRData(R=r, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
     return edata
 

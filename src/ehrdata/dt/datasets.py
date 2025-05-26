@@ -225,7 +225,7 @@ def ehrdata_blobs(
         obs=pd.DataFrame({"cluster": y.astype(str)}, index=pd.Index([str(i) for i in range(n_observations)])),
         var=pd.DataFrame(index=pd.Index([f"feature_{i}" for i in range(n_variables)])),
         R=R,
-        t=t_df,
+        tem=t_df,
     )
 
 
@@ -509,7 +509,7 @@ def physionet2012(
     xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
 
     var = xa["Parameter"].to_dataframe()
-    t = xa["interval_step"].to_dataframe()
+    tem = xa["interval_step"].to_dataframe()
     r = xa["Value"].values
 
     # Three time series variables in the original dataset ['DiasABP', 'NIDiasABP', 'Weight'] have -1 instead of NaN for some missing values
@@ -519,7 +519,7 @@ def physionet2012(
     obs.index = obs.index.astype(str)
     var.index = var.index.astype(str)
 
-    edata = EHRData(R=r, obs=obs, var=var, t=t)
+    edata = EHRData(R=r, obs=obs, var=var, tem=tem)
 
     return edata[~edata.obs.index.isin(drop_samples or [])]
 
