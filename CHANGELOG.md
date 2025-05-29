@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
 
+- Initialize EHRData with X and layers
+
 ### Added
 
 ### Modified
