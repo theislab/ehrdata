@@ -119,7 +119,7 @@ def test_ehrdata_init_vanilla_X_and_layers(X_numpy_32):
     assert edata.X.shape == (3, 2)
     assert edata.obs.shape == (3, 0)
     assert edata.var.shape == (2, 0)
-    assert edata.t.shape == (0, 0)
+    assert edata.tem.shape == (0, 0)
 
 
 #################################################################
