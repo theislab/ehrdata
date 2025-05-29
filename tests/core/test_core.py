@@ -113,6 +113,15 @@ def test_ehrdata_init_vanilla_X_and_r_and_t(X_numpy_32, R_numpy_322, t_21):
     assert edata.R.shape == (3, 2, 2)
 
 
+def test_ehrdata_init_vanilla_X_and_layers(X_numpy_32):
+    edata = EHRData(X=X_numpy_32, layers={"some_layer": X_numpy_32})
+
+    assert edata.X.shape == (3, 2)
+    assert edata.obs.shape == (3, 0)
+    assert edata.var.shape == (2, 0)
+    assert edata.t.shape == (0, 0)
+
+
 #################################################################
 ### Test aligned dataframes during intitialization
 #################################################################
