@@ -56,23 +56,23 @@ def var_31():
 
 
 @pytest.fixture
-def t_11():
-    return pd.DataFrame({"t_col_1": [1]}, index=["t1"])
+def tem_11():
+    return pd.DataFrame({"tem_col_1": [1]}, index=["t1"])
 
 
 @pytest.fixture
-def t_21():
-    return pd.DataFrame({"t_col_1": [1, 2]}, index=["t1", "t2"])
+def tem_21():
+    return pd.DataFrame({"tem_col_1": [1, 2]}, index=["t1", "t2"])
 
 
 @pytest.fixture
-def t_31():
-    return pd.DataFrame({"t_col_1": [1, 2, 3]}, index=["t1", "t2", "t3"])
+def tem_31():
+    return pd.DataFrame({"tem_col_1": [1, 2, 3]}, index=["t1", "t2", "t3"])
 
 
 @pytest.fixture
-def edata_333(X_numpy_33, R_numpy_333, obs_31, var_31, t_31):
-    return EHRData(X=X_numpy_33, R=R_numpy_333, obs=obs_31, var=var_31, t=t_31)
+def edata_333(X_numpy_33, R_numpy_333, obs_31, var_31, tem_31):
+    return EHRData(X=X_numpy_33, R=R_numpy_333, obs=obs_31, var=var_31, tem=tem_31)
 
 
 @pytest.fixture
