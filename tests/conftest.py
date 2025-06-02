@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import anndata as ad
 import dask.array as da
 import duckdb
@@ -8,6 +10,21 @@ import sparse as sp
 
 from ehrdata import EHRData
 from ehrdata.io.omop import setup_connection
+
+
+@pytest.fixture
+def dataset_basic():
+    return pd.read_csv("tests/data/toy_simple/dataframe/dataset_basic.csv")
+
+
+@pytest.fixture
+def dataset_non_num_with_missing():
+    return pd.read_csv("tests/data/toy_simple/dataframe/dataset_non_num_with_missing.csv")
+
+
+@pytest.fixture
+def dataset_num_with_missing():
+    return pd.read_csv("tests/data/toy_simple/dataframe/dataset_num_with_missing.csv")
 
 
 @pytest.fixture
@@ -110,3 +127,6 @@ def omop_connection_multiple_units():
     setup_connection(path="tests/data/toy_omop/multiple_units", backend_handle=con)
     yield con
     con.close()
+
+
+TEST_DATA_PATH = Path(__file__).parent / "data"
