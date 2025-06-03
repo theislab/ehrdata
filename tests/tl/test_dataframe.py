@@ -82,29 +82,54 @@ def test_to_dataframe_basic(dataset, request):
     df = to_dataframe(edata)
 
     assert df.shape == (original_df.shape[0], original_df.shape[1])
-    expected_index = pd.RangeIndex(start=0, stop=len(original_df), step=1)
-    assert df.index.equals(expected_index)
+    assert df.index.equals(edata.obs.index)
 
 
 @pytest.mark.parametrize("dataset", ["dataset_basic", "dataset_non_num_with_missing", "dataset_num_with_missing"])
 def test_to_dataframe_basic_layer(dataset, request):
     original_df = request.getfixturevalue(dataset)
     modified_df = original_df.copy()
-    modified_df.iloc[1, 1] = "modified_value"
+    modified_df.iloc[1, 1] = 123
 
     edata = EHRData(X=original_df, var=original_df.columns.to_frame(), layers={"modified_df": modified_df})
     df = to_dataframe(edata, layer="modified_df")
 
     assert df.shape == (original_df.shape[0], original_df.shape[1])
-    expected_index = pd.RangeIndex(start=0, stop=len(original_df), step=1)
-    assert df.index.equals(expected_index)
+    assert df.index.equals(edata.obs.index)
 
-    assert df.iloc[1, 1] == "modified_value"
-
-
-def test_to_dataframe_basic_obs_col():
-    pass
+    assert df.iloc[1, 1] == 123
 
 
-def test_to_dataframe_basic_var_col():
-    pass
+@pytest.mark.parametrize("dataset", ["dataset_basic", "dataset_non_num_with_missing", "dataset_num_with_missing"])
+def test_to_dataframe_basic_obs_cols(dataset, request):
+    original_df = request.getfixturevalue(dataset)
+    df_no_patient_id_col = original_df.drop(columns=["patient_id"])
+
+    edata = EHRData(
+        X=df_no_patient_id_col, var=df_no_patient_id_col.columns.to_frame(), obs=original_df[["patient_id"]]
+    )
+    # do this because want to ensure that edata has been set up properly
+    assert edata.X.shape == (original_df.shape[0], original_df.shape[1] - 1)
+    df = to_dataframe(edata, obs_cols=["patient_id"])
+
+    assert df.shape == (original_df.shape[0], original_df.shape[1])
+    assert df.index.equals(edata.obs.index)
+
+    assert "patient_id" in df.columns
+
+
+@pytest.mark.parametrize("dataset", ["dataset_basic", "dataset_non_num_with_missing", "dataset_num_with_missing"])
+def test_to_dataframe_basic_var_col(dataset, request):
+    original_df = request.getfixturevalue(dataset)
+    edata = EHRData(X=original_df, var=original_df.columns.to_frame())
+
+    new_var_col_name = "new_var_annotation"
+    new_var_col_value = [f"some_annotation_{i}" for i in range(edata.shape[1])]
+    edata.var[new_var_col_name] = new_var_col_value
+    df = to_dataframe(edata, var_col=[new_var_col_name])
+
+    assert df.shape == original_df.shape
+    assert df.index.equals(edata.obs.index)
+
+    assert np.array_equal(df.columns.values, new_var_col_value)
+    assert df.shape == (original_df.shape[0], original_df.shape[1])

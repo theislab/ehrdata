@@ -15,7 +15,7 @@ def to_dataframe(
     edata: EHRData,
     layer: str | None = None,
     obs_cols: Iterable[str] | str | None = None,
-    var_cols: Iterable[str] | str | None = None,
+    var_col: str | None = None,
 ) -> pd.DataFrame:
     """Transform an EHRData object to a Pandas DataFrame.
 
@@ -23,10 +23,10 @@ def to_dataframe(
         edata: The EHRData object to be transformed into a pandas DataFrame
         layer: The layer to access the values of. If not specified, it uses the `X` matrix.
         obs_cols: The columns of `obs` to add to the DataFrame.
-        var_cols: The columns of `var` to fetch values from.
+        var_col: The column of `var` to create the column names from in the created DataFrame. If not specified, the `var_names` will be used.
 
     Returns:
-        The AnnData object as a pandas DataFrame
+        The data object as a pandas DataFrame
 
     Examples:
         >>> import ehrapy as ep
@@ -38,7 +38,7 @@ def to_dataframe(
     if issparse(X):  # pragma: no cover
         X = X.toarray()
 
-    df = pd.DataFrame(X, columns=list(edata.var_names))
+    df = pd.DataFrame(X, columns=list(edata.var_names if var_col is None else edata.var[var_col].values.flatten()))
     if obs_cols:
         if len(edata.obs.columns) == 0:
             msg = "Cannot slice columns from empty obs!"
@@ -50,16 +50,5 @@ def to_dataframe(
         # reset index needed since we slice all or at least some columns from obs DataFrame
         obs_slice = obs_slice.reset_index(drop=True)
         df = pd.concat([df, obs_slice], axis=1)
-    if var_cols:
-        if len(edata.var.columns) == 0:
-            msg = "Cannot slice columns from empty var!"
-            raise ValueError(msg)
-        if isinstance(var_cols, str):
-            var_cols = list(var_cols)
-        if isinstance(var_cols, list):
-            var_slice = edata.var[var_cols]
-        # reset index needed since we slice all or at least some columns from var DataFrame
-        var_slice = var_slice.reset_index(drop=True)
-        df = pd.concat([df, var_slice], axis=1)
-
+    df.index = edata.obs_names
     return df
