@@ -10,6 +10,8 @@
     :toctree: io
     :nosignatures:
 
+    tl.from_dataframe
+    tl.to_dataframe
     tl.omop.EHRDataset
 
 ```
