@@ -508,8 +508,8 @@ def physionet2012(
 
     xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
 
-    var = xa["Parameter"].to_pandas()
-    tem = xa["interval_step"].to_pandas()
+    var = xa["Parameter"].to_dataframe()
+    tem = xa["interval_step"].to_dataframe()
     r = xa["Value"].values
 
     # Three time series variables in the original dataset ['DiasABP', 'NIDiasABP', 'Weight'] have -1 instead of NaN for some missing values

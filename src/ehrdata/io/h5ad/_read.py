@@ -29,6 +29,18 @@ def read_h5ad(
 
     from ehrdata import EHRData
 
+    # TODO: support tem
     edata = EHRData.from_adata(ad.read_h5ad(f"{file_name}", backed=backed))
+    edata = EHRData(
+        X=edata.X,
+        R=edata.R,
+        obs=edata.obs,
+        var=edata.var,
+        uns=edata.uns,
+        obsm=edata.obsm,
+        varm=edata.varm,
+        obsp=edata.obsp,
+        varp=edata.varp,
+    )
 
     return edata
