@@ -151,7 +151,7 @@ def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.Dat
 
 
 def _create_enriched_var_with_unit_info(backend_handle, ds, var, unit_report) -> pd.DataFrame:
-    feature_concept_id_table = var  # ds["data_table_concept_id"].to_dataframe()
+    feature_concept_id_table = var  # ds["data_table_concept_id"].to_pandas()
 
     feature_concept_id_unit_table = pd.merge(
         feature_concept_id_table, unit_report, how="left", left_index=True, right_on="concept_id"

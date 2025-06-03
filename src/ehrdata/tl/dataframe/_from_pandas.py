@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
-def from_dataframe(
+def from_pandas(
     df: pd.DataFrame,
     columns_obs_only: list[str] | None = None,
     index_column: str | int | None = None,
@@ -37,7 +37,7 @@ def from_dataframe(
         ...         "sex": ["M", "F", "F", "M", "F"],
         ...     }
         ... )
-        >>> edata = ed.io.from_dataframe(df, index_column="patient_id")
+        >>> edata = ed.io.from_pandas(df, index_column="patient_id")
     """
     from ehrdata import EHRData
 

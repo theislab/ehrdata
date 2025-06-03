@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
-def to_dataframe(
+def to_pandas(
     edata: EHRData,
     layer: str | None = None,
     obs_cols: Iterable[str] | str | None = None,
@@ -26,12 +26,12 @@ def to_dataframe(
         var_col: The column of `var` to create the column names from in the created DataFrame. If not specified, the `var_names` will be used.
 
     Returns:
-        The data object as a pandas DataFrame
+        The data object as a pandas DataFrame.
 
     Examples:
-        >>> import ehrapy as ep
-        >>> edata = ep.dt.mimic_2(encoded=True)
-        >>> df = ep.ad.anndata_to_df(edata)
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.mimic_2()
+        >>> df = ep.tl.to_pandas(edata)
     """
     X = edata.layers[layer] if layer is not None else edata.X
 

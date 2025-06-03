@@ -1,2 +1,2 @@
-from ._from_dataframe import from_dataframe
-from ._to_dataframe import to_dataframe
+from ._from_pandas import from_pandas
+from ._to_pandas import to_pandas
