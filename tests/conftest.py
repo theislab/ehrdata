@@ -103,14 +103,36 @@ def adata_33(X_numpy_33, obs_31, var_31):
 
 
 @pytest.fixture
+def variable_type_samples():
+    column_types = {
+        "float_column": np.array([1.1, 1.2, 1.3, 2.1]),
+        "float_column_with_missing": np.array([1.1, np.nan, 1.3, 2.1]),
+        "int_column": np.array([1, 2, 3, 4]),
+        "int_column_with_missing": np.array([1, np.nan, 3, 4]),
+        "int_column_irregular": np.array([1, 2, 5, 6]),
+        "string_column": np.array(["a", "b", "c", "d"]),
+        "string_column_with_missing": np.array(["a", np.nan, "c", "d"]),
+        "string_column_with_missing_strings": np.array(["a", "np.nan", "nan", "d"]),
+        "bool_column_TrueFalse": np.array([True, False, True, False]),
+        "bool_column_01": np.array([1, 0, 1, 0]),
+        "bool_column_with_missing": np.array([True, np.nan, True, False]),
+    }
+    # duplicate entries with .astype(str)
+    for key, value in column_types.items():
+        column_types[key + "_str"] = value.astype(str)
+    return column_types
+
+
+@pytest.fixture
 def edata_nonnumeric_missing_330(obs_31, var_31):
-    X = np.array(
+    # create X of dtype object - np would create a string array
+    X = pd.DataFrame(
         [
             [3, "E10", 12.1],
             [np.nan, "E11", 13.2],
             [14, np.nan, 12.5],
         ]
-    )
+    ).to_numpy()
     return EHRData(X=X, obs=obs_31, var=var_31)
 
 

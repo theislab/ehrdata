@@ -3,9 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-import numpy as np
-from scipy.sparse import issparse
-
 if TYPE_CHECKING:
     from ehrdata import EHRData
 
@@ -36,10 +33,10 @@ def write_h5ad(
     """
     filename = Path(filename)  # allow passing strings
 
-    if not issparse(edata.X) and edata.X.dtype == np.object_:
-        edata.X = edata.X.astype(str)
-    for layer, array in edata.layers.items():
-        if not issparse(array) and array.dtype == np.object_:
-            edata.layers[layer] = array.astype(str)
+    # if not issparse(edata.X) and edata.X.dtype == np.object_:
+    #     edata.X = edata.X.astype(str)
+    # for layer, array in edata.layers.items():
+    #     if not issparse(array) and array.dtype == np.object_:
+    #         edata.layers[layer] = array.astype(str)
 
     edata.write_h5ad(filename, compression=compression, compression_opts=compression_opts)
