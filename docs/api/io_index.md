@@ -10,6 +10,8 @@
     :toctree: io
     :nosignatures:
 
+    io.read_csv
+    io.read_h5ad
     io.omop.setup_connection
     io.omop.setup_obs
     io.omop.setup_variables

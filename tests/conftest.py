@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import anndata as ad
 import dask.array as da
 import duckdb
@@ -8,6 +10,21 @@ import sparse as sp
 
 from ehrdata import EHRData
 from ehrdata.io.omop import setup_connection
+
+
+@pytest.fixture
+def csv_basic():
+    return pd.read_csv("tests/data/toy_csv/csv_basic.csv")
+
+
+@pytest.fixture
+def csv_non_num_with_missing():
+    return pd.read_csv("tests/data/toy_csv/csv_non_num_with_missing.csv")
+
+
+@pytest.fixture
+def csv_num_with_missing():
+    return pd.read_csv("tests/data/toy_csv/csv_num_with_missing.csv")
 
 
 @pytest.fixture
@@ -76,8 +93,25 @@ def edata_333(X_numpy_33, R_numpy_333, obs_31, var_31, tem_31):
 
 
 @pytest.fixture
+def edata_330(X_numpy_33, obs_31, var_31):
+    return EHRData(X=X_numpy_33, obs=obs_31, var=var_31)
+
+
+@pytest.fixture
 def adata_33(X_numpy_33, obs_31, var_31):
     return ad.AnnData(X=X_numpy_33, obs=obs_31, var=var_31)
+
+
+@pytest.fixture
+def edata_nonnumeric_missing_330(obs_31, var_31):
+    X = np.array(
+        [
+            [3, "E10", 12.1],
+            [np.nan, "E11", 13.2],
+            [14, np.nan, 12.5],
+        ]
+    )
+    return EHRData(X=X, obs=obs_31, var=var_31)
 
 
 @pytest.fixture
@@ -110,3 +144,6 @@ def omop_connection_multiple_units():
     setup_connection(path="tests/data/toy_omop/multiple_units", backend_handle=con)
     yield con
     con.close()
+
+
+TEST_DATA_PATH = Path(__file__).parent / "data"
