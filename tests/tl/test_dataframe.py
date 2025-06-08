@@ -312,3 +312,59 @@ def test_from_pandas_longitudinal_long_columns_obs_only_not_implemented():
     )
     with pytest.raises(NotImplementedError):
         from_pandas(df, columns_obs_only=["observation_id"], format="long")
+
+
+def test_to_pandas_longitudinal_wide(edata_333):
+    df = to_pandas(edata_333, format="wide", layer="R_layer")
+    assert df.shape == (3, 9)
+    assert df.index.equals(edata_333.obs.index)
+    assert np.array_equal(
+        df.columns.values,
+        [
+            "var1_t_t1",
+            "var1_t_t2",
+            "var1_t_t3",
+            "var2_t_t1",
+            "var2_t_t2",
+            "var2_t_t3",
+            "var3_t_t1",
+            "var3_t_t2",
+            "var3_t_t3",
+        ],
+    )
+    assert np.array_equal(df[["var1_t_t3"]].values.flatten(), edata_333.R[:, 0, 2])
+
+
+def test_to_pandas_longitudinal_wide_obs_cols(edata_333):
+    df = to_pandas(edata_333, format="wide", layer="R_layer", obs_cols=["obs_col_1"])
+    assert df.shape == (3, 10)
+    assert df.index.equals(edata_333.obs.index)
+    assert np.array_equal(
+        df.columns.values,
+        [
+            "var1_t_t1",
+            "var1_t_t2",
+            "var1_t_t3",
+            "var2_t_t1",
+            "var2_t_t2",
+            "var2_t_t3",
+            "var3_t_t1",
+            "var3_t_t2",
+            "var3_t_t3",
+            "obs_col_1",
+        ],
+    )
+    assert np.array_equal(df[["var1_t_t3"]].values.flatten(), edata_333.R[:, 0, 2])
+    assert np.array_equal(df[["obs_col_1"]].values.flatten(), edata_333.obs["obs_col_1"].values)
+
+
+def test_to_pandas_longitudinal_long(edata_333):
+    df = to_pandas(edata_333, format="long", layer="R_layer")
+    assert df.shape == (27, 4)
+    assert np.array_equal(df.iloc[13, :3].values, np.array(["obs2", "var2", "t2"]).astype(object))
+    assert df.iloc[13, 3] == 14
+
+
+def test_to_pandas_longitudinal_long_obs_cols_raises_error(edata_333):
+    with pytest.raises(NotImplementedError):
+        to_pandas(edata_333, format="long", obs_cols=["obs_col_1"])
