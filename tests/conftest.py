@@ -117,10 +117,30 @@ def variable_type_samples():
         "bool_column_01": np.array([1, 0, 1, 0]),
         "bool_column_with_missing": np.array([True, np.nan, True, False]),
     }
-    # duplicate entries with .astype(str)
-    for key, value in column_types.items():
-        column_types[key + "_str"] = value.astype(str)
-    return column_types
+
+    target_types = {
+        "float_column": "numeric",
+        "float_column_with_missing": "numeric",
+        "int_column": "numeric",
+        "int_column_with_missing": "numeric",
+        "int_column_irregular": "numeric",
+        "string_column": "categorical",
+        "string_column_with_missing": "categorical",
+        "string_column_with_missing_strings": "categorical",
+        "bool_column_TrueFalse": "categorical",
+        "bool_column_01": "categorical",
+        "bool_column_with_missing": "categorical",
+    }
+    return column_types, target_types
+
+
+@pytest.fixture
+def variable_type_samples_string_format(variable_type_samples):
+    # cast entries with .astype(str)
+    data, target_types = variable_type_samples
+    for key, value in data.items():
+        data[key] = value.astype(str)
+    return data, target_types
 
 
 @pytest.fixture
