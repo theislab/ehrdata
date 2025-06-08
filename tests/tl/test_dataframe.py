@@ -133,3 +133,182 @@ def test_to_pandas_basic_var_col(dataset, request):
 
     assert np.array_equal(df.columns.values, new_var_col_value)
     assert df.shape == (original_df.shape[0], original_df.shape[1])
+
+
+def test_from_pandas_longitudinal_wide():
+    df = pd.DataFrame(
+        {
+            "var1_t_timestep1": [1, 2, 3],
+            "var2_t_timestep1": [4, 5, 6],
+            "var1_t_timestep2": [7, 8, 9],
+            "var2_t_timestep2": [10, 11, 12],
+        },
+        index=["patient_1", "patient_2", "patient_3"],
+    )
+    edata = from_pandas(df, format="wide")
+    assert edata.shape == (3, 2, 2)
+    assert edata.R.shape == (3, 2, 2)
+    assert edata.X.shape == (3, 2)
+    assert edata.obs.shape == (3, 0)
+    assert edata.var.shape == (2, 0)
+    assert edata.tem.shape == (2, 0)
+
+    assert np.array_equal(edata.obs_names.values, ["patient_1", "patient_2", "patient_3"])
+    assert np.array_equal(edata.var_names.values, ["var1", "var2"])
+    assert np.array_equal(edata.tem.index.values, ["timestep1", "timestep2"])
+
+    assert np.array_equal(
+        edata.R[1],
+        np.array(
+            [
+                [2, 8],
+                [5, 11],
+            ]
+        ),
+    )
+
+
+def test_from_pandas_longitudinal_wide_missing_timestep():
+    df = pd.DataFrame(
+        {
+            "var1_t_timestep1": [1, 2, 3],
+            "var2_t_timestep1": [4, 5, 6],
+            "var1_t_timestep2": [7, 8, 9],
+            "obs_column": ["obs_1", "obs_2", "obs_3"],
+        },
+        index=["patient_1", "patient_2", "patient_3"],
+    )
+    edata = from_pandas(df, format="wide", columns_obs_only=["obs_column"])
+    assert edata.shape == (3, 2, 2)
+    assert edata.R.shape == (3, 2, 2)
+    assert edata.X.shape == (3, 2)
+    assert edata.obs.shape == (3, 1)
+    assert edata.var.shape == (2, 0)
+    assert edata.tem.shape == (2, 0)
+
+    assert np.array_equal(edata.obs_names.values, ["patient_1", "patient_2", "patient_3"])
+    assert np.array_equal(edata.var_names.values, ["var1", "var2"])
+    assert np.array_equal(edata.tem.index.values, ["timestep1", "timestep2"])
+
+    assert np.array_equal(
+        edata.R[1],
+        np.array(
+            [
+                [2, 8],
+                [5, np.nan],
+            ]
+        ),
+        equal_nan=True,
+    )
+
+    assert np.array_equal(edata.obs["obs_column"].values, ["obs_1", "obs_2", "obs_3"])
+
+
+def test_from_pandas_longitudinal_wide_column_obs_only():
+    df = pd.DataFrame(
+        {
+            "var1_t_timestep1": [1, 2, 3],
+            "var2_t_timestep1": [4, 5, 6],
+            "var1_t_timestep2": [7, 8, 9],
+            "var2_t_timestep2": [10, 11, 12],
+            "obs_column": ["obs_1", "obs_2", "obs_3"],
+        },
+        index=["patient_1", "patient_2", "patient_3"],
+    )
+    edata = from_pandas(df, format="wide", columns_obs_only=["obs_column"])
+    assert edata.shape == (3, 2, 2)
+    assert edata.R.shape == (3, 2, 2)
+    assert edata.X.shape == (3, 2)
+    assert edata.obs.shape == (3, 1)
+    assert edata.var.shape == (2, 0)
+    assert edata.tem.shape == (2, 0)
+
+    assert np.array_equal(edata.obs_names.values, ["patient_1", "patient_2", "patient_3"])
+    assert np.array_equal(edata.var_names.values, ["var1", "var2"])
+    assert np.array_equal(edata.tem.index.values, ["timestep1", "timestep2"])
+
+    assert np.array_equal(
+        edata.R[1],
+        np.array(
+            [
+                [2, 8],
+                [5, 11],
+            ]
+        ),
+    )
+
+    assert np.array_equal(edata.obs["obs_column"].values, ["obs_1", "obs_2", "obs_3"])
+
+
+def test_from_pandas_longitudinal_long():
+    df = pd.DataFrame(
+        {
+            "observation_id": [
+                "patient_1",
+                "patient_1",
+                "patient_1",
+                "patient_1",
+                "patient_2",
+                "patient_2",
+                "patient_2",
+                "patient_2",
+                "patient_3",
+                "patient_3",
+                "patient_3",
+                "patient_3",
+            ],
+            "variable": [
+                "var1",
+                "var1",
+                "var2",
+                "var2",
+                "var1",
+                "var1",
+                "var2",
+                "var2",
+                "var1",
+                "var1",
+                "var2",
+                "var2",
+            ],
+            "time": ["t1", "t2", "t1", "t2", "t1", "t2", "t1", "t2", "t1", "t2", "t1", "t2"],
+            "value": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        }
+    )
+    edata = from_pandas(df, format="long")
+    assert edata.shape == (3, 2, 2)
+    assert edata.R.shape == (3, 2, 2)
+    assert edata.X.shape == (3, 2)
+    assert edata.obs.shape == (3, 0)
+    assert edata.var.shape == (2, 0)
+    assert edata.tem.shape == (2, 0)
+
+    assert np.array_equal(edata.obs_names.values, ["patient_1", "patient_2", "patient_3"])
+    assert np.array_equal(edata.var_names.values, ["var1", "var2"])
+    assert np.array_equal(edata.tem.index.values, ["t1", "t2"])
+
+
+def test_from_pandas_longitudinal_long_index_column_not_implemented():
+    df = pd.DataFrame(
+        {
+            "observation_id": ["patient_1"],
+            "variable": ["var1"],
+            "time": ["t1"],
+            "value": [1],
+        }
+    )
+    with pytest.raises(NotImplementedError):
+        from_pandas(df, index_column="observation_id", format="long")
+
+
+def test_from_pandas_longitudinal_long_columns_obs_only_not_implemented():
+    df = pd.DataFrame(
+        {
+            "observation_id": ["patient_1"],
+            "variable": ["var1"],
+            "time": ["t1"],
+            "value": [1],
+        }
+    )
+    with pytest.raises(NotImplementedError):
+        from_pandas(df, columns_obs_only=["observation_id"], format="long")

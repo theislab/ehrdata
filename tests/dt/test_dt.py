@@ -5,6 +5,21 @@ import pytest
 
 import ehrdata as ed
 
+# def test_mimic_2():
+#     ed.dt.mimic_2()
+
+
+# def test_mimic_2_preprocessed():
+#     ed.dt.mimic_2_preprocessed()
+
+
+# def test_diabetes_130_raw():
+#     ed.dt.diabetes_130_raw()
+
+
+# def test_diabetes_130_fairlearn():
+#     ed.dt.diabetes_130_fairlearn()
+
 
 @pytest.fixture
 def duckdb_connection():
