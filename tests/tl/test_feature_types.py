@@ -116,12 +116,15 @@ def test_feature_type_inference_3D(sample_dataset, request):
         "variable_type_samples_string_format",
     ],
 )
-def test_feature_type_overview_vanilla(sample_dataset, request):
+def test_feature_type_overview_vanilla(sample_dataset, request, capsys):
     data, _ = request.getfixturevalue(sample_dataset)
     data = pd.DataFrame(data)
     edata = EHRData(X=data.values, var=pd.DataFrame(data.columns))
-    # TODO: check the output below
     feature_type_overview(edata)
+    assert (
+        " Detected feature types for EHRData object with 4 obs and 11 vars\n╠══ 📅 Date features\n╠══ 📐 Numerical features\n║   ╠══ 0\n║   ╠══ 1\n║   ╠══ 2\n║   ╠══ 3\n║   ╚══ 4\n╚══ 🗂️ Categorical features\n    ╠══ 10 (2 categories)\n    ╠══ 5 (4 categories)\n    ╠══ 6 (3 categories)\n    ╠══ 7 (2 categories)\n    ╠══ 8 (2 categories)\n    ╚══ 9 (2 categories)"
+        in capsys.readouterr().out
+    )
 
 
 @pytest.mark.parametrize(
@@ -132,9 +135,39 @@ def test_feature_type_overview_vanilla(sample_dataset, request):
     ],
 )
 def test_replace_feature_types(sample_dataset, request):
-    data, _ = request.getfixturevalue(sample_dataset)
+    data, target_types = request.getfixturevalue(sample_dataset)
     data = pd.DataFrame(data)
-    edata = EHRData(X=data.values, var=pd.DataFrame(data.columns))
-    # TODO: fix this test below
-    replace_feature_types(edata, ["feature1", "feature2", "feature3"], "categorical")
-    assert all(edata.var["feature_type"] == "categorical")
+    edata = EHRData(X=data.values, var=pd.DataFrame(data.columns).set_index(data.columns))
+    infer_feature_types(edata)
+    replace_feature_types(edata, ["int_column", "int_column_with_missing"], "categorical")
+
+    target_types["int_column"] = "categorical"
+    target_types["int_column_with_missing"] = "categorical"
+    assert all(edata.var["feature_type"] == list(target_types.values()))
+
+
+def test_replace_feature_types_not_inferred_raises_error(variable_type_samples):
+    data, _ = variable_type_samples
+    data = pd.DataFrame(data)
+    edata = EHRData(X=data.values, var=pd.DataFrame(data.columns).set_index(data.columns))
+
+    with pytest.raises(ValueError):
+        replace_feature_types(edata, ["int_column", "int_column_with_missing"], "categorical")
+
+
+def test_replace_feature_types_invalid_type_raises_error(variable_type_samples):
+    data, _ = variable_type_samples
+    data = pd.DataFrame(data)
+    edata = EHRData(X=data.values, var=pd.DataFrame(data.columns).set_index(data.columns))
+    infer_feature_types(edata)
+    with pytest.raises(KeyError):
+        replace_feature_types(edata, ["misspelt_column"], "categorical")
+
+
+def test_replace_feature_types_unknown_feature_raises_error(variable_type_samples):
+    data, _ = variable_type_samples
+    data = pd.DataFrame(data)
+    edata = EHRData(X=data.values, var=pd.DataFrame(data.columns).set_index(data.columns))
+    infer_feature_types(edata)
+    with pytest.raises(ValueError):
+        replace_feature_types(edata, ["int_column"], "invalid_target")

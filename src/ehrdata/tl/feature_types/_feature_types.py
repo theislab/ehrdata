@@ -238,12 +238,18 @@ def feature_type_overview(edata: EHRData) -> None:
 
     else:
         for categorical in sorted(cat_features):
-            branch.add(f"{categorical} ({df.loc[:, categorical].nunique()} categories)")
+            categorical_feature = df.loc[:, categorical]
+            categorical_feature_nans_cleaned = categorical_feature.replace(MISSING_VALUES, np.nan)
+            branch.add(f"{categorical} ({categorical_feature_nans_cleaned.nunique()} categories)")
 
     print(tree)
 
 
-def replace_feature_types(edata, features: Iterable[str], corrected_type: str) -> None:
+def replace_feature_types(
+    edata: EHRData,
+    features: Iterable[str],
+    corrected_type: str,
+) -> None:
     """Correct the feature types for a list of features inplace.
 
     Args:
@@ -252,11 +258,15 @@ def replace_feature_types(edata, features: Iterable[str], corrected_type: str) -
         corrected_type: The corrected feature type. One of 'date', 'categorical', or 'numeric'.
 
     Examples:
-        >>> import ehrapy as ep
-        >>> edata = ep.dt.diabetes_130_fairlearn()
-        >>> ep.ad.infer_feature_types(edata)
-        >>> ep.ad.replace_feature_types(edata, ["time_in_hospital", "number_diagnoses", "num_procedures"], "numeric")
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.diabetes_130_fairlearn()
+        >>> ed.tl.infer_feature_types(edata)
+        >>> ed.tl.replace_feature_types(edata, ["time_in_hospital", "number_diagnoses", "num_procedures"], "numeric")
     """
+    if FEATURE_TYPE_KEY not in edata.var:
+        err_msg = "Feature types were not inferred. Please infer feature types using 'ed.tl.infer_feature_types' before correcting."
+        raise ValueError(err_msg)
+
     if corrected_type not in [CATEGORICAL_TAG, NUMERIC_TAG, DATE_TAG]:
         err_msg = f"Corrected type {corrected_type} not recognized. Choose between '{DATE_TAG}', '{CATEGORICAL_TAG}', or '{NUMERIC_TAG}'."
         raise ValueError(err_msg)

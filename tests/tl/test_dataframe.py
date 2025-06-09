@@ -126,7 +126,7 @@ def test_to_pandas_basic_var_col(dataset, request):
     new_var_col_name = "new_var_annotation"
     new_var_col_value = [f"some_annotation_{i}" for i in range(edata.shape[1])]
     edata.var[new_var_col_name] = new_var_col_value
-    df = to_pandas(edata, var_col=[new_var_col_name])
+    df = to_pandas(edata, var_col=new_var_col_name)
 
     assert df.shape == original_df.shape
     assert df.index.equals(edata.obs.index)

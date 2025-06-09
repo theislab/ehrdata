@@ -36,21 +36,24 @@ def to_pandas(
         >>> edata = ed.dt.mimic_2()
         >>> df = ep.tl.to_pandas(edata)
     """
-    edata_to_use = edata if var_col is None else edata[var_col]
-    X = edata_to_use.layers[layer] if layer is not None else edata_to_use.X
+    X = edata.layers[layer] if layer is not None else edata.X
+
+    if var_col is not None and var_col not in edata.var.columns:
+        err_msg = f"Variable column {var_col} not found in edata.var"
+        raise ValueError(err_msg)
+
+    var_names = edata.var_names if var_col is None else edata.var[var_col]
 
     if issparse(X):  # pragma: no cover
         X = X.toarray()
 
     if format == "wide":
         if len(X.shape) == 2:
-            df = pd.DataFrame(X, columns=list(edata_to_use.var_names))
+            df = pd.DataFrame(X, columns=var_names)
         elif len(X.shape) == 3:
             X_wide = X.reshape(X.shape[0], -1)
             column_names = [
-                f"{edata_to_use.var_names[i]}_t_{edata_to_use.tem.index[j]}"
-                for i in range(X.shape[1])
-                for j in range(X.shape[2])
+                f"{edata.var_names[i]}_t_{edata.tem.index[j]}" for i in range(X.shape[1]) for j in range(X.shape[2])
             ]
             df = pd.DataFrame(X_wide, columns=column_names)
 
@@ -74,7 +77,7 @@ def to_pandas(
             raise NotImplementedError(err_msg)
 
         if len(X.shape) == 2:
-            df = pd.DataFrame(X, columns=list(edata_to_use.var_names))
+            df = pd.DataFrame(X, columns=var_names)
             df = df.melt(id_vars=edata.obs_names, var_name="variable", value_name="value")
             # to long
         elif len(X.shape) == 3:
@@ -83,8 +86,8 @@ def to_pandas(
                 dims=["observation_id", "variable", "time"],
                 coords={
                     "observation_id": edata.obs_names,
-                    "variable": edata_to_use.var_names,
-                    "time": edata_to_use.tem.index,
+                    "variable": edata.var_names,
+                    "time": edata.tem.index,
                 },
             )
             data_array.name = "value"
