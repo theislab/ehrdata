@@ -572,17 +572,19 @@ def mimic_2_preprocessed() -> EHRData:
 
     Examples:
         >>> import ehrdata as ed
-        >>> adata = ep.dt.mimic_2_preprocessed()
+        >>> ed = ed.dt.mimic_2_preprocessed()
     """
     download(
         url="https://figshare.com/ndownloader/files/39727936",
         output_path=DEFAULT_DATA_PATH,
+        output_file_name="mimic_2_preprocessed.h5ad",
+        archive_format="h5ad",
     )
-    adata = read_h5ad(
-        file_name=f"{DEFAULT_DATA_PATH}/ehrapy_mimic2.csv",
+    edata = read_h5ad(
+        file_name=f"{DEFAULT_DATA_PATH}/mimic_2_preprocessed.h5ad",
     )
 
-    return adata
+    return edata
 
 
 def diabetes_130_raw(
@@ -602,7 +604,7 @@ def diabetes_130_raw(
 
     Examples:
         >>> import ehrdata as ed
-        >>> adata = ep.dt.diabetes_130_raw(
+        >>> edata = ed.dt.diabetes_130_raw()
 
     References:
         [1] Beata Strack, Jonathan P. DeShazo, Chris Gennings, Juan L. Olmo, Sebastian Ventura, Krzysztof J. Cios, and John N. Clore, “Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records,” BioMed Research International, vol. 2014, Article ID 781670, 11 pages, 2014.
@@ -610,6 +612,8 @@ def diabetes_130_raw(
     download(
         url="https://figshare.com/ndownloader/files/45110029",
         output_path=DEFAULT_DATA_PATH,
+        output_file_name="diabetes_130_raw.csv",
+        archive_format="csv",
     )
     adata = read_csv(
         filename=f"{DEFAULT_DATA_PATH}/diabetes_130_raw.csv",
@@ -648,6 +652,8 @@ def diabetes_130_fairlearn(
     download(
         url="https://figshare.com/ndownloader/files/45110371",
         output_path=DEFAULT_DATA_PATH,
+        output_file_name="diabetes_130_fairlearn.csv",
+        archive_format="csv",
     )
     adata = read_csv(
         filename=f"{DEFAULT_DATA_PATH}/diabetes_130_fairlearn.csv",
