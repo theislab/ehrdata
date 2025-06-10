@@ -13,7 +13,6 @@ Many are also designed to work seamlessly in Binder, a free cloud computing plat
 :maxdepth: 3
 
 getting_started
-tutorial_omop_visualization
 omop_tables_tutorial
 tutorial_time_series_with_pypots
 omop_ml
