@@ -30,18 +30,8 @@ def read_zarr(
     from ehrdata import EHRData
 
     # TODO: support tem
+    # TODO: cast to object dtype if string dtype
     edata = EHRData.from_adata(ad.read_zarr(f"{file_name}"))
-    # edata = EHRData(
-    #     X=edata.X,
-    #     R=edata.R,
-    #     obs=edata.obs,
-    #     var=edata.var,
-    #     uns=edata.uns,
-    #     obsm=edata.obsm,
-    #     varm=edata.varm,
-    #     obsp=edata.obsp,
-    #     varp=edata.varp,
-    # )
 
     return edata
 
@@ -71,6 +61,7 @@ def write_zarr(
         >>> ed.io.write_h5ad("mimic_2.h5ad", edata)
     """
     filename = Path(filename)  # allow passing strings
+    # TODO: support temp files
 
     # if not issparse(edata.X) and edata.X.dtype == np.object_:
     #     edata.X = edata.X.astype(str)

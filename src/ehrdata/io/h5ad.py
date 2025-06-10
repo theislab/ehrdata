@@ -3,6 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+import numpy as np
+from scipy.sparse import issparse
+
+from ehrdata.tl import infer_feature_types
+
 if TYPE_CHECKING:
     from ehrdata import EHRData
 
@@ -28,19 +33,9 @@ def read_h5ad(
 
     from ehrdata import EHRData
 
-    # TODO: support tem
+    # TODO: support temp files
+    # TODO: cast to object dtype if string dtype
     edata = EHRData.from_adata(ad.read_h5ad(f"{file_name}", backed=backed))
-    edata = EHRData(
-        X=edata.X,
-        R=edata.R,
-        obs=edata.obs,
-        var=edata.var,
-        uns=edata.uns,
-        obsm=edata.obsm,
-        varm=edata.varm,
-        obsp=edata.obsp,
-        varp=edata.varp,
-    )
 
     return edata
 
@@ -71,10 +66,16 @@ def write_h5ad(
     """
     filename = Path(filename)  # allow passing strings
 
-    # if not issparse(edata.X) and edata.X.dtype == np.object_:
-    #     edata.X = edata.X.astype(str)
-    # for layer, array in edata.layers.items():
-    #     if not issparse(array) and array.dtype == np.object_:
-    #         edata.layers[layer] = array.astype(str)
+    infer_feature_types(edata)
+    # TODO: support tem
+    # numpy object dtype is not supported by h5ad;
+    # if numeric, store as numeric;
+    # if object, convert to (expensive) string
+    # sparse matrices can't be dtype object, don't need to worry about them
+    if not issparse(edata.X) and edata.X.dtype == np.object_:
+        edata.X = edata.X.astype(str)
+    for layer, array in edata.layers.items():
+        if not issparse(array) and array.dtype == np.object_:
+            edata.layers[layer] = array.astype(str)
 
     edata.write_h5ad(filename, compression=compression, compression_opts=compression_opts)
