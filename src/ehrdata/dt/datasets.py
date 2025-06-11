@@ -431,20 +431,20 @@ def physionet2012(
     # # returns a dictionary
     # tsdb.data_processing.load_physionet2012(data_path)
 
-    outcome_file_names = ["Outcomes-a.txt", "Outcomes-b.txt", "Outcomes-c.txt"]
+    outcome_filenames = ["Outcomes-a.txt", "Outcomes-b.txt", "Outcomes-c.txt"]
     temp_data_set_names = ["set-a", "set-b", "set-c"]
 
-    for file_name in temp_data_set_names:
+    for filename in temp_data_set_names:
         download(
-            url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}.tar.gz?download",
+            url=f"https://physionet.org/files/challenge-2012/1.0.0/{filename}.tar.gz?download",
             output_path=data_path,
-            output_file_name=f"{file_name}.tar.gz",
+            output_filename=f"{filename}.tar.gz",
             archive_format="tar.gz",
         )
 
-    for file_name in outcome_file_names:
+    for filename in outcome_filenames:
         download(
-            url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}?download",
+            url=f"https://physionet.org/files/challenge-2012/1.0.0/{filename}?download",
             output_path=data_path,
         )
 
@@ -473,8 +473,8 @@ def physionet2012(
     person_long_across_set_df = pd.concat(person_long_across_set_collector)
 
     person_outcome_collector = []
-    for outcome_file_name in outcome_file_names:
-        outcome_df = pd.read_csv(data_path / outcome_file_name)
+    for outcome_filename in outcome_filenames:
+        outcome_df = pd.read_csv(data_path / outcome_filename)
         person_outcome_collector.append(outcome_df)
 
     person_outcome_df = pd.concat(person_outcome_collector)
@@ -550,7 +550,7 @@ def mimic_2(
     download(
         "https://www.physionet.org/files/mimic2-iaccd/1.0/full_cohort_data.csv?download",
         output_path=DEFAULT_DATA_PATH,
-        output_file_name="ehrapy_mimic2.csv",
+        output_filename="ehrapy_mimic2.csv",
     )
     edata = read_csv(
         filename=f"{DEFAULT_DATA_PATH}/ehrapy_mimic2.csv",
@@ -577,11 +577,11 @@ def mimic_2_preprocessed() -> EHRData:
     download(
         url="https://figshare.com/ndownloader/files/39727936",
         output_path=DEFAULT_DATA_PATH,
-        output_file_name="mimic_2_preprocessed.h5ad",
+        output_filename="mimic_2_preprocessed.h5ad",
         archive_format="h5ad",
     )
     edata = read_h5ad(
-        file_name=f"{DEFAULT_DATA_PATH}/mimic_2_preprocessed.h5ad",
+        filename=f"{DEFAULT_DATA_PATH}/mimic_2_preprocessed.h5ad",
     )
 
     return edata
@@ -612,7 +612,7 @@ def diabetes_130_raw(
     download(
         url="https://figshare.com/ndownloader/files/45110029",
         output_path=DEFAULT_DATA_PATH,
-        output_file_name="diabetes_130_raw.csv",
+        output_filename="diabetes_130_raw.csv",
         archive_format="csv",
     )
     adata = read_csv(
@@ -652,7 +652,7 @@ def diabetes_130_fairlearn(
     download(
         url="https://figshare.com/ndownloader/files/45110371",
         output_path=DEFAULT_DATA_PATH,
-        output_file_name="diabetes_130_fairlearn.csv",
+        output_filename="diabetes_130_fairlearn.csv",
         archive_format="csv",
     )
     adata = read_csv(

@@ -11,7 +11,7 @@ _TEST_PATH_ZARR = f"{TEST_DATA_PATH}/toy_zarr/"
 
 
 def test_read_zarr_basic():
-    edata = read_zarr(file_name=f"{_TEST_PATH_ZARR}/adata_basic.zarr")
+    edata = read_zarr(filename=f"{_TEST_PATH_ZARR}/adata_basic.zarr")
 
     assert edata.shape == (5, 4, 0)
     assert edata.X.shape == (5, 4)
@@ -31,7 +31,7 @@ def test_read_zarr_basic():
 
 
 def test_read_zarr_basic_with_tem():
-    edata = read_zarr(file_name=f"{_TEST_PATH_ZARR}/edata_basic_with_tem.zarr")
+    edata = read_zarr(filename=f"{_TEST_PATH_ZARR}/edata_basic_with_tem.zarr")
 
     assert edata.shape == (5, 4, 2)
     assert edata.X.shape == (5, 4)

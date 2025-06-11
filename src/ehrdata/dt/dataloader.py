@@ -20,7 +20,7 @@ COMPRESSION_FORMATS_LIST = list(get_args(COMPRESSION_FORMATS))
 
 def download(
     url: str,
-    output_file_name: str | None = None,
+    output_filename: str | None = None,
     output_path: str | Path | None = None,
     archive_format: COMPRESSION_FORMATS | None = None,
     block_size: int = 1024,
@@ -34,8 +34,8 @@ def download(
 
     Args:
         url: URL to download.
-        output_file_name: Name of the file to download. If not specified, the file name will be inferred from the URL.
-        output_path: Path to download/extract the files to. Defaults to 'ehrapy_data/output_file_name' if not specified.
+        output_filename: Name of the file to download. If not specified, the file name will be inferred from the URL.
+        output_path: Path to download/extract the files to. Defaults to 'ehrapy_data/output_filename' if not specified.
         archive_format: Format of the archive to download. If not specified, the format will be inferred from the URL.
         block_size: Block size for downloads in bytes.
         overwrite: Whether to overwrite existing files.
@@ -45,35 +45,35 @@ def download(
     """
     raw_formats = ["csv", "txt", "parquet", "h5ad"]
 
-    def _sanitize_file_name(file_name: str) -> str:
+    def _sanitize_filename(filename: str) -> str:
         if os.name == "nt":
-            file_name = file_name.replace("?", "_").replace("*", "_")
-        return file_name
+            filename = filename.replace("?", "_").replace("*", "_")
+        return filename
 
-    def _remove_archive_extension(file_name: str) -> str:
+    def _remove_archive_extension(filename: str) -> str:
         for ext in COMPRESSION_FORMATS_LIST:
-            if file_name.endswith(ext):
-                return file_name.removesuffix(ext).rstrip(".")
-        return file_name
+            if filename.endswith(ext):
+                return filename.removesuffix(ext).rstrip(".")
+        return filename
 
     if output_path is None:
         output_path = tempfile.gettempdir()
 
     output_path = Path(output_path)
 
-    url_file_name = PurePath(urlparse(url).path).name
-    suffix = url_file_name.split(".")[-1]
+    url_filename = PurePath(urlparse(url).path).name
+    suffix = url_filename.split(".")[-1]
 
-    output_file_name = _sanitize_file_name(url_file_name) if output_file_name is None else output_file_name
+    output_filename = _sanitize_filename(url_filename) if output_filename is None else output_filename
     archive_format = suffix if archive_format is None else archive_format
 
     if archive_format in raw_formats:
-        raw_data_output_path = output_path / output_file_name
+        raw_data_output_path = output_path / output_filename
         path_to_check = raw_data_output_path
     elif archive_format in COMPRESSION_FORMATS_LIST:
         tmpdir = tempfile.mkdtemp()
-        raw_data_output_path = Path(tmpdir) / output_file_name
-        path_to_check = output_path / _remove_archive_extension(output_file_name)
+        raw_data_output_path = Path(tmpdir) / output_filename
+        path_to_check = output_path / _remove_archive_extension(output_filename)
     else:
         msg = f"Unknown file format: {archive_format}"
         raise RuntimeError(msg)
@@ -88,7 +88,7 @@ def download(
             else:
                 logger.warning(f"{warning} Overwriting...")
 
-        temp_file_name = f"{raw_data_output_path}.part"
+        temp_filename = f"{raw_data_output_path}.part"
 
         retry_count = 0
         while retry_count < max_retries:
@@ -108,13 +108,13 @@ def download(
 
                 with Progress(refresh_per_second=5) as progress:
                     task = progress.add_task("[red]Downloading...", total=total)
-                    with Path(temp_file_name).open("wb") as file:
+                    with Path(temp_filename).open("wb") as file:
                         for data in response.iter_content(block_size):
                             file.write(data)
                             progress.update(task, advance=len(data))
                         progress.update(task, completed=total, refresh=True)
 
-                Path(temp_file_name).replace(raw_data_output_path)
+                Path(temp_filename).replace(raw_data_output_path)
 
                 if archive_format in COMPRESSION_FORMATS_LIST:
                     shutil.unpack_archive(raw_data_output_path, output_path)
@@ -130,18 +130,18 @@ def download(
                     time.sleep(retry_delay)
                 else:
                     logger.error(f"Download failed after {max_retries} attempts: {e!s}")
-                    if Path(temp_file_name).exists():
-                        Path(temp_file_name).unlink(missing_ok=True)
+                    if Path(temp_filename).exists():
+                        Path(temp_filename).unlink(missing_ok=True)
                     raise
 
             except Exception as e:
                 logger.error(f"Download failed: {e!s}")
-                if Path(temp_file_name).exists():
-                    Path(temp_file_name).unlink(missing_ok=True)
+                if Path(temp_filename).exists():
+                    Path(temp_filename).unlink(missing_ok=True)
                 raise
             finally:
-                if Path(temp_file_name).exists():
-                    Path(temp_file_name).unlink(missing_ok=True)
+                if Path(temp_filename).exists():
+                    Path(temp_filename).unlink(missing_ok=True)
                 Path(lock_path).unlink(missing_ok=True)
 
         return path_to_check

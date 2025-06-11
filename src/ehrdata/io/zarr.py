@@ -14,12 +14,12 @@ if TYPE_CHECKING:
 
 
 def read_zarr(
-    file_name: Path | str,
+    filename: Path | str,
 ) -> EHRData:
     """Reads an zarr store.
 
     Args:
-        file_name: Path to the file or directory to read.
+        filename: Path to the file or directory to read.
         backed: If 'r', load AnnData in backed mode instead of fully loading it into memory (memory mode). If you want to modify backed attributes of the AnnData object, you need to choose 'r+'.
             Currently, backed only support updates to X. That means any changes to other slots like obs will not be written to disk in backed mode. If you would like save changes made to these slots of a backed AnnData, write them to a new file (see write()). For an example, see Partial reading of large data.
 
@@ -32,7 +32,7 @@ def read_zarr(
     from ehrdata import EHRData
     from ehrdata.tl import harmonize_missing_values
 
-    f = file_name if isinstance(file_name, zarr.Group) else zarr.open(file_name, mode="r")
+    f = filename if isinstance(filename, zarr.Group) else zarr.open(filename, mode="r")
 
     dictionary_for_init = {k: ad.io.read_elem(f[k]) for k, v in dict(f).items() if not k.startswith("raw.")}
 

@@ -51,9 +51,9 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
     used_tables = []
     missing_tables = []
     unused_files = []
-    for file_name in os.listdir(path):  # noqa: PTH208
-        file_name_trunk = file_name.split(".")[0].lower()
-        regular_omop_table_name = file_name_trunk.replace(prefix, "")
+    for filename in os.listdir(path):  # noqa: PTH208
+        filename_trunk = filename.split(".")[0].lower()
+        regular_omop_table_name = filename_trunk.replace(prefix, "")
 
         if regular_omop_table_name in tables:
             used_tables.append(regular_omop_table_name)
@@ -61,7 +61,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
             dtype = {"measurement_source_value": str} if regular_omop_table_name == "measurement" else None
 
             # read raw csv as temporary table
-            temp_relation = backend_handle.read_csv(path / file_name, dtype=dtype)  # noqa: F841
+            temp_relation = backend_handle.read_csv(path / filename, dtype=dtype)  # noqa: F841
             backend_handle.execute("CREATE OR REPLACE TABLE temp_table AS SELECT * FROM temp_relation")
 
             # make query to create table with lowercase column names
@@ -81,8 +81,8 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
 
             backend_handle.execute("DROP TABLE temp_table")
 
-        elif file_name_trunk != DOWNLOAD_VERIFICATION_TAG:
-            unused_files.append(file_name)
+        elif filename_trunk != DOWNLOAD_VERIFICATION_TAG:
+            unused_files.append(filename)
 
     missing_tables = [table for table in tables if table not in used_tables]
 
