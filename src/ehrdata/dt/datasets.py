@@ -578,7 +578,7 @@ def mimic_2_preprocessed() -> EHRData:
         url="https://figshare.com/ndownloader/files/39727936",
         output_path=DEFAULT_DATA_PATH,
         output_filename="mimic_2_preprocessed.h5ad",
-        archive_format="h5ad",
+        raw_format="h5ad",
     )
     edata = read_h5ad(
         filename=f"{DEFAULT_DATA_PATH}/mimic_2_preprocessed.h5ad",
@@ -613,7 +613,7 @@ def diabetes_130_raw(
         url="https://figshare.com/ndownloader/files/45110029",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_raw.csv",
-        archive_format="csv",
+        raw_format="csv",
     )
     adata = read_csv(
         filename=f"{DEFAULT_DATA_PATH}/diabetes_130_raw.csv",
@@ -653,7 +653,7 @@ def diabetes_130_fairlearn(
         url="https://figshare.com/ndownloader/files/45110371",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_fairlearn.csv",
-        archive_format="csv",
+        raw_format="csv",
     )
     adata = read_csv(
         filename=f"{DEFAULT_DATA_PATH}/diabetes_130_fairlearn.csv",
