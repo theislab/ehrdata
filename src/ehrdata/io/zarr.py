@@ -66,9 +66,9 @@ def write_zarr(
     chunks: bool | int | tuple[int, ...] | None = None,
     convert_strings_to_categoricals: bool = True,
 ) -> None:
-    """Write :class:`~ehrdata.EHRData` objects to file.
+    """Write :class:`~ehrdata.EHRData` objects to disk.
 
-    It is possbile to either write an :class:`~ehrdata.EHRData` object to an .zarr file.
+    It is possible to either write an :class:`~ehrdata.EHRData` object to an .zarr file.
     The .zarr file can be used as a cache to save the current state of the object and to retrieve it faster once needed.
     This preserves the object state at the time of writing.
 

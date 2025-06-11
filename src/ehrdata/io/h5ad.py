@@ -21,8 +21,8 @@ def read_h5ad(
 
     Args:
         filename: Path to the file or directory to read.
-        backed: If 'r', load AnnData in backed mode instead of fully loading it into memory (memory mode). If you want to modify backed attributes of the AnnData object, you need to choose 'r+'.
-            Currently, backed only support updates to X. That means any changes to other slots like obs will not be written to disk in backed mode. If you would like save changes made to these slots of a backed AnnData, write them to a new file (see write()). For an example, see Partial reading of large data.
+        backed: If 'r', load EHRData in backed mode instead of fully loading it into memory (memory mode). If you want to modify backed attributes of the EHRData object, you need to choose 'r+'.
+            Currently, backed only support updates to X. That means any changes to other slots like obs will not be written to disk in backed mode. If you would like save changes made to these slots of a backed EHRData, write them to a new file (see write()). For an example, see Partial reading of large data.
 
     Examples:
         >>> import ehrdata as ed
@@ -66,9 +66,9 @@ def write_h5ad(
     compression: Literal["gzip", "lzf"] | None = None,
     compression_opts: int | None = None,
 ) -> None:
-    """Write :class:`~ehrdata.EHRData` objects to file.
+    """Write :class:`~ehrdata.EHRData` objects to disk.
 
-    It is possbile to either write an :class:`~ehrdata.EHRData` object to an .h5ad file.
+    It is possible to either write an :class:`~ehrdata.EHRData` object to an `.h5ad` or a compressed `.gzip` or `lzf` file.
     The .h5ad file can be used as a cache to save the current state of the object and to retrieve it faster once needed.
     This preserves the object state at the time of writing.
 

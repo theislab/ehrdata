@@ -538,14 +538,14 @@ def mimic_2(
     More details: https://physionet.org/content/mimic2-iaccd/1.0/
 
     Args:
-        columns_obs_only: Columns to include in obs only and not X.
+        columns_obs_only: Columns to include only in obs and not X.
 
     Returns:
         Loaded MIMIC-II dataset
 
     Examples:
         >>> import ehrdata as ed
-        >>> adata = ep.dt.mimic_2(encoded=True)
+        >>> edata = ep.dt.mimic_2(encoded=True)
     """
     download(
         "https://www.physionet.org/files/mimic2-iaccd/1.0/full_cohort_data.csv?download",
@@ -572,7 +572,7 @@ def mimic_2_preprocessed() -> EHRData:
 
     Examples:
         >>> import ehrdata as ed
-        >>> ed = ed.dt.mimic_2_preprocessed()
+        >>> edata = ed.dt.mimic_2_preprocessed()
     """
     download(
         url="https://figshare.com/ndownloader/files/39727936",
@@ -642,7 +642,7 @@ def diabetes_130_fairlearn(
 
     Examples:
         >>> import ehrdata as ed
-        >>> adata = ep.dt.diabetes_130_fairlearn()
+        >>> edata = ed.dt.diabetes_130_fairlearn()
 
     References:
         [1] Beata Strack, Jonathan P. DeShazo, Chris Gennings, Juan L. Olmo, Sebastian Ventura, Krzysztof J. Cios, and John N. Clore, “Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records,” BioMed Research International, vol. 2014, Article ID 781670, 11 pages, 2014.
@@ -655,9 +655,9 @@ def diabetes_130_fairlearn(
         output_filename="diabetes_130_fairlearn.csv",
         raw_format="csv",
     )
-    adata = read_csv(
+    edata = read_csv(
         filename=f"{DEFAULT_DATA_PATH}/diabetes_130_fairlearn.csv",
         columns_obs_only=columns_obs_only,
     )
 
-    return adata
+    return edata
