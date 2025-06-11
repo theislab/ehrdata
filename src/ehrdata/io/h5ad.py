@@ -1,25 +1,26 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+import anndata as ad
+import h5py
 import numpy as np
 from scipy.sparse import issparse
-
-from ehrdata.tl import infer_feature_types
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
 def read_h5ad(
-    file_name: Path | str,
+    filename: Path | str,
     backed: Literal["r", "r+"] | bool | None = None,
 ) -> EHRData:
     """Reads an h5ad file.
 
     Args:
-        file_name: Path to the file or directory to read.
+        filename: Path to the file or directory to read.
         backed: If 'r', load AnnData in backed mode instead of fully loading it into memory (memory mode). If you want to modify backed attributes of the AnnData object, you need to choose 'r+'.
             Currently, backed only support updates to X. That means any changes to other slots like obs will not be written to disk in backed mode. If you would like save changes made to these slots of a backed AnnData, write them to a new file (see write()). For an example, see Partial reading of large data.
 
@@ -29,13 +30,31 @@ def read_h5ad(
         >>> ed.io.write("mimic_2.h5ad", edata)
         >>> edata_2 = ed.io.read_h5ad("mimic_2.h5ad")
     """
-    import anndata as ad
-
     from ehrdata import EHRData
+    from ehrdata.tl import harmonize_missing_values
 
-    # TODO: support temp files
-    # TODO: cast to object dtype if string dtype
-    edata = EHRData.from_adata(ad.read_h5ad(f"{file_name}", backed=backed))
+    with h5py.File(filename, "r") as f:
+        dictionary_for_init = {k: ad.io.read_elem(f[k]) for k, v in dict(f).items() if not k.startswith("raw.")}
+
+    # If X, layers is str; convert to object dtype. First, try to cast each column to float64 in pandas.
+    if "X" in dictionary_for_init:
+        dictionary_for_init["X"] = dictionary_for_init["X"].astype(object)
+    if "layers" in dictionary_for_init:
+        for key in dictionary_for_init["layers"]:
+            dictionary_for_init["layers"][key] = dictionary_for_init["layers"][key].astype(object)
+
+    edata = EHRData(**dictionary_for_init)
+
+    # cast "nan" and other designated missing value strings to np.nan to enable to-float casting if only numbers and missing values
+    harmonize_missing_values(edata)
+    for column in range(edata.X.shape[1]):
+        with contextlib.suppress(ValueError):
+            edata.X[:, column] = edata.X[:, column].astype(np.float64)
+    for key in edata.layers:
+        harmonize_missing_values(edata, layer=key)
+        for column in range(edata.layers[key].shape[1]):
+            with contextlib.suppress(ValueError):
+                edata.layers[key][:, column] = edata.layers[key][:, column].astype(np.float64)
 
     return edata
 
@@ -66,16 +85,20 @@ def write_h5ad(
     """
     filename = Path(filename)  # allow passing strings
 
-    infer_feature_types(edata)
-    # TODO: support tem
-    # numpy object dtype is not supported by h5ad;
-    # if numeric, store as numeric;
-    # if object, convert to (expensive) string
-    # sparse matrices can't be dtype object, don't need to worry about them
     if not issparse(edata.X) and edata.X.dtype == np.object_:
-        edata.X = edata.X.astype(str)
+        try:
+            edata.X = edata.X.astype(np.float64)
+        except ValueError:
+            edata.X = edata.X.astype(str)
     for layer, array in edata.layers.items():
         if not issparse(array) and array.dtype == np.object_:
-            edata.layers[layer] = array.astype(str)
-
-    edata.write_h5ad(filename, compression=compression, compression_opts=compression_opts)
+            try:
+                edata.layers[layer] = array.astype(np.float64)
+            except ValueError:
+                edata.layers[layer] = array.astype(str)
+    ad.AnnData(edata).write_h5ad(
+        filename,
+        compression=compression,
+    )
+    with h5py.File(filename, "a") as f:
+        ad.io.write_elem(f, "tem", edata.tem)

@@ -12,6 +12,17 @@ from ehrdata import EHRData
 from ehrdata.io.omop import setup_connection
 
 
+def _assert_dtype_object_array_with_missing_values_equal(a: np.ndarray, b: np.ndarray):
+    # need to use pd.isnull to check for np.isnan in dtype object arrays, because np.isnan does not work on dtype object array
+    a = a.copy()
+    b = b.copy()
+    assert np.array_equal(pd.isnull(a), pd.isnull(b))
+    # if verified equal position of nan values, replace with 0 and verify the rest of the entries are equal
+    a[pd.isnull(a)] = 0
+    b[pd.isnull(b)] = 0
+    assert np.array_equal(a, b)
+
+
 @pytest.fixture
 def csv_basic():
     return pd.read_csv("tests/data/toy_csv/csv_basic.csv")
@@ -154,6 +165,24 @@ def edata_nonnumeric_missing_330(obs_31, var_31):
         ]
     ).to_numpy()
     return EHRData(X=X, obs=obs_31, var=var_31)
+
+
+@pytest.fixture
+def edata_basic_with_tem_full():
+    edata_basic_with_tem_dict = {
+        "X": np.ones((5, 4)),
+        "R": np.ones((5, 4, 2)),
+        "obs": pd.DataFrame({"survival": [1, 2, 3, 4, 5]}),
+        "var": pd.DataFrame({"variables": ["var_1", "var_2", "var_3", "var_4"]}),
+        "obsm": {"obs_level_representation": np.ones((5, 2))},
+        "varm": {"var_level_representation": np.ones((4, 2))},
+        "layers": {"other_layer": np.ones((5, 4))},
+        "obsp": {"obs_level_connectivities": np.ones((5, 5))},
+        "varp": {"var_level_connectivities": np.random.randn(4, 4)},
+        "uns": {"information": ["info1"]},
+        "tem": pd.DataFrame({"timestep": ["t1", "t2"]}),
+    }
+    return EHRData(**edata_basic_with_tem_dict)
 
 
 @pytest.fixture

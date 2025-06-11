@@ -2,13 +2,13 @@
 # Toy zarr files creation
 #########################
 import anndata as ad
+import h5py
 import numpy as np
 import pandas as pd
 import zarr
 
 #########################
-# adata_basic.zarr:  basic AnnData object
-
+# adata_basic.zarr/h5ad:  basic AnnData object
 
 adata_basic = ad.AnnData(
     X=np.ones((5, 4)),
@@ -21,12 +21,13 @@ adata_basic = ad.AnnData(
     varp={"var_level_connectivities": np.random.randn(4, 4)},
     uns={"information": ["info1"]},
 )
-adata_basic.write_zarr("adata_basic.zarr")
+adata_basic.write_zarr("toy_zarr/adata_basic.zarr")
+adata_basic.write_h5ad("toy_h5ad/adata_basic.h5ad")
 
 #########################
-# adata_basic.zarr:  basic EHRData object with tem, R
+# adata_basic.zarr/h5ad:  basic EHRData object with tem, R
 
-f = zarr.open("edata_basic_with_tem.zarr", mode="w")
+zarr_file = zarr.open("toy_zarr/edata_basic_with_tem.zarr", mode="w")
 edata_basic_with_tem_dict = {
     "X": np.ones((5, 4)),
     "R": np.ones((5, 4, 2)),
@@ -41,4 +42,9 @@ edata_basic_with_tem_dict = {
     "tem": pd.DataFrame({"timestep": ["t1", "t2"]}),
 }
 for k, v in edata_basic_with_tem_dict.items():
-    ad.io.write_elem(f, k, v)
+    ad.io.write_elem(zarr_file, k, v)
+
+
+with h5py.File("toy_h5ad/edata_basic_with_tem.h5ad", "w") as h5ad_file:
+    for k, v in edata_basic_with_tem_dict.items():
+        ad.io.write_elem(h5ad_file, k, v)

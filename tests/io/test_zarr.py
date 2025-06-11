@@ -1,12 +1,17 @@
-from tests.conftest import TEST_DATA_PATH
+import anndata as ad
+import numpy as np
+import pandas as pd
+import pytest
+import zarr
+from tests.conftest import TEST_DATA_PATH, _assert_dtype_object_array_with_missing_values_equal
 
-from ehrdata.io import read_zarr
+from ehrdata.io import read_zarr, write_zarr
 
-_TEST_PATH_H5AD = f"{TEST_DATA_PATH}/toy_zarr/"
+_TEST_PATH_ZARR = f"{TEST_DATA_PATH}/toy_zarr/"
 
 
 def test_read_zarr_basic():
-    edata = read_zarr(file_name=f"{_TEST_PATH_H5AD}/adata_basic.zarr")
+    edata = read_zarr(file_name=f"{_TEST_PATH_ZARR}/adata_basic.zarr")
 
     assert edata.shape == (5, 4, 0)
     assert edata.X.shape == (5, 4)
@@ -26,7 +31,7 @@ def test_read_zarr_basic():
 
 
 def test_read_zarr_basic_with_tem():
-    edata = read_zarr(file_name=f"{_TEST_PATH_H5AD}/edata_basic_with_tem.zarr")
+    edata = read_zarr(file_name=f"{_TEST_PATH_ZARR}/edata_basic_with_tem.zarr")
 
     assert edata.shape == (5, 4, 2)
     assert edata.X.shape == (5, 4)
@@ -48,39 +53,75 @@ def test_read_zarr_basic_with_tem():
     assert "information" in edata.uns
 
 
-def test_write_zarr():
-    import ehrdata as ed
+@pytest.mark.parametrize("edata_name", ["edata_333", "edata_basic_with_tem_full", "edata_nonnumeric_missing_330"])
+def test_write_zarr_basic(edata_name, request, tmp_path):
+    edata = request.getfixturevalue(edata_name)
 
-    edata = ed.io.read_csv(f"{TEST_DATA_PATH}/toy_csv/csv_basic.csv", columns_obs_only=["survival"])
-    edata = ed.io.read_csv(f"{TEST_DATA_PATH}/toy_csv/csv_basic.csv")
+    write_zarr(edata, f"{tmp_path}/{edata_name}.zarr")
 
-    ed.io.write_zarr(edata, f"{TEST_DATA_PATH}/toy_zarr/zarr_numeric_basic.zarr")
-    assert True
+    zarr_file = zarr.open(f"{tmp_path}/{edata_name}.zarr", mode="r")
+    # Note that R is not included in the list because it is just a value of the .layers field
+    assert set(dict(zarr_file).keys()) == {
+        "X",
+        "obs",
+        "var",
+        "obsm",
+        "varm",
+        "layers",
+        "obsp",
+        "varp",
+        "uns",
+        "tem",
+    }
+
+    assert np.array_equal(ad.io.read_elem(zarr_file["X"]), edata.X)
+
+    pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["obs"]), edata.obs)
+    pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["var"]), edata.var)
+    pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["tem"]), edata.tem)
+    for key in edata.obsm:
+        assert key in ad.io.read_elem(zarr_file["obsm"])
+        assert np.array_equal(ad.io.read_elem(zarr_file["obsm"][key]), edata.obsm[key])
+    for key in edata.varm:
+        assert key in ad.io.read_elem(zarr_file["varm"])
+        assert np.array_equal(ad.io.read_elem(zarr_file["varm"][key]), edata.varm[key])
+    for key in edata.obsp:
+        assert key in ad.io.read_elem(zarr_file["obsp"])
+        assert np.array_equal(ad.io.read_elem(zarr_file["obsp"][key]), edata.obsp[key])
+    for key in edata.varp:
+        assert key in ad.io.read_elem(zarr_file["varp"])
+        assert np.array_equal(ad.io.read_elem(zarr_file["varp"][key]), edata.varp[key])
+    for key in edata.uns:
+        assert key in ad.io.read_elem(zarr_file["uns"])
 
 
-# TODO: make this test run - how can dtype object be handled?
-# @pytest.mark.parametrize("edata_name", ["edata_330", "edata_nonnumeric_missing_330", "edata_333"])
-# def test_write_h5ad_basic(edata_name, request, tmp_path):
-#     edata = request.getfixturevalue(edata_name)
-#     write_h5ad(edata, tmp_path / f"test_write_{edata_name}.h5ad")
-#     assert Path.exists(tmp_path / f"test_write_{edata_name}.h5ad")
+@pytest.mark.parametrize("edata_name", ["edata_333", "edata_basic_with_tem_full", "edata_nonnumeric_missing_330"])
+def test_write_read_zarr_basic(edata_name, request, tmp_path):
+    edata = request.getfixturevalue(edata_name)
+    write_zarr(edata.copy(), f"{tmp_path}/{edata_name}.zarr")
+    edata_read = read_zarr(f"{tmp_path}/{edata_name}.zarr")
 
+    assert edata.shape == edata_read.shape
 
-# TODO: make this test run - how can dtype object be handled?
-# @pytest.mark.parametrize("edata_name", ["edata_330", "edata_nonnumeric_missing_330", "edata_333"])
-# def test_write_read_h5ad_basic(edata_name, request, tmp_path):
-#     edata = request.getfixturevalue(edata_name)
-#     write_h5ad(edata, tmp_path / f"test_write_{edata_name}.h5ad")
+    _assert_dtype_object_array_with_missing_values_equal(edata.X, edata_read.X)
+    for key in edata.layers:
+        _assert_dtype_object_array_with_missing_values_equal(edata.layers[key], edata_read.layers[key])
 
-#     edata_read = read_h5ad(tmp_path / f"test_write_{edata_name}.h5ad")
-
-#     assert edata_read.shape == edata.shape
-
-#     assert np.array_equal(edata_read.X, edata.X)
-#     pd.testing.assert_frame_equal(edata_read.obs, edata.obs)
-#     pd.testing.assert_frame_equal(edata_read.var, edata.var)
-#     if edata.R is None:
-#         assert edata_read.R is None
-#     else:
-#         assert edata_read.R is not None
-#         assert np.array_equal(edata.R, edata_read.R)
+    pd.testing.assert_frame_equal(edata.obs, edata_read.obs)
+    pd.testing.assert_frame_equal(edata.var, edata_read.var)
+    pd.testing.assert_frame_equal(edata.tem, edata_read.tem)
+    for key in edata.obsm:
+        assert key in edata_read.obsm
+        assert np.array_equal(edata.obsm[key], edata_read.obsm[key])
+    for key in edata.varm:
+        assert key in edata_read.varm
+        assert np.array_equal(edata.varm[key], edata_read.varm[key])
+    for key in edata.obsp:
+        assert key in edata_read.obsp
+        assert np.array_equal(edata.obsp[key], edata_read.obsp[key])
+    for key in edata.varp:
+        assert key in edata_read.varp
+        assert np.array_equal(edata.varp[key], edata_read.varp[key])
+    for key in edata.uns:
+        assert key in edata_read.uns
+        assert np.array_equal(edata.uns[key], edata_read.uns[key])
