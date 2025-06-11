@@ -5,13 +5,47 @@ from ehrdata.io import read_zarr
 _TEST_PATH_H5AD = f"{TEST_DATA_PATH}/toy_zarr/"
 
 
-def test_read_zarr():
-    edata = read_zarr(file_name=f"{_TEST_PATH_H5AD}/zarr_numeric_basic.zarr")
+def test_read_zarr_basic():
+    edata = read_zarr(file_name=f"{_TEST_PATH_H5AD}/adata_basic.zarr")
 
-    assert edata.shape == (4, 3, 0)
-    assert edata.X.shape == (4, 3)
-    assert set(edata.var_names) == {"col" + str(i) for i in range(1, 4)}
-    assert set(edata.obs.columns) == set()
+    assert edata.shape == (5, 4, 0)
+    assert edata.X.shape == (5, 4)
+    assert "survival" in edata.obs.columns
+    assert all(edata.obs["survival"].values == [1, 2, 3, 4, 5])
+    assert "variables" in edata.var.columns
+    assert all(edata.var["variables"].values == ["var_1", "var_2", "var_3", "var_4"])
+    assert "obs_level_representation" in edata.obsm
+    assert edata.obsm["obs_level_representation"].shape == (5, 2)
+    assert "var_level_representation" in edata.varm
+    assert edata.varm["var_level_representation"].shape == (4, 2)
+    # shapes are enforced by AnnData/EHRData for the below, no need to test
+    assert "other_layer" in edata.layers
+    assert "obs_level_connectivities" in edata.obsp
+    assert "var_level_connectivities" in edata.varp
+    assert "information" in edata.uns
+
+
+def test_read_zarr_basic_with_tem():
+    edata = read_zarr(file_name=f"{_TEST_PATH_H5AD}/edata_basic_with_tem.zarr")
+
+    assert edata.shape == (5, 4, 2)
+    assert edata.X.shape == (5, 4)
+    assert edata.R.shape == (5, 4, 2)
+    assert "survival" in edata.obs.columns
+    assert all(edata.obs["survival"].values == [1, 2, 3, 4, 5])
+    assert "variables" in edata.var.columns
+    assert all(edata.var["variables"].values == ["var_1", "var_2", "var_3", "var_4"])
+    assert "timestep" in edata.tem.columns
+    assert all(edata.tem["timestep"].values == ["t1", "t2"])
+    assert "obs_level_representation" in edata.obsm
+    assert edata.obsm["obs_level_representation"].shape == (5, 2)
+    assert "var_level_representation" in edata.varm
+    assert edata.varm["var_level_representation"].shape == (4, 2)
+    # shapes are enforced by AnnData/EHRData for the below, no need to test
+    assert "other_layer" in edata.layers
+    assert "obs_level_connectivities" in edata.obsp
+    assert "var_level_connectivities" in edata.varp
+    assert "information" in edata.uns
 
 
 def test_write_zarr():

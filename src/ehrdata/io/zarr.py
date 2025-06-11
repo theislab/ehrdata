@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import anndata as ad
+import zarr
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
@@ -25,13 +26,12 @@ def read_zarr(
         >>> ed.io.write_zarr("mimic_2.h5ad", edata)
         >>> edata_2 = ed.io.read_zarr("mimic_2.h5ad")
     """
-    import anndata as ad
-
     from ehrdata import EHRData
 
-    # TODO: support tem
-    # TODO: cast to object dtype if string dtype
-    edata = EHRData.from_adata(ad.read_zarr(f"{file_name}"))
+    f = file_name if isinstance(file_name, zarr.Group) else zarr.open(file_name, mode="r")
+
+    dictionary_for_init = {k: ad.io.read_elem(f[k]) for k, v in dict(f).items() if not k.startswith("raw.")}
+    edata = EHRData(**dictionary_for_init)
 
     return edata
 
