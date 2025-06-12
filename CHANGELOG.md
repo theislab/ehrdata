@@ -81,3 +81,7 @@ and this project adheres to [Semantic Versioning][].
 ### Added
 
 - Basic tool, preprocessing and plotting functions
+
+### Fixed
+
+- tutorial notebooks updated to align with breaking changes
