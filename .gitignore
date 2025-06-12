@@ -28,3 +28,4 @@ docs/api/plot
 
 ehrapy_data
 test.ipynb
+*.h5ad
