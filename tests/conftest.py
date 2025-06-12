@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import anndata as ad
 import dask.array as da
 import duckdb
@@ -8,6 +10,32 @@ import sparse as sp
 
 from ehrdata import EHRData
 from ehrdata.io.omop import setup_connection
+
+
+def _assert_dtype_object_array_with_missing_values_equal(a: np.ndarray, b: np.ndarray):
+    # need to use pd.isnull to check for np.isnan in dtype object arrays, because np.isnan does not work on dtype object array
+    a = a.copy()
+    b = b.copy()
+    assert np.array_equal(pd.isnull(a), pd.isnull(b))
+    # if verified equal position of nan values, replace with 0 and verify the rest of the entries are equal
+    a[pd.isnull(a)] = 0
+    b[pd.isnull(b)] = 0
+    assert np.array_equal(a, b)
+
+
+@pytest.fixture
+def csv_basic():
+    return pd.read_csv("tests/data/toy_csv/csv_basic.csv")
+
+
+@pytest.fixture
+def csv_non_num_with_missing():
+    return pd.read_csv("tests/data/toy_csv/csv_non_num_with_missing.csv")
+
+
+@pytest.fixture
+def csv_num_with_missing():
+    return pd.read_csv("tests/data/toy_csv/csv_num_with_missing.csv")
 
 
 @pytest.fixture
@@ -76,8 +104,85 @@ def edata_333(X_numpy_33, R_numpy_333, obs_31, var_31, tem_31):
 
 
 @pytest.fixture
+def edata_330(X_numpy_33, obs_31, var_31):
+    return EHRData(X=X_numpy_33, obs=obs_31, var=var_31)
+
+
+@pytest.fixture
 def adata_33(X_numpy_33, obs_31, var_31):
     return ad.AnnData(X=X_numpy_33, obs=obs_31, var=var_31)
+
+
+@pytest.fixture
+def variable_type_samples():
+    column_types = {
+        "float_column": np.array([1.1, 1.2, 1.3, 2.1]),
+        "float_column_with_missing": np.array([1.1, np.nan, 1.3, 2.1]),
+        "int_column": np.array([1, 2, 3, 4]),
+        "int_column_with_missing": np.array([1, np.nan, 3, 4]),
+        "int_column_irregular": np.array([1, 2, 5, 6]),
+        "string_column": np.array(["a", "b", "c", "d"]),
+        "string_column_with_missing": np.array(["a", np.nan, "c", "d"]),
+        "string_column_with_missing_strings": np.array(["a", "np.nan", "nan", "d"]),
+        "bool_column_TrueFalse": np.array([True, False, True, False]),
+        "bool_column_01": np.array([1, 0, 1, 0]),
+        "bool_column_with_missing": np.array([True, np.nan, True, False]),
+    }
+
+    target_types = {
+        "float_column": "numeric",
+        "float_column_with_missing": "numeric",
+        "int_column": "numeric",
+        "int_column_with_missing": "numeric",
+        "int_column_irregular": "numeric",
+        "string_column": "categorical",
+        "string_column_with_missing": "categorical",
+        "string_column_with_missing_strings": "categorical",
+        "bool_column_TrueFalse": "categorical",
+        "bool_column_01": "categorical",
+        "bool_column_with_missing": "categorical",
+    }
+    return column_types, target_types
+
+
+@pytest.fixture
+def variable_type_samples_string_format(variable_type_samples):
+    # cast entries with .astype(str)
+    data, target_types = variable_type_samples
+    for key, value in data.items():
+        data[key] = value.astype(str)
+    return data, target_types
+
+
+@pytest.fixture
+def edata_nonnumeric_missing_330(obs_31, var_31):
+    # create X of dtype object - np would create a string array
+    X = pd.DataFrame(
+        [
+            [3, "E10", 12.1],
+            [np.nan, "E11", 13.2],
+            [14, np.nan, 12.5],
+        ]
+    ).to_numpy()
+    return EHRData(X=X, obs=obs_31, var=var_31)
+
+
+@pytest.fixture
+def edata_basic_with_tem_full():
+    edata_basic_with_tem_dict = {
+        "X": np.ones((5, 4)),
+        "R": np.ones((5, 4, 2)),
+        "obs": pd.DataFrame({"survival": [1, 2, 3, 4, 5]}),
+        "var": pd.DataFrame({"variables": ["var_1", "var_2", "var_3", "var_4"]}),
+        "obsm": {"obs_level_representation": np.ones((5, 2))},
+        "varm": {"var_level_representation": np.ones((4, 2))},
+        "layers": {"other_layer": np.ones((5, 4))},
+        "obsp": {"obs_level_connectivities": np.ones((5, 5))},
+        "varp": {"var_level_connectivities": np.random.randn(4, 4)},
+        "uns": {"information": ["info1"]},
+        "tem": pd.DataFrame({"timestep": ["t1", "t2"]}),
+    }
+    return EHRData(**edata_basic_with_tem_dict)
 
 
 @pytest.fixture
@@ -110,3 +215,6 @@ def omop_connection_multiple_units():
     setup_connection(path="tests/data/toy_omop/multiple_units", backend_handle=con)
     yield con
     con.close()
+
+
+TEST_DATA_PATH = Path(__file__).parent / "data"
