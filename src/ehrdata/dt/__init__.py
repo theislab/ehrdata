@@ -1,3 +1,23 @@
-from .datasets import ehrdata_blobs, gibleed_omop, mimic_ii, mimic_iv_omop, physionet2012, synthea27nj_omop
+from .datasets import (
+    diabetes_130_fairlearn,
+    diabetes_130_raw,
+    ehrdata_blobs,
+    gibleed_omop,
+    mimic_2,
+    mimic_2_preprocessed,
+    mimic_iv_omop,
+    physionet2012,
+    synthea27nj_omop,
+)
 
-__all__ = ["ehrdata_blobs", "gibleed_omop", "mimic_ii", "mimic_iv_omop", "physionet2012", "synthea27nj_omop"]
+__all__ = [
+    "diabetes_130_fairlearn",
+    "diabetes_130_raw",
+    "ehrdata_blobs",
+    "gibleed_omop",
+    "mimic_2",
+    "mimic_2_preprocessed",
+    "mimic_iv_omop",
+    "physionet2012",
+    "synthea27nj_omop",
+]

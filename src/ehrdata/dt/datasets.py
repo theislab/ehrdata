@@ -8,12 +8,13 @@ import numpy as np
 import pandas as pd
 from lamin_utils import logger
 
-from ehrdata.dt.dataloader import download
+from ehrdata.dt.dataloader import _download
+from ehrdata.io import read_csv, read_h5ad
 from ehrdata.io.omop import setup_connection
 from ehrdata.io.omop._queries import _generate_timedeltas
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable
 
     from duckdb.duckdb import DuckDBPyConnection
 
@@ -22,6 +23,8 @@ if TYPE_CHECKING:
 
 from scipy.sparse import csr_matrix
 from sparse import COO
+
+DEFAULT_DATA_PATH = Path("ehrapy_data")
 
 
 def ehrdata_blobs(
@@ -237,7 +240,7 @@ def _setup_eunomia_datasets(
     dataset_prefix: str = "",
 ) -> None:
     """Loads the Eunomia datasets in the OMOP Common Data model."""
-    download(
+    _download(
         data_url,
         output_path=data_path,
     )
@@ -278,7 +281,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
     """
     data_url = "https://physionet.org/static/published-projects/mimic-iv-demo-omop/mimic-iv-demo-data-in-the-omop-common-data-model-0.9.zip"
     if data_path is None:
-        data_path = Path("ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9")
+        data_path = DEFAULT_DATA_PATH / "ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9"
 
     _setup_eunomia_datasets(
         data_url=data_url,
@@ -312,7 +315,7 @@ def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = No
     data_url = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/GiBleed/GiBleed_5.3.zip"
 
     if data_path is None:
-        data_path = Path("ehrapy_data/GiBleed_5.3")
+        data_path = DEFAULT_DATA_PATH / "GiBleed_5.3"
 
     _setup_eunomia_datasets(
         data_url=data_url,
@@ -336,7 +339,6 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
         Nothing. Adds the tables to the backend via the handle.
 
     Examples:
-        >>> import ehrapy as ep
         >>> import ehrdata as ed
         >>> import duckdb
         >>> con = duckdb.connect()
@@ -346,19 +348,13 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
     data_url = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip"
 
     if data_path is None:
-        data_path = Path("ehrapy_data/Synthea27Nj_5.4")
+        data_path = DEFAULT_DATA_PATH / "Synthea27Nj_5.4"
 
     _setup_eunomia_datasets(
         data_url=data_url,
         backend_handle=backend_handle,
         data_path=data_path,
     )
-
-
-def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-    """Loads the MIMIC2 dataset."""
-    # TODO: replace mimic_ii as is in ehrapy with its dict-of-table return time - map variables to OMOP?
-    raise NotImplementedError()
 
 
 def physionet2012(
@@ -368,7 +364,7 @@ def physionet2012(
     interval_length_unit: str = "h",
     num_intervals: int = 48,
     aggregation_strategy: str = "last",
-    drop_samples: Sequence[str] | None = [
+    drop_samples: Iterable[str] | None = [
         "147514",
         "142731",
         "145611",
@@ -406,18 +402,17 @@ def physionet2012(
        drop_samples: Samples to drop from the dataset (indicate their RecordID).
 
     Returns:
-        Returns a the processed physionet2012 dataset in an EHRData object.
+        The processed physionet2012 dataset.
         The raw data is also downloaded, stored and available under the ``data_path``.
 
     Examples:
-        >>> import ehrapy as ep
         >>> import ehrdata as ed
         >>> edata = ed.dt.physionet_2012()
     """
     from ehrdata import EHRData
 
     if data_path is None:
-        data_path = Path("ehrapy_data/physionet2012")
+        data_path = DEFAULT_DATA_PATH / "physionet2012"
 
     # alternative in future?
     # config_parser = tsdb.utils.config.read_configs()
@@ -430,20 +425,20 @@ def physionet2012(
     # # returns a dictionary
     # tsdb.data_processing.load_physionet2012(data_path)
 
-    outcome_file_names = ["Outcomes-a.txt", "Outcomes-b.txt", "Outcomes-c.txt"]
+    outcome_filenames = ["Outcomes-a.txt", "Outcomes-b.txt", "Outcomes-c.txt"]
     temp_data_set_names = ["set-a", "set-b", "set-c"]
 
-    for file_name in temp_data_set_names:
-        download(
-            url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}.tar.gz?download",
+    for filename in temp_data_set_names:
+        _download(
+            url=f"https://physionet.org/files/challenge-2012/1.0.0/{filename}.tar.gz?download",
             output_path=data_path,
-            output_file_name=f"{file_name}.tar.gz",
+            output_filename=f"{filename}.tar.gz",
             archive_format="tar.gz",
         )
 
-    for file_name in outcome_file_names:
-        download(
-            url=f"https://physionet.org/files/challenge-2012/1.0.0/{file_name}?download",
+    for filename in outcome_filenames:
+        _download(
+            url=f"https://physionet.org/files/challenge-2012/1.0.0/{filename}?download",
             output_path=data_path,
         )
 
@@ -472,8 +467,8 @@ def physionet2012(
     person_long_across_set_df = pd.concat(person_long_across_set_collector)
 
     person_outcome_collector = []
-    for outcome_file_name in outcome_file_names:
-        outcome_df = pd.read_csv(data_path / outcome_file_name)
+    for outcome_filename in outcome_filenames:
+        outcome_df = pd.read_csv(data_path / outcome_filename)
         person_outcome_collector.append(outcome_df)
 
     person_outcome_df = pd.concat(person_outcome_collector)
@@ -524,6 +519,132 @@ def physionet2012(
     return edata[~edata.obs.index.isin(drop_samples or [])]
 
 
-def physionet2019():
-    """Loads the dataset of the `PhysioNet challenge 2019 <https://physionet.org/content/challenge-2019/1.0.0/>_`."""
-    raise NotImplementedError()
+def mimic_2(
+    columns_obs_only: Iterable[str] | None = None,
+) -> EHRData:
+    """Loads the MIMIC-II dataset.
+
+    More details: https://physionet.org/content/mimic2-iaccd/1.0/
+
+    Args:
+        columns_obs_only: Columns to include only in obs and not X.
+
+    Returns:
+        Loaded MIMIC-II dataset.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ep.dt.mimic_2()
+    """
+    _download(
+        "https://www.physionet.org/files/mimic2-iaccd/1.0/full_cohort_data.csv?download",
+        output_path=DEFAULT_DATA_PATH,
+        output_filename="ehrapy_mimic2.csv",
+    )
+    edata = read_csv(
+        filename=f"{DEFAULT_DATA_PATH}/ehrapy_mimic2.csv",
+        columns_obs_only=columns_obs_only,
+    )
+
+    return edata
+
+
+def mimic_2_preprocessed() -> EHRData:
+    """Loads the preprocessed MIMIC-II dataset.
+
+    More details: https://physionet.org/content/mimic2-iaccd/1.0/
+
+    The dataset was preprocessed according to: https://github.com/theislab/ehrapy-datasets/tree/main/mimic_2
+
+    Returns:
+        Loaded preprocessed MIMIC-II dataset.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.mimic_2_preprocessed()
+    """
+    _download(
+        url="https://figshare.com/ndownloader/files/39727936",
+        output_path=DEFAULT_DATA_PATH,
+        output_filename="mimic_2_preprocessed.h5ad",
+        raw_format="h5ad",
+    )
+    edata = read_h5ad(
+        filename=f"{DEFAULT_DATA_PATH}/mimic_2_preprocessed.h5ad",
+    )
+
+    return edata
+
+
+def diabetes_130_raw(
+    columns_obs_only: Iterable[str] | None = None,
+) -> EHRData:
+    """Loads the raw diabetes-130 dataset.
+
+    More details: http://archive.ics.uci.edu/ml/datasets/Diabetes+130-US+hospitals+for+years+1999-2008 [1]
+
+    Args:
+        columns_obs_only: Columns to include in `obs` only and not `X`.
+
+    Returns:
+       Loaded Diabetes 130 dataset
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.diabetes_130_raw()
+
+    References:
+        [1] Beata Strack, Jonathan P. DeShazo, Chris Gennings, Juan L. Olmo, Sebastian Ventura, Krzysztof J. Cios, and John N. Clore, “Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records,” BioMed Research International, vol. 2014, Article ID 781670, 11 pages, 2014.
+    """
+    _download(
+        url="https://figshare.com/ndownloader/files/45110029",
+        output_path=DEFAULT_DATA_PATH,
+        output_filename="diabetes_130_raw.csv",
+        raw_format="csv",
+    )
+    adata = read_csv(
+        filename=f"{DEFAULT_DATA_PATH}/diabetes_130_raw.csv",
+        columns_obs_only=columns_obs_only,
+    )
+
+    return adata
+
+
+def diabetes_130_fairlearn(
+    columns_obs_only: Iterable[str] | None = None,
+) -> EHRData:
+    """Loads the preprocessed diabetes-130 dataset by fairlearn.
+
+    This loads the dataset from the `fairlearn.datasets.fetch_diabetes_hospital` function.
+
+    More details: http://archive.ics.uci.edu/ml/datasets/Diabetes+130-US+hospitals+for+years+1999-2008 [1]
+
+    Preprocessing: https://fairlearn.org/v0.10/api_reference/generated/fairlearn.datasets.fetch_diabetes_hospital.html#fairlearn.datasets.fetch_diabetes_hospital [2]
+
+    Args:
+        columns_obs_only: Columns to include in obs only and not X.
+
+    Returns:
+        Loaded diabetes-130 dataset processed by the fairlearn team.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.diabetes_130_fairlearn()
+
+    References:
+        [1] Beata Strack, Jonathan P. DeShazo, Chris Gennings, Juan L. Olmo, Sebastian Ventura, Krzysztof J. Cios, and John N. Clore, “Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records,” BioMed Research International, vol. 2014, Article ID 781670, 11 pages, 2014.
+
+        [2] Bird, S., Dudík, M., Edgar, R., Horn, B., Lutz, R., Milan, V., ... & Walker, K. (2020). Fairlearn: A toolkit for assessing and improving fairness in AI. Microsoft, Tech. Rep. MSR-TR-2020-32.
+    """
+    _download(
+        url="https://figshare.com/ndownloader/files/45110371",
+        output_path=DEFAULT_DATA_PATH,
+        output_filename="diabetes_130_fairlearn.csv",
+        raw_format="csv",
+    )
+    edata = read_csv(
+        filename=f"{DEFAULT_DATA_PATH}/diabetes_130_fairlearn.csv",
+        columns_obs_only=columns_obs_only,
+    )
+
+    return edata
