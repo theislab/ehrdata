@@ -16,11 +16,11 @@ from rich.progress import Progress
 
 COMPRESSION_FORMATS = Literal["tar.gz", "gztar", "zip", "tar", "gz", "bz", "xz"]
 COMPRESSION_FORMATS_LIST = list(get_args(COMPRESSION_FORMATS))
-RAW_FORMATS = Literal["csv", "txt", "parquet", "h5ad"]
+RAW_FORMATS = Literal["csv", "txt", "parquet", "h5ad", "zarr"]
 RAW_FORMATS_LIST = list(get_args(RAW_FORMATS))
 
 
-def download(
+def _download(
     url: str,
     output_filename: str | None = None,
     output_path: str | Path | None = None,

@@ -74,8 +74,8 @@ def infer_feature_types(
     layer: str | None = None,
     output: Literal["tree", "dataframe"] | None = "tree",
     verbose: bool = True,
-) -> None:
-    """Infer feature types from EHRData object.
+) -> pd.DataFrame | None:
+    """Infer feature types from an :class:`~ehrdata.EHRData` object.
 
     For each feature in edata.var_names, the method infers one of the following types: 'date', 'categorical', or 'numeric'.
     The inferred types are stored in edata.var['feature_type']. Please check the inferred types and adjust if necessary using
@@ -87,13 +87,13 @@ def infer_feature_types(
     Args:
         edata: Data object storing the EHR data.
         layer: The layer to use from the EHRData object. If None, the X layer is used.
-        output: The output format. Choose between 'tree', 'dataframe', or None. If 'tree', the feature types will be printed to the console in a tree format.
-            If 'dataframe', a pandas DataFrame with the feature types will be returned. If None, nothing will be returned.
+        output: The output format. Choose between `'tree'`, `'dataframe'`, or `None`. If `'tree'`, the feature types will be printed to the console in a tree format.
+            If `'dataframe'`, a :class:`~pandas.DataFrame` with the feature types will be returned. If `None`, nothing will be returned.
         verbose: Whether to print warnings for uncertain feature types.
 
     Examples:
         >>> import ehrapy as ep
-        >>> edata = ep.dt.mimic_2(encoded=False)
+        >>> edata = ep.dt.mimic_2()
         >>> ep.ad.infer_feature_types(edata)
     """
     feature_types = {}
@@ -134,7 +134,7 @@ def infer_feature_types(
     if output == "tree":
         feature_type_overview(edata)
     elif output == "dataframe":
-        return edata.var[FEATURE_TYPE_KEY]
+        return edata.var[FEATURE_TYPE_KEY].to_frame()
     elif output is not None:
         err_msg = f"Output format {output} not recognized. Choose between 'tree', 'dataframe', or None."
         raise ValueError(err_msg)
@@ -199,14 +199,14 @@ def _check_feature_types(func):
 
 @_check_feature_types
 def feature_type_overview(edata: EHRData) -> None:
-    """Print an overview of the feature types and encoding modes in the EHRData object.
+    """Print an overview of the feature types and encoding modes in the :class:`~ehrdata.EHRData` object.
 
     Args:
-        edata: The EHRData object storing the EHR data.
+        edata: The object storing the EHR data.
 
     Examples:
         >>> import ehrapy as ep
-        >>> edata = ep.dt.mimic_2(encoded=True)
+        >>> edata = ep.dt.mimic_2()
         >>> ep.ad.feature_type_overview(edata)
     """
     tree = Tree(
@@ -255,7 +255,7 @@ def replace_feature_types(
     Args:
         edata: Data object storing the EHR data.
         features: The features to correct.
-        corrected_type: The corrected feature type. One of 'date', 'categorical', or 'numeric'.
+        corrected_type: The corrected feature type. One of `'date'`, `'categorical'`, or `'numeric'`.
 
     Examples:
         >>> import ehrdata as ed
@@ -290,20 +290,20 @@ def harmonize_missing_values(
     missing_values: Iterable[str] | None = ["nan", "np.nan", "<NA>", "pd.NA"],
     copy: bool = False,
 ) -> EHRData | None:
-    """Harmonize missing values in the EHRData object.
+    """Harmonize missing values in the :class:`~ehrdata.EHRData` object.
 
     This function will replace strings that are considered to represent missing values with np.nan.
 
 
     Args:
-        edata: The EHRData object storing the EHR data.
-        layer: The layer to use from the EHRData object. If None, the X layer is used.
+        edata: The data object storing the EHR data.
+        layer: The layer to use from the :class:`~ehrdata.EHRData` object. If `None`, the `X` layer is used.
         missing_values: The strings that are considered to represent missing values and should be replaced with np.nan
-        copy: Whether to return a copy of the EHRData object with the missing values replaced.
+        copy: Whether to return a copy of the :class:`~ehrdata.EHRData` object with the missing values replaced.
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ed.dt.mimic_2(encoded=True)
+        >>> edata = ed.dt.mimic_2()
         >>> ed.ad.harmonize_missing_values(edata)
     """
     if copy:

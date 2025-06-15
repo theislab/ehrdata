@@ -8,13 +8,13 @@ import numpy as np
 import pandas as pd
 from lamin_utils import logger
 
-from ehrdata.dt.dataloader import download
+from ehrdata.dt.dataloader import _download
 from ehrdata.io import read_csv, read_h5ad
 from ehrdata.io.omop import setup_connection
 from ehrdata.io.omop._queries import _generate_timedeltas
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable
 
     from duckdb.duckdb import DuckDBPyConnection
 
@@ -240,7 +240,7 @@ def _setup_eunomia_datasets(
     dataset_prefix: str = "",
 ) -> None:
     """Loads the Eunomia datasets in the OMOP Common Data model."""
-    download(
+    _download(
         data_url,
         output_path=data_path,
     )
@@ -357,12 +357,6 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
     )
 
 
-def mimic_ii(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
-    """Loads the MIMIC2 dataset."""
-    # TODO: replace mimic_ii as is in ehrapy with its dict-of-table return time - map variables to OMOP?
-    raise NotImplementedError()
-
-
 def physionet2012(
     data_path: Path | None = None,
     *,
@@ -370,7 +364,7 @@ def physionet2012(
     interval_length_unit: str = "h",
     num_intervals: int = 48,
     aggregation_strategy: str = "last",
-    drop_samples: Sequence[str] | None = [
+    drop_samples: Iterable[str] | None = [
         "147514",
         "142731",
         "145611",
@@ -408,7 +402,7 @@ def physionet2012(
        drop_samples: Samples to drop from the dataset (indicate their RecordID).
 
     Returns:
-        Returns a the processed physionet2012 dataset in an EHRData object.
+        The processed physionet2012 dataset.
         The raw data is also downloaded, stored and available under the ``data_path``.
 
     Examples:
@@ -435,7 +429,7 @@ def physionet2012(
     temp_data_set_names = ["set-a", "set-b", "set-c"]
 
     for filename in temp_data_set_names:
-        download(
+        _download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{filename}.tar.gz?download",
             output_path=data_path,
             output_filename=f"{filename}.tar.gz",
@@ -443,7 +437,7 @@ def physionet2012(
         )
 
     for filename in outcome_filenames:
-        download(
+        _download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{filename}?download",
             output_path=data_path,
         )
@@ -525,13 +519,8 @@ def physionet2012(
     return edata[~edata.obs.index.isin(drop_samples or [])]
 
 
-def physionet2019():
-    """Loads the dataset of the `PhysioNet challenge 2019 <https://physionet.org/content/challenge-2019/1.0.0/>_`."""
-    raise NotImplementedError()
-
-
 def mimic_2(
-    columns_obs_only: list[str] | None = None,
+    columns_obs_only: Iterable[str] | None = None,
 ) -> EHRData:
     """Loads the MIMIC-II dataset.
 
@@ -541,13 +530,13 @@ def mimic_2(
         columns_obs_only: Columns to include only in obs and not X.
 
     Returns:
-        Loaded MIMIC-II dataset
+        Loaded MIMIC-II dataset.
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ep.dt.mimic_2(encoded=True)
+        >>> edata = ep.dt.mimic_2()
     """
-    download(
+    _download(
         "https://www.physionet.org/files/mimic2-iaccd/1.0/full_cohort_data.csv?download",
         output_path=DEFAULT_DATA_PATH,
         output_filename="ehrapy_mimic2.csv",
@@ -568,13 +557,13 @@ def mimic_2_preprocessed() -> EHRData:
     The dataset was preprocessed according to: https://github.com/theislab/ehrapy-datasets/tree/main/mimic_2
 
     Returns:
-        Loaded preprocessed MIMIC-II dataset
+        Loaded preprocessed MIMIC-II dataset.
 
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_2_preprocessed()
     """
-    download(
+    _download(
         url="https://figshare.com/ndownloader/files/39727936",
         output_path=DEFAULT_DATA_PATH,
         output_filename="mimic_2_preprocessed.h5ad",
@@ -588,16 +577,14 @@ def mimic_2_preprocessed() -> EHRData:
 
 
 def diabetes_130_raw(
-    columns_obs_only: list[str] | None = None,
+    columns_obs_only: Iterable[str] | None = None,
 ) -> EHRData:
     """Loads the raw diabetes-130 dataset.
 
     More details: http://archive.ics.uci.edu/ml/datasets/Diabetes+130-US+hospitals+for+years+1999-2008 [1]
 
-    Preprocessing: None except for the data preparation outlined on the link above.
-
     Args:
-        columns_obs_only: Columns to include in obs only and not X.
+        columns_obs_only: Columns to include in `obs` only and not `X`.
 
     Returns:
        Loaded Diabetes 130 dataset
@@ -609,7 +596,7 @@ def diabetes_130_raw(
     References:
         [1] Beata Strack, Jonathan P. DeShazo, Chris Gennings, Juan L. Olmo, Sebastian Ventura, Krzysztof J. Cios, and John N. Clore, “Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records,” BioMed Research International, vol. 2014, Article ID 781670, 11 pages, 2014.
     """
-    download(
+    _download(
         url="https://figshare.com/ndownloader/files/45110029",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_raw.csv",
@@ -624,7 +611,7 @@ def diabetes_130_raw(
 
 
 def diabetes_130_fairlearn(
-    columns_obs_only: list[str] | None = None,
+    columns_obs_only: Iterable[str] | None = None,
 ) -> EHRData:
     """Loads the preprocessed diabetes-130 dataset by fairlearn.
 
@@ -649,7 +636,7 @@ def diabetes_130_fairlearn(
 
         [2] Bird, S., Dudík, M., Edgar, R., Horn, B., Lutz, R., Milan, V., ... & Walker, K. (2020). Fairlearn: A toolkit for assessing and improving fairness in AI. Microsoft, Tech. Rep. MSR-TR-2020-32.
     """
-    download(
+    _download(
         url="https://figshare.com/ndownloader/files/45110371",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_fairlearn.csv",

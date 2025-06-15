@@ -27,15 +27,15 @@ class EHRDataset(torch.utils.data.Dataset):
         datetime: bool = True,
         idxs: Sequence[int] | None = None,
     ) -> None:
-        """:class:`~torch.utils.data.Dataset` for EHRData.
+        """:class:`~torch.utils.data.Dataset` for a :class:`~ehrdata.EHRData` object.
 
-        This function builds a :class:`~torch.utils.data.Dataset` for EHRData. The EHRData is assumed to be in the OMOP CDM format.
-        It is a Dataset structure for the tensor in ehrdata.r, in a suitable format for :class:`~pytorch.utils.data.DataLoader`.
+        This function builds a :class:`~torch.utils.data.Dataset` for a :class:`~ehrdata.EHRData` object. The :class:`~ehrdata.EHRData` object is assumed to be in the OMOP CDM format.
+        It is a Dataset structure for the tensor in ehrdata.R, in a suitable format for :class:`~pytorch.utils.data.DataLoader`.
         This allows to stream the data in batches from the RDBMS, not requiring to load the entire dataset in memory.
 
         Args:
             con: The connection to the database.
-            edata: The EHRData object.
+            edata: The data object.
             data_tables: The OMOP data tables to extract.
             target: The target variable to be used.
             datetime: If True, use datetime, if False, use date.
@@ -43,7 +43,7 @@ class EHRDataset(torch.utils.data.Dataset):
                 subset of the data, for e.g. train-test splits.
 
         Returns:
-            A :class:`torch.utils.data.Dataset` object of the .r tensor in EhrData.
+            A :class:`torch.utils.data.Dataset` object of the :class:`~ehrdata.EHRData` object.
         """
         super().__init__()
         self.con = con

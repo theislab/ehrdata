@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import pandas as pd
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from pathlib import Path
 
     from ehrdata import EHRData
@@ -15,20 +16,20 @@ def read_csv(
     *,
     sep: str = ",",
     index_column: str | None = None,
-    columns_obs_only: list[str] | None = None,
+    columns_obs_only: Iterable[str] | None = None,
     **kwargs,
 ) -> EHRData:
     """Reads a csv file.
 
     This function reads a csv file, and creates an :class:`ehrdata.EHRData` object.
-    It first reads the csv file using :func:`pandas.read_csv`, and then passes the resulting DataFrame to :func:`ehrdata.tl.from_pandas`.
+    It first reads the csv file using :func:`pandas.read_csv`, and then passes the resulting :class:`~pandas.DataFrame` to :func:`ehrdata.tl.from_pandas`.
 
     Args:
         filename: Path to the file or directory to read.
-        sep: Separator in the file. Delegates to pandas.read_csv().
-        index_column: If specified, this column of the csv file will be used for the `.obs` DataFrame.
-        columns_obs_only: These columns will be added to the `.obs` DataFrame only.
-        **kwargs: Passed to :func:`pandas.read_csv`
+        sep: Separator in the file. Delegates to :func:`pandas.read_csv`.
+        index_column: If specified, this column of the csv file will be used for the `.obs` dataframe.
+        columns_obs_only: These columns will be added to the `.obs` dataframe only.
+        **kwargs: Passed to :func:`pandas.read_csv`.
 
     Returns:
         The dataset in the form of an :class:`ehrdata.EHRData` object.

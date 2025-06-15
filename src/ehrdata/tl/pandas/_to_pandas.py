@@ -19,23 +19,76 @@ def to_pandas(
     var_col: str | None = None,
     format: Literal["wide", "long"] = "wide",
 ) -> pd.DataFrame:
-    """Transform an EHRData object to a Pandas DataFrame.
+    """Transform an :class:`~ehrdata.EHRData` object to a :class:`~pandas.DataFrame`.
 
     Args:
-        edata: The EHRData object to be transformed into a pandas DataFrame
+        edata: The object to be transformed into a dataframe.
         layer: The layer to access the values of. If not specified, it uses the `X` matrix.
-        obs_cols: The columns of `obs` to add to the DataFrame.
-        var_col: The column of `var` to create the column names from in the created DataFrame. If not specified, the `var_names` will be used.
-        format: The format of the output DataFrame. This is relevant for longitudinal data. If "wide", the output dataframe will write a column for each (variable, time) tuple, naming the colun as <variable_name>_t_<tem.index value>. If "long", the output dataframe will be in long format, with columns "observation_id", "variable", "time", and "value".
+        obs_cols: The columns of `obs` to add to the dataframe.
+        var_col: The column of `var` to create the column names from in the created dataframe. If not specified, the `var_names` will be used.
+        format: The format of the output dataframe. This is relevant for longitudinal data. If "wide", the output dataframe will write a column for each (variable, time) tuple, naming the colun as <variable_name>_t_<tem.index value>. If "long", the output dataframe will be in long format, with columns "observation_id", "variable", "time", and "value".
 
     Returns:
-        The data object as a pandas DataFrame.
+        The data object as a :class:`~pandas.DataFrame`.
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ed.dt.mimic_2()
-        >>> df = ep.tl.to_pandas(edata)
+        >>> edata = ed.dt.ehrdata_blobs(n_observations=2, n_variables=2, base_timepoints=3)
+        >>> edata
+
+        >>> EHRData object with n_obs × n_vars × n_t = 2 × 2 × 3
+        >>> obs: "cluster"
+        >>> tem: '0', '1', '2'
+        >>> shape of .X: (2, 2)
+        >>> shape of .R: (2, 2, 3)
+
+        >>> df_wide = ed.tl.to_pandas(edata, format="wide")
+        >>> df_wide
+
+        +-----+----------------+----------------+----------------+----------------+----------------+----------------+
+        |     | feature_0_t_0  | feature_0_t_1  | feature_0_t_2  | feature_1_t_0  | feature_1_t_1  | feature_1_t_2  |
+        +=====+================+================+================+================+================+================+
+        |  0  |    3.060372    |    3.827524    |    4.680650    |   -1.697623    |   -1.816282    |   -2.775774    |
+        +-----+----------------+----------------+----------------+----------------+----------------+----------------+
+        |  1  |   -3.395852    |   -4.948999    |   -5.401154    |   -7.347151    |   -9.427101    |  -11.793235    |
+        +-----+----------------+----------------+----------------+----------------+----------------+----------------+
+
+        >>> df_long = ed.tl.to_pandas(edata, format="long")
+        >>> df_long
+
+        +--------------------+------------------+------+-------------+
+        | observation_id     | variable         | time | value       |
+        +====================+==================+======+=============+
+        | 0                  | feature_0        | 0    | 3.060372    |
+        +--------------------+------------------+------+-------------+
+        | 0                  | feature_0        | 1    | 3.827524    |
+        +--------------------+------------------+------+-------------+
+        | 0                  | feature_0        | 2    | 4.680650    |
+        +--------------------+------------------+------+-------------+
+        | 0                  | feature_1        | 0    | -1.697623   |
+        +--------------------+------------------+------+-------------+
+        | 0                  | feature_1        | 1    | -1.816282   |
+        +--------------------+------------------+------+-------------+
+        | 0                  | feature_1        | 2    | -2.775774   |
+        +--------------------+------------------+------+-------------+
+        | 1                  | feature_0        | 0    | -3.395852   |
+        +--------------------+------------------+------+-------------+
+        | 1                  | feature_0        | 1    | -4.948999   |
+        +--------------------+------------------+------+-------------+
+        | 1                  | feature_0        | 2    | -5.401154   |
+        +--------------------+------------------+------+-------------+
+        | 1                  | feature_1        | 0    | -7.347151   |
+        +--------------------+------------------+------+-------------+
+        | 1                  | feature_1        | 1    | -9.427101   |
+        +--------------------+------------------+------+-------------+
+        | 1                  | feature_1        | 2    | -11.793235  |
+        +--------------------+------------------+------+-------------+
     """
+    if layer is not None:
+        if layer == "X":
+            layer = None
+        if layer == "R":
+            layer = "R_layer"
     X = edata.layers[layer] if layer is not None else edata.X
 
     if var_col is not None and var_col not in edata.var.columns:

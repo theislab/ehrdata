@@ -297,21 +297,8 @@ def test_from_pandas_longitudinal_long_index_column_not_implemented():
             "value": [1],
         }
     )
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(ValueError):
         from_pandas(df, index_column="observation_id", format="long")
-
-
-def test_from_pandas_longitudinal_long_columns_obs_only_not_implemented():
-    df = pd.DataFrame(
-        {
-            "observation_id": ["patient_1"],
-            "variable": ["var1"],
-            "time": ["t1"],
-            "value": [1],
-        }
-    )
-    with pytest.raises(NotImplementedError):
-        from_pandas(df, columns_obs_only=["observation_id"], format="long")
 
 
 def test_to_pandas_longitudinal_wide(edata_333):

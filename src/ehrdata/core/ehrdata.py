@@ -29,7 +29,7 @@ class EHRData(AnnData):
        :align: right
        :class: dark-light
 
-    Extends :class:`~anndata.AnnData` to further support regular and irregular time-series data.
+    Extends  to further support regular and irregular time-series data.
 
     Args:
         X: A #observations × #variables data array. A view of the data is used if the
