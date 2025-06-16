@@ -44,7 +44,7 @@ def test_synthea27nj_omop():
 def test_physionet2012():
     edata = ed.dt.physionet2012()
     assert edata.shape == (11988, 37, 48)
-
+    assert edata.tem.shape == (48, 1)
     assert edata.R.shape == (11988, 37, 48)
     assert edata.obs.shape == (11988, 10)
     assert edata.var.shape == (37, 1)
