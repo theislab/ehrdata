@@ -59,6 +59,13 @@ jobs:
           PLATFORM: ${{ matrix.os }}
           DISPLAY: :42
         run: uvx hatch test --cover --python ${{ matrix.python }}
+
+      - name: Show coverage files before coverage run
+        run: ls -lah
+      - name: Generate XML coverage report
+        run: coverage xml
+      - name: Show coverage files after coverage run
+        run: ls -lah
       - name: Upload coverage
         uses: codecov/codecov-action@v5
       - name: List contents of dataset cache
