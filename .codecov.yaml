@@ -11,7 +11,4 @@ coverage:
     patch: false
     changes: false
 
-comment:
-  layout: diff, flags, files
-  behavior: once
-  require_base: no
+comment: true
