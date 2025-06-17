@@ -60,6 +60,6 @@ jobs:
           DISPLAY: :42
         run: uvx hatch test --cover --python ${{ matrix.python }}
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
       - name: List contents of dataset cache
         run: ls -lh ./ehrapy_data
