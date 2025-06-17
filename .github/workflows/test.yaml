@@ -60,6 +60,7 @@ jobs:
           DISPLAY: :42
         run: uvx hatch test --cov=ehrdata --cov-report=xml --python ${{ matrix.python }}
       - name: Upload coverage
+        if: matrix.python == '3.11'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
