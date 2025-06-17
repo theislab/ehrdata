@@ -69,6 +69,7 @@ optional-dependencies.test = [
   "coverage",
   "ehrdata[torch,vitessce,lamin]",
   "pytest",
+  "pytest-cov",
 ]
 optional-dependencies.torch = [
   "torch",
