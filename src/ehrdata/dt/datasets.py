@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from lamin_utils import logger
 
-from ehrdata.dt.dataloader import _download
+from ehrdata.dt._dataloader import _download
 from ehrdata.io import read_csv, read_h5ad
 from ehrdata.io.omop import setup_connection
 from ehrdata.io.omop._queries import _generate_timedeltas
