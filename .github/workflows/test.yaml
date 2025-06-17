@@ -58,7 +58,7 @@ jobs:
           MPLBACKEND: agg
           PLATFORM: ${{ matrix.os }}
           DISPLAY: :42
-        run: uvx hatch test --cover --cov-report=xml --python ${{ matrix.python }}
+        run: uvx hatch test --cov=ehrdata --cov-report=xml --python ${{ matrix.python }}
 
       - name: Show coverage files
         run: ls -lah
