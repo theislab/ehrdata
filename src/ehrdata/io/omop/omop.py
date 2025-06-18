@@ -285,7 +285,7 @@ def setup_variables(
 
     Args:
         backend_handle: The backend handle to the database.
-        edata: The EHRData object to which the variables should be added.
+        edata: Data object to which the variables should be added.
         data_tables: The tables to be used.
         data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
             'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
@@ -502,7 +502,7 @@ def setup_interval_variables(
 
     Args:
        backend_handle: The backend handle to the database.
-       edata: The EHRData object to which the variables should be added.
+       edata: Data object to which the variables should be added.
        data_tables: The tables to be used.
        data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
            'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'

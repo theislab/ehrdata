@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 def to_pandas(
     edata: EHRData,
+    *,
     layer: str | None = None,
     obs_cols: Iterable[str] | str | None = None,
     var_col: str | None = None,
@@ -22,14 +23,11 @@ def to_pandas(
     """Transform an :class:`~ehrdata.EHRData` object to a :class:`~pandas.DataFrame`.
 
     Args:
-        edata: The object to be transformed into a dataframe.
+        edata: Data object.
         layer: The layer to access the values of. If not specified, it uses the `X` matrix.
         obs_cols: The columns of `obs` to add to the dataframe.
         var_col: The column of `var` to create the column names from in the created dataframe. If not specified, the `var_names` will be used.
         format: The format of the output dataframe. This is relevant for longitudinal data. If "wide", the output dataframe will write a column for each (variable, time) tuple, naming the colun as <variable_name>_t_<tem.index value>. If "long", the output dataframe will be in long format, with columns "observation_id", "variable", "time", and "value".
-
-    Returns:
-        The data object as a :class:`~pandas.DataFrame`.
 
     Examples:
         >>> import ehrdata as ed

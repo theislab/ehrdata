@@ -524,13 +524,14 @@ def mimic_2(
 ) -> EHRData:
     """Loads the MIMIC-II dataset.
 
-    More details: https://physionet.org/content/mimic2-iaccd/1.0/
+    This dataset was created for the purpose of a case study in the book: `Secondary Analysis of Electronic Health Records <https://link.springer.com/book/10.1007/978-3-319-43742-2>`_.
+    In particular, the dataset was used to investigate the effectiveness of indwelling arterial catheters in hemodynamically stable patients with respiratory failure for mortality outcomes.
+    The dataset is derived from MIMIC-II, the publicly-accessible critical care database. It contains summary clinical data and  outcomes for 1,776 patients.
+    More details: https://physionet.org/content/mimic2-iaccd/1.0/.
 
     Args:
         columns_obs_only: Columns to include only in obs and not X.
 
-    Returns:
-        Loaded MIMIC-II dataset.
 
     Examples:
         >>> import ehrdata as ed
@@ -552,12 +553,15 @@ def mimic_2(
 def mimic_2_preprocessed() -> EHRData:
     """Loads the preprocessed MIMIC-II dataset.
 
-    More details: https://physionet.org/content/mimic2-iaccd/1.0/
+    This dataset is a preprocessed verion of :func:`~ehrdata.dt.mimic_2`.
+    The dataset was preprocessed according to: https://github.com/theislab/ehrapy-datasets/tree/main/mimic_2.
 
-    The dataset was preprocessed according to: https://github.com/theislab/ehrapy-datasets/tree/main/mimic_2
+    This dataset was created for the purpose of a case study in the book: `Secondary Analysis of Electronic Health Records <https://link.springer.com/book/10.1007/978-3-319-43742-2>`_.
+    In particular, the dataset was used to investigate the effectiveness of indwelling arterial catheters in hemodynamically stable patients with respiratory failure for mortality outcomes.
+    The dataset is derived from MIMIC-II, the publicly-accessible critical care database. It contains summary clinical data and  outcomes for 1,776 patients.
 
-    Returns:
-        Loaded preprocessed MIMIC-II dataset.
+    More details on the original dataset: https://physionet.org/content/mimic2-iaccd/1.0/.
+
 
     Examples:
         >>> import ehrdata as ed
@@ -585,9 +589,6 @@ def diabetes_130_raw(
 
     Args:
         columns_obs_only: Columns to include in `obs` only and not `X`.
-
-    Returns:
-       Loaded Diabetes 130 dataset
 
     Examples:
         >>> import ehrdata as ed
@@ -624,8 +625,6 @@ def diabetes_130_fairlearn(
     Args:
         columns_obs_only: Columns to include in obs only and not X.
 
-    Returns:
-        Loaded diabetes-130 dataset processed by the fairlearn team.
 
     Examples:
         >>> import ehrdata as ed

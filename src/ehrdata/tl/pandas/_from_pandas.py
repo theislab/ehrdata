@@ -14,6 +14,7 @@ PANDAS_FORMATS = ["flat", "wide", "long"]
 
 def from_pandas(
     df: pd.DataFrame,
+    *,
     columns_obs_only: Iterable[str] | None = None,
     index_column: str | int | None = None,
     format: Literal["flat", "wide", "long"] = "flat",
@@ -28,14 +29,11 @@ def from_pandas(
 
     Args:
         df: The dataframe to be transformed.
-        columns_obs_only: An optional list of column names that should belong to obs only and not X.
+        columns_obs_only: Column names that should belong to obs only and not X.
         index_column: The index column of obs. This can be either a column name (or its numerical index in the DataFrame) or the index of the dataframe.
         format: The format of the input dataframe. If the data is not longitudinal, choose `format="flat"`. If the data is longitudinal in the long format, choose `format="long"`. If the data is longitudinal in a wide format, choose `format="wide"`.
         wide_format_time_suffix: Use only if `format="wide"`. Suffices in the variable columns that indicate the time of the observation. The collected suffices will be sorted lexicographically, and the variables ordered accordingly along the 3rd axis of the :class:`~ehrdata.EHRData` object.
         long_format_keys: Use only if `format="long"`. The keys of the dataframe in the long format. The dictionary should have the following structure: {"observation_column": "<the column name of the observation ids>", "variable_column": "<the column name of the variable ids>", "time_column": "<the column name of the time>", "value_column": "<the column name of the values>"}.
-
-    Returns:
-        The :class:`~ehrdata.EHRData` object created from the given :class:`~pandas.DataFrame`.
 
     Examples:
         >>> import ehrdata as ed
@@ -97,8 +95,6 @@ def from_pandas(
     """
     from ehrdata import EHRData
 
-    df = df.copy()
-
     if format not in PANDAS_FORMATS:
         err_msg = f"Format {format} is not supported. Please choose from {PANDAS_FORMATS}."
         raise ValueError(err_msg)
@@ -138,7 +134,7 @@ def from_pandas(
                 index_column = df.columns[index_column]
             if not df.index.name or df.index.name != index_column:
                 if index_column in df.columns:
-                    df.set_index(index_column, inplace=True)
+                    df = df.set_index(index_column)
                 else:
                     err_msg = f"Column {index_column} not found in DataFrame."
                     raise ValueError(err_msg)
@@ -153,7 +149,7 @@ def from_pandas(
                 err_msg = f"Columns {missing_cols} specified in columns_obs_only are not in the DataFrame."
                 raise ValueError(err_msg)
             obs = df.loc[:, columns_obs_only].copy()
-            df.drop(columns=columns_obs_only, inplace=True, errors="ignore")
+            df = df.drop(columns=columns_obs_only, errors="ignore")
         else:
             obs = pd.DataFrame(index=df.index)
 
@@ -163,9 +159,8 @@ def from_pandas(
             elif obs[col].dtype == "object":
                 obs[col] = obs[col].astype("category")
 
-    # Prepare the AnnData object
     if format == "flat":
-        X = df.to_numpy(copy=True)
+        X = df.to_numpy()
         obs.index = obs.index.astype(str)
         var = pd.DataFrame(index=df.columns)
         var.index = var.index.astype(str)
@@ -193,9 +188,7 @@ def from_pandas(
         for i, timepoint in enumerate(unique_timepoints):
             for j, variable in enumerate(unique_variables):
                 if variable + wide_format_time_suffix + timepoint in df.columns:
-                    R[:, j, i] = (
-                        df.loc[:, (variables == variable) & (timepoints == timepoint)].to_numpy(copy=True).flatten()
-                    )
+                    R[:, j, i] = df.loc[:, (variables == variable) & (timepoints == timepoint)].to_numpy().flatten()
 
         obs.index = obs.index.astype(str)
         var = pd.DataFrame(index=unique_variables)

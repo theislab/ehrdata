@@ -35,7 +35,7 @@ class EHRDataset(torch.utils.data.Dataset):
 
         Args:
             con: The connection to the database.
-            edata: The data object.
+            edata: Data object.
             data_tables: The OMOP data tables to extract.
             target: The target variable to be used.
             datetime: If True, use datetime, if False, use date.

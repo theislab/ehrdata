@@ -85,7 +85,7 @@ def infer_feature_types(
     recommended to check the inferred types.
 
     Args:
-        edata: Data object storing the EHR data.
+        edata: Data object.
         layer: The layer to use from the EHRData object. If None, the X layer is used.
         output: The output format. Choose between `'tree'`, `'dataframe'`, or `None`. If `'tree'`, the feature types will be printed to the console in a tree format.
             If `'dataframe'`, a :class:`~pandas.DataFrame` with the feature types will be returned. If `None`, nothing will be returned.
@@ -202,7 +202,7 @@ def feature_type_overview(edata: EHRData) -> None:
     """Print an overview of the feature types and encoding modes in the :class:`~ehrdata.EHRData` object.
 
     Args:
-        edata: The object storing the EHR data.
+        edata: Data object.
 
     Examples:
         >>> import ehrapy as ep
@@ -253,7 +253,7 @@ def replace_feature_types(
     """Correct the feature types for a list of features inplace.
 
     Args:
-        edata: Data object storing the EHR data.
+        edata: Data object.
         features: The features to correct.
         corrected_type: The corrected feature type. One of `'date'`, `'categorical'`, or `'numeric'`.
 
@@ -296,7 +296,7 @@ def harmonize_missing_values(
 
 
     Args:
-        edata: The data object storing the EHR data.
+        edata: Data object.
         layer: The layer to use from the :class:`~ehrdata.EHRData` object. If `None`, the `X` layer is used.
         missing_values: The strings that are considered to represent missing values and should be replaced with np.nan
         copy: Whether to return a copy of the :class:`~ehrdata.EHRData` object with the missing values replaced.
