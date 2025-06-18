@@ -1,12 +1,10 @@
-from pathlib import Path
-
 import pandas as pd
 import pytest
-from tests.conftest import TEST_DATA_PATH
+from tests.conftest import TEST_DATA_PATH, _assert_shape_matches
 
 from ehrdata.io import read_csv
 
-_TEST_PATH = f"{TEST_DATA_PATH}/toy_csv/"
+TEST_PATH = TEST_DATA_PATH / "toy_csv"
 
 
 @pytest.mark.parametrize(
@@ -18,10 +16,10 @@ _TEST_PATH = f"{TEST_DATA_PATH}/toy_csv/"
     ],
 )
 def test_read_csv(filename, target_shape):
-    edata = read_csv(Path(_TEST_PATH) / filename)
+    edata = read_csv(TEST_PATH / filename)
 
-    assert edata.shape == (target_shape[0], target_shape[1], 0)
-    assert edata.X.shape == (target_shape[0], target_shape[1])
+    _assert_shape_matches(edata, (target_shape[0], target_shape[1], 0), check_R_None=True)
+
     assert edata.obs.shape == (target_shape[0], 0)
     assert edata.var.shape == (target_shape[1], 0)
     assert edata.tem.shape == (0, 0)
@@ -40,10 +38,9 @@ def test_read_csv(filename, target_shape):
 )
 @pytest.mark.parametrize("index_column", ["patient_id", 0])
 def test_read_csv_index_column(filename, target_shape, index_column):
-    edata = read_csv(Path(_TEST_PATH) / filename, index_column=index_column)
+    edata = read_csv(TEST_PATH / filename, index_column=index_column)
 
-    assert edata.shape == (target_shape[0], target_shape[1] - 1, 0)
-    assert edata.X.shape == (target_shape[0], target_shape[1] - 1)
+    _assert_shape_matches(edata, (target_shape[0], target_shape[1] - 1, 0), check_R_None=True)
     assert edata.obs.shape == (target_shape[0], 0)
     assert edata.var.shape == (target_shape[1] - 1, 0)
     assert edata.tem.shape == (0, 0)
@@ -60,10 +57,9 @@ def test_read_csv_index_column(filename, target_shape, index_column):
     ],
 )
 def test_read_csv_columns_obs_only(filename, target_shape):
-    edata = read_csv(Path(_TEST_PATH) / filename, columns_obs_only=["patient_id"])
+    edata = read_csv(TEST_PATH / filename, columns_obs_only=["patient_id"])
 
-    assert edata.shape == (target_shape[0], target_shape[1] - 1, 0)
-    assert edata.X.shape == (target_shape[0], target_shape[1] - 1)
+    _assert_shape_matches(edata, (target_shape[0], target_shape[1] - 1, 0), check_R_None=True)
     assert edata.obs.shape == (target_shape[0], 1)
     assert edata.var.shape == (target_shape[1] - 1, 0)
     assert edata.tem.shape == (0, 0)

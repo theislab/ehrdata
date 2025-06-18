@@ -9,7 +9,40 @@ import pytest
 import sparse as sp
 
 from ehrdata import EHRData
+from ehrdata.core.constants import R_LAYER_KEY
 from ehrdata.io.omop import setup_connection
+
+
+def _assert_shape_matches(
+    edata: EHRData, shape: tuple[int, int, int], *, check_X_None: bool = False, check_R_None: bool = False
+):
+    assert edata.shape == shape
+
+    if check_X_None:
+        assert edata.X is None
+    else:
+        assert edata.X.shape == shape[0:2]
+
+    if check_R_None:
+        assert edata.R is None
+    else:
+        assert edata.R.shape == shape
+
+    assert isinstance(edata.obs, pd.DataFrame)
+    assert len(edata.obs) == shape[0]
+    assert edata.n_obs == shape[0]
+
+    assert isinstance(edata.var, pd.DataFrame)
+    assert len(edata.var) == shape[1]
+    assert edata.n_vars == shape[1]
+
+    assert isinstance(edata.tem, pd.DataFrame)
+    assert len(edata.tem) == shape[2]
+    assert edata.n_t == shape[2]
+
+    for key in edata.layers:
+        if key != R_LAYER_KEY:
+            assert edata.layers[key].shape == shape[0:2]
 
 
 def _assert_dtype_object_array_with_missing_values_equal(a: np.ndarray, b: np.ndarray):
@@ -215,6 +248,23 @@ def omop_connection_multiple_units():
     setup_connection(path="tests/data/toy_omop/multiple_units", backend_handle=con)
     yield con
     con.close()
+
+
+def _assert_io_read(edata: EHRData):
+    """Assert the test zarr and h5ad files are read correctly."""
+    assert "survival" in edata.obs.columns
+    assert all(edata.obs["survival"].values == [1, 2, 3, 4, 5])
+    assert "variables" in edata.var.columns
+    assert all(edata.var["variables"].values == ["var_1", "var_2", "var_3", "var_4"])
+    assert "obs_level_representation" in edata.obsm
+    assert edata.obsm["obs_level_representation"].shape == (5, 2)
+    assert "var_level_representation" in edata.varm
+    assert edata.varm["var_level_representation"].shape == (4, 2)
+    # shapes are enforced by AnnData/EHRData for the below, no need to test
+    assert "other_layer" in edata.layers
+    assert "obs_level_connectivities" in edata.obsp
+    assert "var_level_connectivities" in edata.varp
+    assert "information" in edata.uns
 
 
 TEST_DATA_PATH = Path(__file__).parent / "data"

@@ -311,7 +311,8 @@ def harmonize_missing_values(
     X = edata.X if layer is None else edata.layers[layer]
 
     if issparse(X):
-        logger.warning("This operation will densify the sparse field data. This might take a while.")
+        logger.warning("This operation does not affect sparse fields, since they are already numeric.")
+        return edata if copy else None
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
     df.replace(missing_values, np.nan, inplace=True)

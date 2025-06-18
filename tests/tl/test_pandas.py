@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from tests.conftest import _assert_shape_matches
 
 from ehrdata import EHRData
 from ehrdata.tl import from_pandas, to_pandas
@@ -11,8 +12,7 @@ def test_from_pandas_basic(df, request):
     df = request.getfixturevalue(df)
     edata = from_pandas(df)
 
-    assert edata.shape == (df.shape[0], df.shape[1], 0)
-    assert edata.X.shape == (df.shape[0], df.shape[1])
+    _assert_shape_matches(edata, (df.shape[0], df.shape[1], 0), check_R_None=True)
     assert edata.obs.shape == (df.shape[0], 0)
     assert edata.var.shape == (df.shape[1], 0)
     assert edata.tem.shape == (0, 0)
@@ -29,9 +29,8 @@ def test_from_pandas_basic(df, request):
 def test_from_pandas_basic_index(df, index_column, request):
     df = request.getfixturevalue(df)
     edata = from_pandas(df, index_column=index_column)
+    _assert_shape_matches(edata, (df.shape[0], df.shape[1] - 1, 0), check_R_None=True)
 
-    assert edata.shape == (df.shape[0], df.shape[1] - 1, 0)
-    assert edata.X.shape == (df.shape[0], df.shape[1] - 1)
     assert edata.obs.shape == (df.shape[0], 0)
     assert edata.var.shape == (df.shape[1] - 1, 0)
     assert edata.tem.shape == (0, 0)
@@ -60,8 +59,7 @@ def test_from_pandas_basic_index_invalid_index_throws_error(csv_basic):
 def test_from_pandas_basic_column_obs_only(df, request):
     df = request.getfixturevalue(df)
     edata = from_pandas(df, columns_obs_only=["patient_id"])
-    assert edata.shape == (df.shape[0], df.shape[1] - 1, 0)
-    assert edata.X.shape == (df.shape[0], df.shape[1] - 1)
+    _assert_shape_matches(edata, (df.shape[0], df.shape[1] - 1, 0), check_R_None=True)
     assert edata.obs.shape == (df.shape[0], 1)
     assert edata.var.shape == (df.shape[1] - 1, 0)
     assert edata.tem.shape == (0, 0)
@@ -146,9 +144,8 @@ def test_from_pandas_longitudinal_wide():
         index=["patient_1", "patient_2", "patient_3"],
     )
     edata = from_pandas(df, format="wide")
-    assert edata.shape == (3, 2, 2)
-    assert edata.R.shape == (3, 2, 2)
-    assert edata.X.shape == (3, 2)
+    _assert_shape_matches(edata, (3, 2, 2))
+
     assert edata.obs.shape == (3, 0)
     assert edata.var.shape == (2, 0)
     assert edata.tem.shape == (2, 0)
@@ -179,9 +176,8 @@ def test_from_pandas_longitudinal_wide_missing_timestep():
         index=["patient_1", "patient_2", "patient_3"],
     )
     edata = from_pandas(df, format="wide", columns_obs_only=["obs_column"])
-    assert edata.shape == (3, 2, 2)
-    assert edata.R.shape == (3, 2, 2)
-    assert edata.X.shape == (3, 2)
+    _assert_shape_matches(edata, (3, 2, 2))
+
     assert edata.obs.shape == (3, 1)
     assert edata.var.shape == (2, 0)
     assert edata.tem.shape == (2, 0)
@@ -216,9 +212,8 @@ def test_from_pandas_longitudinal_wide_column_obs_only():
         index=["patient_1", "patient_2", "patient_3"],
     )
     edata = from_pandas(df, format="wide", columns_obs_only=["obs_column"])
-    assert edata.shape == (3, 2, 2)
-    assert edata.R.shape == (3, 2, 2)
-    assert edata.X.shape == (3, 2)
+    _assert_shape_matches(edata, (3, 2, 2))
+
     assert edata.obs.shape == (3, 1)
     assert edata.var.shape == (2, 0)
     assert edata.tem.shape == (2, 0)
@@ -276,9 +271,7 @@ def test_from_pandas_longitudinal_long():
         }
     )
     edata = from_pandas(df, format="long")
-    assert edata.shape == (3, 2, 2)
-    assert edata.R.shape == (3, 2, 2)
-    assert edata.X.shape == (3, 2)
+    _assert_shape_matches(edata, (3, 2, 2))
     assert edata.obs.shape == (3, 0)
     assert edata.var.shape == (2, 0)
     assert edata.tem.shape == (2, 0)
@@ -286,6 +279,12 @@ def test_from_pandas_longitudinal_long():
     assert np.array_equal(edata.obs_names.values, ["patient_1", "patient_2", "patient_3"])
     assert np.array_equal(edata.var_names.values, ["var1", "var2"])
     assert np.array_equal(edata.tem.index.values, ["t1", "t2"])
+
+
+def test_from_pandas_invalid_format():
+    df = pd.DataFrame()
+    with pytest.raises(ValueError):
+        from_pandas(df, format="invalid_format")
 
 
 def test_from_pandas_longitudinal_long_index_column_not_implemented():
@@ -350,6 +349,11 @@ def test_to_pandas_longitudinal_long(edata_333):
     assert df.shape == (27, 4)
     assert np.array_equal(df.iloc[13, :3].values, np.array(["obs2", "var2", "t2"]).astype(object))
     assert df.iloc[13, 3] == 14
+
+
+def test_to_pandas_invalid_format(edata_333):
+    with pytest.raises(ValueError):
+        to_pandas(edata_333, format="invalid_format")
 
 
 def test_to_pandas_longitudinal_long_obs_cols_raises_error(edata_333):

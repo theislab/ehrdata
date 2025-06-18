@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
     from ehrdata import EHRData
 
+from ehrdata.core.constants import PANDAS_FORMATS
+
 
 def to_pandas(
     edata: EHRData,
@@ -82,16 +84,20 @@ def to_pandas(
         | 1                  | feature_1        | 2    | -11.793235  |
         +--------------------+------------------+------+-------------+
     """
+    if format not in PANDAS_FORMATS:
+        err_msg = f"Format {format} is not supported. Please choose from {PANDAS_FORMATS}."
+        raise ValueError(err_msg)
+
+    if var_col is not None and var_col not in edata.var.columns:
+        err_msg = f"Variable column {var_col} not found in edata.var"
+        raise ValueError(err_msg)
+
     if layer is not None:
         if layer == "X":
             layer = None
         if layer == "R":
             layer = "R_layer"
     X = edata.layers[layer] if layer is not None else edata.X
-
-    if var_col is not None and var_col not in edata.var.columns:
-        err_msg = f"Variable column {var_col} not found in edata.var"
-        raise ValueError(err_msg)
 
     var_names = edata.var_names if var_col is None else edata.var[var_col]
 

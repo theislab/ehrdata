@@ -72,8 +72,6 @@ def write_zarr(
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
     It is possible to either write an :class:`~ehrdata.EHRData` object to an .zarr file.
-    The .zarr file can be used as a cache to save the current state of the object and to retrieve it faster once needed.
-    This preserves the object state at the time of writing.
 
     Args:
         edata: Data object.

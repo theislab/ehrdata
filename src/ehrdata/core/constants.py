@@ -21,3 +21,10 @@ MISSING_VALUES = (
     "<NA>",  # this is the result value of str(pd.NA)
     "pd.NA",  # this is very explicit about what the value should mean
 )
+
+
+# Pandas Format
+# --------------
+# The format of the pandas dataframe to be used in the to_pandas and from_pandas functions
+
+PANDAS_FORMATS = ["flat", "wide", "long"]

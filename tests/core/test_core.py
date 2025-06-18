@@ -2,25 +2,10 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from tests.conftest import _assert_shape_matches
 
 from ehrdata import EHRData
 from ehrdata.core.constants import R_LAYER_KEY
-
-
-def _assert_shape_matches(edata: EHRData, shape: tuple[int, int, int]):
-    assert edata.shape == shape
-
-    assert isinstance(edata.obs, pd.DataFrame)
-    assert len(edata.obs) == shape[0]
-    assert edata.n_obs == shape[0]
-
-    assert isinstance(edata.var, pd.DataFrame)
-    assert len(edata.var) == shape[1]
-    assert edata.n_vars == shape[1]
-
-    assert isinstance(edata.tem, pd.DataFrame)
-    assert len(edata.tem) == shape[2]
-    assert edata.n_t == shape[2]
 
 
 def _assert_fields_are_view(edata: EHRData):
@@ -36,7 +21,7 @@ def _assert_fields_are_view(edata: EHRData):
 def test_ehrdata_init_vanilla_empty():
     edata = EHRData()
 
-    _assert_shape_matches(edata, (0, 0, 0))
+    _assert_shape_matches(edata, (0, 0, 0), check_X_None=True, check_R_None=True)
     assert edata.X is None
     assert edata.R is None
     assert edata.obs.shape == (0, 0)
@@ -46,9 +31,7 @@ def test_ehrdata_init_vanilla_empty():
 
 def test_ehrdata_init_vanilla_X(X_numpy_32):
     edata = EHRData(X=X_numpy_32)
-    _assert_shape_matches(edata, (3, 2, 0))
-
-    assert edata.R is None
+    _assert_shape_matches(edata, (3, 2, 0), check_R_None=True)
 
     assert edata.obs.shape == (3, 0)
 
@@ -88,10 +71,9 @@ def test_ehrdata_init_vanilla_X_and_r(X_numpy_32, R_numpy_322):
 
 def test_ehrdata_init_vanilla_X_and_t(X_numpy_32, tem_21):
     edata = EHRData(X=X_numpy_32, tem=tem_21)
-    _assert_shape_matches(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2), check_R_None=True)
 
     assert edata.layers is not None
-    assert edata.R is None
 
     assert edata.X.shape == (3, 2)
     assert edata.obs.shape == (3, 0)
@@ -116,7 +98,8 @@ def test_ehrdata_init_vanilla_X_and_r_and_t(X_numpy_32, R_numpy_322, tem_21):
 def test_ehrdata_init_vanilla_X_and_layers(X_numpy_32):
     edata = EHRData(X=X_numpy_32, layers={"some_layer": X_numpy_32})
 
-    assert edata.X.shape == (3, 2)
+    _assert_shape_matches(edata, (3, 2, 0), check_R_None=True)
+
     assert edata.obs.shape == (3, 0)
     assert edata.var.shape == (2, 0)
     assert edata.tem.shape == (0, 0)
@@ -127,17 +110,17 @@ def test_ehrdata_init_vanilla_X_and_layers(X_numpy_32):
 #################################################################
 def test_ehrdata_init_vanilla_obs(obs_31):
     edata = EHRData(obs=obs_31)
-    _assert_shape_matches(edata, (3, 0, 0))
+    _assert_shape_matches(edata, (3, 0, 0), check_X_None=True, check_R_None=True)
 
 
 def test_ehrdata_init_vanilla_var(var_31):
     edata = EHRData(var=var_31)
-    _assert_shape_matches(edata, (0, 3, 0))
+    _assert_shape_matches(edata, (0, 3, 0), check_X_None=True, check_R_None=True)
 
 
 def test_ehrdata_init_vanilla_tem(tem_31):
     edata = EHRData(tem=tem_31)
-    _assert_shape_matches(edata, (0, 0, 3))
+    _assert_shape_matches(edata, (0, 0, 3), check_X_None=True, check_R_None=True)
 
 
 #################################################################
@@ -274,10 +257,9 @@ def test_ehrdata_del_r(X_numpy_32, R_numpy_322):
     edata = EHRData(X=X_numpy_32, R=R_numpy_322)
     del edata.R
 
-    assert edata.R is None
     assert edata.tem.shape == (0, 0)
 
-    _assert_shape_matches(edata, (3, 2, 0))
+    _assert_shape_matches(edata, (3, 2, 0), check_R_None=True)
 
 
 #################################################################
@@ -321,7 +303,6 @@ def test_ehrdata_subset_slice_3D_vanilla(X_numpy_32, R_numpy_322, obs_31, var_21
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (2, 1, 1))
 
-    assert edata_sliced.R.shape == (2, 1, 1)
     assert edata_sliced.tem.shape == (1, 1)
 
 
@@ -332,7 +313,7 @@ def test_ehrdata_subset_slice_3D_repeated(edata_333):
 
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (1, 1, 1))
-    assert edata_sliced.R.shape == (1, 1, 1)
+
     assert edata_sliced.tem.shape == (1, 1)
 
     # test that the true values are conserved
@@ -392,7 +373,6 @@ def test_ehrdata_subset_boolindex_vanilla(edata_333):
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (2, 1, 1))
 
-    assert edata_sliced.R.shape == (2, 1, 1)
     assert edata_sliced.tem.shape == (1, 1)
 
 
@@ -403,7 +383,7 @@ def test_ehrdata_subset_boolindex_repeated(edata_333):
 
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (1, 1, 1))
-    assert edata_sliced.R.shape == (1, 1, 1)
+
     assert edata_sliced.tem.shape == (1, 1)
 
     # test that the true values are conserved
@@ -419,7 +399,6 @@ def test_ehrdata_subset_numberindex_vanilla(edata_333):
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (2, 1, 1))
 
-    assert edata_sliced.R.shape == (2, 1, 1)
     assert edata_sliced.tem.shape == (1, 1)
 
 
@@ -430,7 +409,7 @@ def test_ehrdata_subset_numberindex_repeated(edata_333):
 
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (1, 1, 1))
-    assert edata_sliced.R.shape == (1, 1, 1)
+
     assert edata_sliced.tem.shape == (1, 1)
 
     # test that the true values are conserved

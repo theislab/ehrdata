@@ -9,7 +9,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from ehrdata import EHRData
-PANDAS_FORMATS = ["flat", "wide", "long"]
+
+from ehrdata.core.constants import PANDAS_FORMATS
 
 
 def from_pandas(
