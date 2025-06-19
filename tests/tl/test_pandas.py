@@ -99,7 +99,8 @@ def test_to_pandas_basic_layer(dataset, request):
 
 
 @pytest.mark.parametrize("dataset", ["csv_basic", "csv_non_num_with_missing", "csv_num_with_missing"])
-def test_to_pandas_basic_obs_cols(dataset, request):
+@pytest.mark.parametrize("obs_cols", [["patient_id"], {"patient_id"}])
+def test_to_pandas_basic_obs_cols(dataset, obs_cols, request):
     original_df = request.getfixturevalue(dataset)
     df_no_patient_id_col = original_df.drop(columns=["patient_id"])
 
@@ -108,7 +109,7 @@ def test_to_pandas_basic_obs_cols(dataset, request):
     )
     # do this because want to ensure that edata has been set up properly
     assert edata.X.shape == (original_df.shape[0], original_df.shape[1] - 1)
-    df = to_pandas(edata, obs_cols=["patient_id"])
+    df = to_pandas(edata, obs_cols=obs_cols)
 
     assert df.shape == (original_df.shape[0], original_df.shape[1])
     assert df.index.equals(edata.obs.index)
@@ -200,7 +201,8 @@ def test_from_pandas_longitudinal_wide_missing_timestep():
     assert np.array_equal(edata.obs["obs_column"].values, ["obs_1", "obs_2", "obs_3"])
 
 
-def test_from_pandas_longitudinal_wide_column_obs_only():
+@pytest.mark.parametrize("columns_obs_only", [["obs_column"], {"obs_column"}])
+def test_from_pandas_longitudinal_wide_column_obs_only(columns_obs_only):
     df = pd.DataFrame(
         {
             "var1_t_timestep1": [1, 2, 3],
@@ -211,7 +213,7 @@ def test_from_pandas_longitudinal_wide_column_obs_only():
         },
         index=["patient_1", "patient_2", "patient_3"],
     )
-    edata = from_pandas(df, format="wide", columns_obs_only=["obs_column"])
+    edata = from_pandas(df, format="wide", columns_obs_only=columns_obs_only)
     _assert_shape_matches(edata, (3, 2, 2))
 
     assert edata.obs.shape == (3, 1)

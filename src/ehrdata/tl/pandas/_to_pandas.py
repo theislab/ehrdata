@@ -18,7 +18,7 @@ def to_pandas(
     edata: EHRData,
     *,
     layer: str | None = None,
-    obs_cols: Iterable[str] | str | None = None,
+    obs_cols: Iterable[str] | None = None,
     var_col: str | None = None,
     format: Literal["wide", "long"] = "wide",
 ) -> pd.DataFrame:
@@ -115,13 +115,11 @@ def to_pandas(
             df = pd.DataFrame(X_wide, columns=column_names)
 
         if obs_cols:
+            obs_cols = list(obs_cols)
             if len(edata.obs.columns) == 0:
                 msg = "Cannot slice columns from empty obs!"
                 raise ValueError(msg)
-            if isinstance(obs_cols, str):
-                obs_cols = list(obs_cols)
-            if isinstance(obs_cols, list):  # pragma: no cover
-                obs_slice = edata.obs[obs_cols]
+            obs_slice = edata.obs[obs_cols]
             # reset index needed since we slice all or at least some columns from obs DataFrame
             obs_slice = obs_slice.reset_index(drop=True)
             df = pd.concat([df, obs_slice], axis=1)
@@ -151,7 +149,3 @@ def to_pandas(
             df = data_array.to_dataframe().reset_index()
 
         return df
-
-    else:
-        err_msg = f"Invalid format: {format}"
-        raise ValueError(err_msg)
