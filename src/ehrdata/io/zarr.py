@@ -19,15 +19,13 @@ def read_zarr(
     """Reads an :class:`~ehrdata.EHRData` object from a zarr store.
 
     Args:
-        filename: Path to the file or directory to read.
-        backed: If 'r', load :class:`~ehrdata.EHRData` in backed mode instead of fully loading it into memory (memory mode). If you want to modify backed attributes of the :class:`~ehrdata.EHRData` object, you need to choose 'r+'.
-            Currently, backed only support updates to `X`. That means any changes to other slots like obs will not be written to disk in backed mode. If you would like save changes made to these slots of a backed :class:`~ehrdata.EHRData`, write them to a new file (see write()). For an example, see Partial reading of large data.
+        filename: The filename, or a Zarr storage class.
 
     Examples:
         >>> import ehrdata as ed
         >>> edata = ep.dt.mimic_2()
         >>> ed.io.write_zarr("mimic_2.zarr", edata)
-        >>> edata_2 = ed.io.read_zarr("mimic_2.zarr")
+        >>> edata_from_zarr = ed.io.read_zarr("mimic_2.zarr")
     """
     from ehrdata import EHRData
     from ehrdata.tl import harmonize_missing_values
