@@ -85,7 +85,7 @@ def test_physionet2012_arguments():
         drop_samples=None,
     )
     assert edata.shape == (12000, 37, 24)
-
+    assert edata.tem.shape == (24, 1)
     assert edata.R.shape == (12000, 37, 24)
     assert edata.obs.shape == (12000, 10)
     assert edata.var.shape == (37, 1)
