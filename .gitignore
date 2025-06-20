@@ -16,6 +16,7 @@ __pycache__/
 /node_modules/
 
 # docs
+/docs/tutorials/data/
 /docs/generated/
 /docs/_build/
 /docs/generated/

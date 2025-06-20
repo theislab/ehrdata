@@ -38,7 +38,7 @@ class EHRData(AnnData):
             the data type matches, otherwise, a copy is made.
         obs: Key-indexed one-dimensional observations annotation of length #observations.
         var: Key-indexed one-dimensional variables annotation of length #variables.
-        t: Key-indexed one-dimensional time annotation of length #timesteps.
+        tem: Key-indexed one-dimensional time annotation of length #timesteps.
         uns: Key-indexed unstructured annotation.
         obsm: Key-indexed multi-dimensional observations annotation of length #observations.
             If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
@@ -131,7 +131,7 @@ class EHRData(AnnData):
         self.R = R
         self._tidx = tidx
 
-        # Handle t
+        # Handle tem
         if R is None and tem is None:
             self.tem = pd.DataFrame([])
 
