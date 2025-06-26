@@ -7,7 +7,7 @@ import anndata as ad
 import h5py
 from lamin_utils import logger
 
-from ehrdata.io._io_utils import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
+from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
