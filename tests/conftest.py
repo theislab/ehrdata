@@ -197,7 +197,7 @@ def edata_nonnumeric_missing_330(obs_31, var_31):
             [14, np.nan, 12.5],
         ]
     ).to_numpy()
-    return EHRData(X=X, obs=obs_31, var=var_31)
+    return EHRData(X=X, layers={"other_layer": X}, obs=obs_31, var=var_31)
 
 
 @pytest.fixture
