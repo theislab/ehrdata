@@ -553,7 +553,7 @@ def mimic_2(
 def mimic_2_preprocessed() -> EHRData:
     """Loads the preprocessed MIMIC-II dataset.
 
-    This dataset is a preprocessed verion of :func:`~ehrdata.dt.mimic_2`.
+    This dataset is a preprocessed version of :func:`~ehrdata.dt.mimic_2`.
     The dataset was preprocessed according to: https://github.com/theislab/ehrapy-datasets/tree/main/mimic_2.
 
     This dataset was created for the purpose of a case study in the book: `Secondary Analysis of Electronic Health Records <https://link.springer.com/book/10.1007/978-3-319-43742-2>`_.
@@ -623,7 +623,7 @@ def diabetes_130_fairlearn(
     Preprocessing: https://fairlearn.org/v0.10/api_reference/generated/fairlearn.datasets.fetch_diabetes_hospital.html#fairlearn.datasets.fetch_diabetes_hospital [2]
 
     Args:
-        columns_obs_only: Columns to include in obs only and not X.
+        columns_obs_only: Columns to include in `obs` only and not `X`.
 
 
     Examples:

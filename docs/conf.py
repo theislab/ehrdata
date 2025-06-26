@@ -148,5 +148,6 @@ nitpick_ignore = [
 # Redirect broken parameter annotation classes
 qualname_overrides = {
     "zarr._storage.store.Store": "zarr.storage.MemoryStore",
+    "zarr.core.group.Group": "zarr.Group",
     "lnschema_core.models.Artifact": "lamindb.Artifact",
 }
