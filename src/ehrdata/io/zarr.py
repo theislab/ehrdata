@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 def read_zarr(
-    filename: PathLike[str] | zarr.Group | str,
+    filename: PathLike[str] | zarr.group.Group | str,
     *,
     harmonize_missing_values: bool = True,
     cast_variables_to_float: bool = True,
@@ -25,7 +25,7 @@ def read_zarr(
 
     Args:
         filename: The filename, or a Zarr storage class.
-        harmonize_missing_values: Whether to call `ehrdata.tl.harmonize_missing_values` on all detected layers. Cannot be called if `backed`.
+        harmonize_missing_values: Whether to call `ehrdata.harmonize_missing_values` on all detected layers. Cannot be called if `backed`.
         cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`. If the cast fails for the values of one variable, then the values of these variable remain unaltered. This can be helpful to recover arrays that were of dtype `object` when they were written to disk.
 
     Examples:
@@ -47,11 +47,11 @@ def read_zarr(
     edata = EHRData(**dictionary_for_init)
 
     if harmonize_missing_values:
-        ed.tl.harmonize_missing_values(edata)
+        ed.harmonize_missing_values(edata)
         logger.info("Harmonizing missing values of X")
 
         for key in edata.layers:
-            ed.tl.harmonize_missing_values(edata, layer=key)
+            ed.harmonize_missing_values(edata, layer=key)
             logger.info(f"Harmonizing missing values of layer {key}")
 
     if cast_variables_to_float:
@@ -73,7 +73,7 @@ def write_zarr(
 
     Args:
         edata: Data object.
-        filename: File name or path to write the file to.
+        filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
         chunks: Chunk shape, passed to :meth:`zarr.Group.create_dataset` for `Zarr` version 2, or to :meth:`zarr.Group.create_array` for `Zarr` version 3.
         convert_strings_to_categoricals: Convert columns of `str` dtype in `.obs` and `.var` to `categorical` dtype.
 

@@ -77,24 +77,24 @@ def infer_feature_types(
 ) -> pd.DataFrame | None:
     """Infer feature types from an :class:`~ehrdata.EHRData` object.
 
-    For each feature in edata.var_names, the method infers one of the following types: 'date', 'categorical', or 'numeric'.
-    The inferred types are stored in edata.var['feature_type']. Please check the inferred types and adjust if necessary using
-    edata.var['feature_type']['feature1']='corrected_type'.
-    Be aware that not all features stored numerically are of 'numeric' type, as categorical features might be stored in a numerically encoded format.
+    For each feature in `edata.var_names`, the method infers one of the following types: `'date'`, `'categorical'`, or `'numeric'`.
+    The inferred types are stored in `edata.var['feature_type']`. Please check the inferred types and adjust if necessary using
+    `edata.var['feature_type']['feature1']='corrected_type'` or with :func:`~ehrdata.replace_feature_types`.
+    Be aware that not all features stored numerically are of `'numeric'` type, as categorical features might be stored in a numerically encoded format.
     For example, a feature with values [0, 1, 2] might be a categorical feature with three categories. This is accounted for in the method, but it is
     recommended to check the inferred types.
 
     Args:
         edata: Data object.
-        layer: The layer to use from the EHRData object. If None, the X layer is used.
+        layer: The layer to use from the EHRData object. If `None`, the `X` field is used.
         output: The output format. Choose between `'tree'`, `'dataframe'`, or `None`. If `'tree'`, the feature types will be printed to the console in a tree format.
             If `'dataframe'`, a :class:`~pandas.DataFrame` with the feature types will be returned. If `None`, nothing will be returned.
         verbose: Whether to print warnings for uncertain feature types.
 
     Examples:
-        >>> import ehrapy as ep
-        >>> edata = ep.dt.mimic_2()
-        >>> ep.ad.infer_feature_types(edata)
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.mimic_2()
+        >>> ed.infer_feature_types(edata)
     """
     feature_types = {}
     uncertain_features = []
@@ -123,12 +123,12 @@ def infer_feature_types(
     if verbose:
         logger.warning(
             f"{'Features' if len(uncertain_features) > 1 else 'Feature'} {str(uncertain_features)[1:-1]} {'were' if len(uncertain_features) > 1 else 'was'} detected as categorical features stored numerically."
-            f"Please verify and correct using `ed.tl.replace_feature_types` if necessary."
+            f"Please verify and correct using `ed.replace_feature_types` if necessary."
         )
 
         logger.info(
             f"Stored feature types in edata.var['{FEATURE_TYPE_KEY}']."
-            f" Please verify and adjust if necessary using `ed.tl.replace_feature_types`."
+            f" Please verify and adjust if necessary using `ed.replace_feature_types`."
         )
 
     if output == "tree":
@@ -176,7 +176,7 @@ def _check_feature_types(func):
         if FEATURE_TYPE_KEY not in edata.var:
             infer_feature_types(edata, output=None)
             logger.warning(
-                f"Feature types were inferred and stored in edata.var[{FEATURE_TYPE_KEY}]. Please verify using `ep.ad.feature_type_overview` and adjust if necessary using `ep.ad.replace_feature_types`."
+                f"Feature types were inferred and stored in edata.var[{FEATURE_TYPE_KEY}]. Please verify using `ed.feature_type_overview` and adjust if necessary using `ed.replace_feature_types`."
             )
 
         for feature in edata.var_names:
@@ -187,7 +187,7 @@ def _check_feature_types(func):
                 and feature_type not in [CATEGORICAL_TAG, NUMERIC_TAG, DATE_TAG]
             ):
                 logger.warning(
-                    f"Feature '{feature}' has an invalid feature type '{feature_type}'. Please correct using `ep.ad.replace_feature_types`."
+                    f"Feature '{feature}' has an invalid feature type '{feature_type}'. Please correct using `ed.replace_feature_types`."
                 )
 
         if _self is not None:
@@ -205,9 +205,9 @@ def feature_type_overview(edata: EHRData) -> None:
         edata: Data object.
 
     Examples:
-        >>> import ehrapy as ep
-        >>> edata = ep.dt.mimic_2()
-        >>> ep.ad.feature_type_overview(edata)
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.mimic_2()
+        >>> ed.feature_type_overview(edata)
     """
     tree = Tree(
         f"[b] Detected feature types for EHRData object with {len(edata.obs_names)} obs and {len(edata.var_names)} vars",
@@ -260,11 +260,11 @@ def replace_feature_types(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.diabetes_130_fairlearn()
-        >>> ed.tl.infer_feature_types(edata)
-        >>> ed.tl.replace_feature_types(edata, ["time_in_hospital", "number_diagnoses", "num_procedures"], "numeric")
+        >>> ed.infer_feature_types(edata)
+        >>> ed.replace_feature_types(edata, ["time_in_hospital", "number_diagnoses", "num_procedures"], "numeric")
     """
     if FEATURE_TYPE_KEY not in edata.var:
-        err_msg = "Feature types were not inferred. Please infer feature types using 'ed.tl.infer_feature_types' before correcting."
+        err_msg = "Feature types were not inferred. Please infer feature types using 'ed.infer_feature_types' before correcting."
         raise ValueError(err_msg)
 
     if corrected_type not in [CATEGORICAL_TAG, NUMERIC_TAG, DATE_TAG]:
@@ -292,7 +292,7 @@ def harmonize_missing_values(
 ) -> EHRData | None:
     """Harmonize missing values in the :class:`~ehrdata.EHRData` object.
 
-    This function will replace strings that are considered to represent missing values with np.nan.
+    This function will replace strings that are considered to represent missing values with `np.nan`.
 
 
     Args:
@@ -304,10 +304,8 @@ def harmonize_missing_values(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_2()
-        >>> ed.ad.harmonize_missing_values(edata)
+        >>> ed.harmonize_missing_values(edata)
     """
-    # if edata.backed:
-    #     logger.warning()
     if copy:
         edata = edata.copy()
     X = edata.X if layer is None else edata.layers[layer]

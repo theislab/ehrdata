@@ -4,7 +4,7 @@ import pytest
 from tests.conftest import _assert_shape_matches
 
 from ehrdata import EHRData
-from ehrdata.tl import from_pandas, to_pandas
+from ehrdata.io import from_pandas, to_pandas
 
 
 @pytest.mark.parametrize("df", ["csv_basic", "csv_non_num_with_missing", "csv_num_with_missing"])

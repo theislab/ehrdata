@@ -2,9 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ehrdata import EHRData
+from ehrdata import EHRData, feature_type_overview, harmonize_missing_values, infer_feature_types, replace_feature_types
 from ehrdata.core.constants import MISSING_VALUES
-from ehrdata.tl import feature_type_overview, harmonize_missing_values, infer_feature_types, replace_feature_types
 
 
 @pytest.mark.parametrize(

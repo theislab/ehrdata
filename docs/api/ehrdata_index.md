@@ -13,3 +13,16 @@
     EHRData
 
 ```
+
+
+```{eval-rst}
+.. autosummary::
+    :toctree: io
+    :nosignatures:
+
+    infer_feature_types
+    feature_type_overview
+    replace_feature_types
+    harmonize_missing_values
+
+```
