@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import anndata as ad
 import h5py
-import numpy as np
-from scipy.sparse import issparse
+from lamin_utils import logger
+
+from ehrdata.io._io_utils import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
@@ -15,49 +15,61 @@ if TYPE_CHECKING:
 
 def read_h5ad(
     filename: Path | str,
+    *,
     backed: Literal["r", "r+"] | bool | None = None,
+    harmonize_missing_values: bool = True,
+    cast_variables_to_float: bool = True,
 ) -> EHRData:
     """Reads an h5ad file.
 
     Args:
         filename: Path to the file or directory to read.
         backed: If 'r', load :class:`~ehrdata.EHRData` in backed mode instead of fully loading it into memory (memory mode). If you want to modify backed attributes of the :class:`~ehrdata.EHRData` object, you need to choose 'r+'.
-            Currently, backed only support updates to `X`. That means any changes to other slots like obs will not be written to disk in backed mode. If you would like save changes made to these slots of a backed EHRData, write them to a new file (see write()). For an example, see Partial reading of large data.
+            Currently, backed only support updates to `X`. That means any changes to other slots like obs will not be written to disk in backed mode. If you would like save changes made to these slots of a backed EHRData, write them to a new file (see write()).
+        harmonize_missing_values: Whether to call `ehrdata.tl.harmonize_missing_values` on all detected layers. Cannot be called if `backed`.
+        cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`. If the cast fails for the values of one variable, then the values of these variable remain unaltered. This can be helpful to recover arrays that were of dtype `object` when they were written to disk. Cannot be called if `backed`.
 
     Examples:
         >>> import ehrdata as ed
         >>> edata = ep.dt.mimic_2()
-        >>> ed.io.write("mimic_2.h5ad", edata)
+        >>> ed.io.write_h5ad("mimic_2.h5ad", edata)
         >>> edata_2 = ed.io.read_h5ad("mimic_2.h5ad")
     """
+    import ehrdata as ed
     from ehrdata import EHRData
-    from ehrdata.tl import harmonize_missing_values
+
+    if backed and harmonize_missing_values:
+        msg = "backed reading is not available with 'harmonize_missing_values=True'."
+        raise ValueError(msg)
+
+    if backed and cast_variables_to_float:
+        msg = "backed reading is not available with 'cast_variables_to_float=True'."
+        raise ValueError(msg)
+
+    if backed not in {None, False}:
+        mode = backed
+        if mode is True:
+            mode = "r+"
+        assert mode in {"r", "r+"}
+        dictionary_for_init = {"filemode": mode, "filename": filename}
+    else:
+        dictionary_for_init = {}
 
     with h5py.File(filename, "r") as f:
-        dictionary_for_init = {k: ad.io.read_elem(f[k]) for k, v in dict(f).items() if not k.startswith("raw.")}
-
-    # If X, layers is str; convert to object dtype. First, try to cast each column to float64 in pandas.
-    if "X" in dictionary_for_init and dictionary_for_init["X"].dtype == str:
-        dictionary_for_init["X"] = dictionary_for_init["X"].astype(object)
-    if "layers" in dictionary_for_init:
-        for key in dictionary_for_init["layers"]:
-            if dictionary_for_init["layers"][key].dtype == str:
-                dictionary_for_init["layers"][key] = dictionary_for_init["layers"][key].astype(object)
+        dictionary_for_init.update({k: ad.io.read_elem(f[k]) for k, _ in dict(f).items() if not k.startswith("raw.")})
 
     edata = EHRData(**dictionary_for_init)
 
-    # cast "nan" and other designated missing value strings to np.nan to enable to-float casting if only numbers and missing values
-    harmonize_missing_values(edata)
-    if not issparse(edata.X):
-        for column in range(edata.X.shape[1]):
-            with contextlib.suppress(ValueError):
-                edata.X[:, column] = edata.X[:, column].astype(np.float64)
-    for key in edata.layers:
-        harmonize_missing_values(edata, layer=key)
-        if not issparse(edata.layers[key]):
-            for column in range(edata.layers[key].shape[1]):
-                with contextlib.suppress(ValueError):
-                    edata.layers[key][:, column] = edata.layers[key][:, column].astype(np.float64)
+    if harmonize_missing_values:
+        ed.tl.harmonize_missing_values(edata)
+        logger.info("Harmonizing missing values of X")
+
+        for key in edata.layers:
+            ed.tl.harmonize_missing_values(edata, layer=key)
+            logger.info(f"Harmonizing missing values of layer {key}")
+
+    if cast_variables_to_float:
+        _cast_variables_to_float(edata)
 
     return edata
 
@@ -72,6 +84,7 @@ def write_h5ad(
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
     It is possible to either write an :class:`~ehrdata.EHRData` object to an `.h5ad` or a compressed `.gzip` or `lzf` file.
+    To write to an `.h5ad file, `X`, `R`, and `layers` cannot be written as  `object` dtype. If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a string dtype.
 
     Args:
         filename: File name or path to write the file to.
@@ -84,19 +97,10 @@ def write_h5ad(
         >>> edata = ed.dt.mimic_2()
         >>> ed.io.write_h5ad("mimic_2.h5ad", edata)
     """
-    filename = Path(filename)  # allow passing strings
+    filename = Path(filename)
 
-    if not issparse(edata.X) and edata.X.dtype == np.object_:
-        try:
-            edata.X = edata.X.astype(np.float64)
-        except ValueError:
-            edata.X = edata.X.astype(str)
-    for layer, array in edata.layers.items():
-        if not issparse(array) and array.dtype == np.object_:
-            try:
-                edata.layers[layer] = array.astype(np.float64)
-            except ValueError:
-                edata.layers[layer] = array.astype(str)
+    edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
+
     ad.AnnData(edata).write_h5ad(
         filename,
         compression=compression,

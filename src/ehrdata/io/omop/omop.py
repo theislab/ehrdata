@@ -195,7 +195,7 @@ def setup_obs(
     *,
     death_table: bool = False,
 ):
-    """Setup the observation table for EHRData object.
+    """Setup the observation table for :class:`~ehrdata.EHRData` object.
 
     For this, a table from the OMOP CDM which represents the "observed unit" via an id should be selected.
     A unit can be a person, or the data of a person together with either the information from cohort, observation_period, or visit_occurrence.
@@ -270,7 +270,7 @@ def setup_variables(
     enrich_var_with_unit_info: bool = False,
     instantiate_tensor: bool = True,
 ):
-    """Extracts selected tables of a data-point character from the OMOP CDM..
+    """Extracts selected tables of a data-point character from the OMOP CDM.
 
     The distinct `concept_id` is encountered in the selected tables form the variables in the EHRData object.
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.

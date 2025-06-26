@@ -306,12 +306,15 @@ def harmonize_missing_values(
         >>> edata = ed.dt.mimic_2()
         >>> ed.ad.harmonize_missing_values(edata)
     """
+    # if edata.backed:
+    #     logger.warning()
     if copy:
         edata = edata.copy()
     X = edata.X if layer is None else edata.layers[layer]
 
-    if issparse(X):
-        logger.warning("This operation does not affect sparse fields, since they are already numeric.")
+    # note that every sparse array is of a numeric dtype and will enter this if block
+    if np.issubdtype(X.dtype, np.number):
+        logger.warning(f"This operation does not affect numeric layer {'X' if layer is None else layer}.")
         return edata if copy else None
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)

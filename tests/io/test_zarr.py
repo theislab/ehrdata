@@ -16,16 +16,27 @@ from ehrdata.io import read_zarr, write_zarr
 TEST_PATH_ZARR = TEST_DATA_PATH / "toy_zarr"
 
 
-def test_read_zarr_basic():
-    edata = read_zarr(filename=TEST_PATH_ZARR / "adata_basic.zarr")
+@pytest.mark.parametrize("harmonize_missing_values", [False, True])
+@pytest.mark.parametrize("cast_variables_to_float", [False, True])
+def test_read_zarr_basic(harmonize_missing_values, cast_variables_to_float):
+    edata = read_zarr(
+        filename=TEST_PATH_ZARR / "adata_basic.zarr",
+        harmonize_missing_values=harmonize_missing_values,
+        cast_variables_to_float=cast_variables_to_float,
+    )
 
     _assert_shape_matches(edata, (5, 4, 0), check_R_None=True)
     _assert_io_read(edata)
 
 
-def test_read_zarr_basic_with_tem():
-    edata = read_zarr(filename=TEST_PATH_ZARR / "edata_basic_with_tem.zarr")
-
+@pytest.mark.parametrize("harmonize_missing_values", [False, True])
+@pytest.mark.parametrize("cast_variables_to_float", [False, True])
+def test_read_zarr_basic_with_tem(harmonize_missing_values, cast_variables_to_float):
+    edata = read_zarr(
+        filename=TEST_PATH_ZARR / "edata_basic_with_tem.zarr",
+        harmonize_missing_values=harmonize_missing_values,
+        cast_variables_to_float=cast_variables_to_float,
+    )
     _assert_shape_matches(edata, (5, 4, 2))
     _assert_io_read(edata)
 
@@ -33,9 +44,14 @@ def test_read_zarr_basic_with_tem():
     assert all(edata.tem["timestep"].values == ["t1", "t2"])
 
 
-def test_read_zarr_sparse_with_tem():
-    edata = read_zarr(filename=TEST_PATH_ZARR / "edata_sparse_with_tem.zarr")
-
+@pytest.mark.parametrize("harmonize_missing_values", [False, True])
+@pytest.mark.parametrize("cast_variables_to_float", [False, True])
+def test_read_zarr_sparse_with_tem(harmonize_missing_values, cast_variables_to_float):
+    edata = read_zarr(
+        filename=TEST_PATH_ZARR / "edata_sparse_with_tem.zarr",
+        harmonize_missing_values=harmonize_missing_values,
+        cast_variables_to_float=cast_variables_to_float,
+    )
     _assert_shape_matches(edata, (5, 4, 2))
     _assert_io_read(edata)
 
@@ -67,7 +83,7 @@ def test_write_zarr_basic(edata_name, request, tmp_path):
         "tem",
     }
 
-    assert np.array_equal(ad.io.read_elem(zarr_file["X"]), edata.X)
+    assert np.array_equal(ad.io.read_elem(zarr_file["X"]).astype(str), edata.X.astype(str))
 
     pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["obs"]), edata.obs)
     pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["var"]), edata.var)

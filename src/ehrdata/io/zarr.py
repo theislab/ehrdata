@@ -1,25 +1,32 @@
 from __future__ import annotations
 
-import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import anndata as ad
-import numpy as np
 import zarr
-from scipy.sparse import issparse
+from lamin_utils import logger
+
+from ehrdata.io._io_utils import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
 
 if TYPE_CHECKING:
+    from os import PathLike
+
     from ehrdata import EHRData
 
 
 def read_zarr(
-    filename: Path | str,
+    filename: PathLike[str] | zarr.Group | str,
+    *,
+    harmonize_missing_values: bool = True,
+    cast_variables_to_float: bool = True,
 ) -> EHRData:
     """Reads an :class:`~ehrdata.EHRData` object from a zarr store.
 
     Args:
         filename: The filename, or a Zarr storage class.
+        harmonize_missing_values: Whether to call `ehrdata.tl.harmonize_missing_values` on all detected layers. Cannot be called if `backed`.
+        cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`. If the cast fails for the values of one variable, then the values of these variable remain unaltered. This can be helpful to recover arrays that were of dtype `object` when they were written to disk.
 
     Examples:
         >>> import ehrdata as ed
@@ -27,35 +34,28 @@ def read_zarr(
         >>> ed.io.write_zarr("mimic_2.zarr", edata)
         >>> edata_from_zarr = ed.io.read_zarr("mimic_2.zarr")
     """
+    import ehrdata as ed
     from ehrdata import EHRData
-    from ehrdata.tl import harmonize_missing_values
+
+    if isinstance(filename, Path):
+        filename = str(filename)
 
     f = filename if isinstance(filename, zarr.Group) else zarr.open(filename, mode="r")
 
     dictionary_for_init = {k: ad.io.read_elem(f[k]) for k, v in dict(f).items() if not k.startswith("raw.")}
 
-    # If X, layers is str; convert to object dtype. First, try to cast each column to float64 in pandas.
-    if "X" in dictionary_for_init and dictionary_for_init["X"].dtype == str:
-        dictionary_for_init["X"] = dictionary_for_init["X"].astype(object)
-    if "layers" in dictionary_for_init:
-        for key in dictionary_for_init["layers"]:
-            if dictionary_for_init["layers"][key].dtype == str:
-                dictionary_for_init["layers"][key] = dictionary_for_init["layers"][key].astype(object)
-
     edata = EHRData(**dictionary_for_init)
 
-    # cast "nan" and other designated missing value strings to np.nan to enable to-float casting if only numbers and missing values
-    harmonize_missing_values(edata)
-    if not issparse(edata.X):
-        for column in range(edata.X.shape[1]):
-            with contextlib.suppress(ValueError):
-                edata.X[:, column] = edata.X[:, column].astype(np.float64)
-    for key in edata.layers:
-        harmonize_missing_values(edata, layer=key)
-        if not issparse(edata.layers[key]):
-            for column in range(edata.layers[key].shape[1]):
-                with contextlib.suppress(ValueError):
-                    edata.layers[key][:, column] = edata.layers[key][:, column].astype(np.float64)
+    if harmonize_missing_values:
+        ed.tl.harmonize_missing_values(edata)
+        logger.info("Harmonizing missing values of X")
+
+        for key in edata.layers:
+            ed.tl.harmonize_missing_values(edata, layer=key)
+            logger.info(f"Harmonizing missing values of layer {key}")
+
+    if cast_variables_to_float:
+        _cast_variables_to_float(edata)
 
     return edata
 
@@ -69,32 +69,23 @@ def write_zarr(
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
-    It is possible to either write an :class:`~ehrdata.EHRData` object to an .zarr file.
+    To write to a `.zarr` file, `X`, `R`, and `layers` cannot be written as  `object` dtype. If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
 
     Args:
         edata: Data object.
         filename: File name or path to write the file to.
-        chunks: Chunk shape.
-        convert_strings_to_categoricals: Convert string columns to categorical.
+        chunks: Chunk shape, passed to :meth:`zarr.Group.create_dataset` for `Zarr` version 2, or to :meth:`zarr.Group.create_array` for `Zarr` version 3.
+        convert_strings_to_categoricals: Convert columns of `str` dtype in `.obs` and `.var` to `categorical` dtype.
 
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_2()
         >>> ed.io.write_zarr("mimic_2.zarr", edata)
     """
-    filename = Path(filename)  # allow passing strings
+    filename = Path(filename)
 
-    if not issparse(edata.X) and edata.X.dtype == np.object_:
-        try:
-            edata.X = edata.X.astype(np.float64)
-        except ValueError:
-            edata.X = edata.X.astype(str)
-    for layer, array in edata.layers.items():
-        if not issparse(array) and array.dtype == np.object_:
-            try:
-                edata.layers[layer] = array.astype(np.float64)
-            except ValueError:
-                edata.layers[layer] = array.astype(str)
+    edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
+
     ad.AnnData(edata).write_zarr(
         filename,
         chunks=chunks,
