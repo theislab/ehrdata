@@ -89,10 +89,10 @@ def write_h5ad(
     compression: Literal["gzip", "lzf"] | None = None,
     compression_opts: int | None = None,
 ) -> None:
-    """Write :class:`~ehrdata.EHRData` objects to disk.
+    """Write :class:`~ehrdata.EHRData` objects to an hdf5 file.
 
     It is possible to either write an :class:`~ehrdata.EHRData` object to an `.h5ad` or a compressed `.gzip` or `lzf` file.
-    To write to an `.h5ad file, `X`, `R`, and `layers` cannot be written as  `object` dtype.
+    To write to an h5ad file, `X`, `R`, and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype;
     if this fails, the field will be casted to a string dtype.
 

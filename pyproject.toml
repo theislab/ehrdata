@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
   "anndata>=0.11",
   "duckdb",
+  "fast-array-utils",
   "filelock",
   # for debug logging (referenced from the issue template)
   "lamin-utils",
