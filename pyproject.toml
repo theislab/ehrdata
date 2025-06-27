@@ -143,6 +143,7 @@ lint.ignore = [
   "E501",    # line too long -> we accept long comment lines; formatter gets rid of long code lines
   "E731",    # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
   "E741",    # allow I, O, l as variable names -> I is the identity matrix
+  "PLC0415", # `import` should be at the top-level of a file
   "PLR0912", # Too many branches
   "PLR0913", # Too many arguments in function def
   "PLR0915", # Too many statements
