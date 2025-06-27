@@ -25,8 +25,10 @@ def read_zarr(
 
     Args:
         filename: The filename, or a Zarr storage class.
-        harmonize_missing_values: Whether to call `ehrdata.harmonize_missing_values` on all detected layers. Cannot be called if `backed`.
-        cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`. If the cast fails for the values of one variable, then the values of these variable remain unaltered. This can be helpful to recover arrays that were of dtype `object` when they were written to disk.
+        harmonize_missing_values: Whether to call `ehrdata.harmonize_missing_values` on all detected layers.
+        cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`.
+            If the cast fails for the values of one variable, then the values of these variable remain unaltered.
+            This can be helpful to recover arrays that were of dtype `object` when they were written to disk.
 
     Examples:
         >>> import ehrdata as ed
@@ -69,7 +71,8 @@ def write_zarr(
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
-    To write to a `.zarr` file, `X`, `R`, and `layers` cannot be written as  `object` dtype. If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
+    To write to a `.zarr` file, `X`, `R`, and `layers` cannot be written as  `object` dtype.
+    If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
 
     Args:
         edata: Data object.

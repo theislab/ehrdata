@@ -24,10 +24,18 @@ def read_h5ad(
 
     Args:
         filename: Path to the file or directory to read.
-        backed: If 'r', load :class:`~ehrdata.EHRData` in backed mode instead of fully loading it into memory (memory mode). If you want to modify backed attributes of the :class:`~ehrdata.EHRData` object, you need to choose 'r+'.
-            Currently, backed only support updates to `X`. That means any changes to other slots like obs will not be written to disk in backed mode. If you would like save changes made to these slots of a backed EHRData, write them to a new file (see :func:`~ehrdata.io.write_h5ad`).
-        harmonize_missing_values: Whether to call `ehrdata.harmonize_missing_values` on all detected layers. Cannot be called if `backed`.
-        cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`. If the cast fails for the values of one variable, then the values of these variable remain unaltered. This can be helpful to recover arrays that were of dtype `object` when they were written to disk. Cannot be called if `backed`.
+        backed: If 'r', load :class:`~ehrdata.EHRData` in backed mode instead of fully loading it into memory (memory mode).
+            If you want to modify backed attributes of the :class:`~ehrdata.EHRData` object, you need to choose 'r+'.
+            Currently, backed only support updates to `X`.
+            That means any changes to other slots like obs will not be written to disk in backed mode.
+            If you would like save changes made to these slots of a backed EHRData,
+            write them to a new file (see :func:`~ehrdata.io.write_h5ad`).
+        harmonize_missing_values: Whether to call `ehrdata.harmonize_missing_values` on all detected layers.
+            Cannot be called if `backed`.
+        cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`.
+            If the cast fails for the values of one variable, then the values of these variable remain unaltered.
+            This can be helpful to recover arrays that were of dtype `object` when they were written to disk.
+            Cannot be called if `backed`.
 
     Examples:
         >>> import ehrdata as ed
@@ -84,12 +92,15 @@ def write_h5ad(
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
     It is possible to either write an :class:`~ehrdata.EHRData` object to an `.h5ad` or a compressed `.gzip` or `lzf` file.
-    To write to an `.h5ad file, `X`, `R`, and `layers` cannot be written as  `object` dtype. If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a string dtype.
+    To write to an `.h5ad file, `X`, `R`, and `layers` cannot be written as  `object` dtype.
+    If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype;
+    if this fails, the field will be casted to a string dtype.
 
     Args:
         filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
         edata: Data object.
-        compression: Optional file compression. Setting compression to 'gzip' can save disk space but will slow down writing and subsequent reading.
+        compression: Optional file compression.
+            Setting compression to 'gzip' can save disk space but will slow down writing and subsequent reading.
         compression_opts: See http://docs.h5py.org/en/latest/high/dataset.html.
 
     Examples:
