@@ -31,11 +31,26 @@ def read_csv(
     Args:
         filename: Path to the file or directory to read. Delegates to :func:`pandas.read_csv`.
         sep: Separator in the file. Delegates to :func:`pandas.read_csv`.
-        index_column: If specified, this column of the csv file will be used for the `.obs` dataframe. Delegates to :func:`~ehrdata.io.from_pandas`.
-        columns_obs_only: These columns will be added to the `.obs` dataframe only. Delegates to :func:`~ehrdata.io.from_pandas`.
-        format: The format of the input dataframe. If the data is not longitudinal, choose `format="flat"`. If the data is longitudinal in the long format, choose `format="long"`. If the data is longitudinal in a wide format, choose `format="wide"`. Delegates to :func:`~ehrdata.io.from_pandas`.
-        wide_format_time_suffix: Use only if `format="wide"`. Suffices in the variable columns that indicate the time of the observation. The collected suffices will be sorted lexicographically, and the variables ordered accordingly along the 3rd axis of the :class:`~ehrdata.EHRData` object. Delegates to :func:`~ehrdata.io.from_pandas`.
-        long_format_keys: Use only if `format="long"`. The keys of the dataframe in the long format. The dictionary should have the following structure: {"observation_column": "<the column name of the observation ids>", "variable_column": "<the column name of the variable ids>", "time_column": "<the column name of the time>", "value_column": "<the column name of the values>"}. Delegates to :func:`~ehrdata.io.from_pandas`.
+        index_column: If specified, this column of the csv file will be used for the `.obs` dataframe.
+            Delegates to :func:`~ehrdata.io.from_pandas`.
+        columns_obs_only: These columns will be added to the `.obs` dataframe only.
+            Delegates to :func:`~ehrdata.io.from_pandas`.
+        format: The format of the input dataframe. If the data is not longitudinal, choose `format="flat"`.
+            If the data is longitudinal in the long format, choose `format="long"`.
+            If the data is longitudinal in a wide format, choose `format="wide"`.
+            Delegates to :func:`~ehrdata.io.from_pandas`.
+        wide_format_time_suffix: Use only if `format="wide"`.
+            Suffices in the variable columns that indicate the time of the observation.
+            The collected suffices will be sorted lexicographically, and the variables ordered accordingly along the 3rd axis of the :class:`~ehrdata.EHRData` object.
+            Delegates to :func:`~ehrdata.io.from_pandas`.
+        long_format_keys: Use only if `format="long"`.
+            The keys of the dataframe in the long format.
+            The dictionary should have the following structure:
+            {"observation_column": "<the column name of the observation ids>",
+            "variable_column": "<the column name of the variable ids>",
+            "time_column": "<the column name of the time>",
+            "value_column": "<the column name of the values>"}.
+            Delegates to :func:`~ehrdata.io.from_pandas`.
         **kwargs: Passed to :func:`pandas.read_csv`.
 
     Examples:
