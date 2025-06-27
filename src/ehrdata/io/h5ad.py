@@ -31,7 +31,7 @@ def read_h5ad(
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ep.dt.mimic_2()
+        >>> edata = ed.dt.mimic_2()
         >>> ed.io.write_h5ad("mimic_2.h5ad", edata)
         >>> edata_2 = ed.io.read_h5ad("mimic_2.h5ad")
     """

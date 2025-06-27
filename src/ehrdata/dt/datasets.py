@@ -532,10 +532,9 @@ def mimic_2(
     Args:
         columns_obs_only: Columns to include only in obs and not X.
 
-
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ep.dt.mimic_2()
+        >>> edata = ed.dt.mimic_2()
     """
     _download(
         "https://www.physionet.org/files/mimic2-iaccd/1.0/full_cohort_data.csv?download",
@@ -561,7 +560,6 @@ def mimic_2_preprocessed() -> EHRData:
     The dataset is derived from MIMIC-II, the publicly-accessible critical care database. It contains summary clinical data and  outcomes for 1,776 patients.
 
     More details on the original dataset: https://physionet.org/content/mimic2-iaccd/1.0/.
-
 
     Examples:
         >>> import ehrdata as ed
@@ -624,7 +622,6 @@ def diabetes_130_fairlearn(
 
     Args:
         columns_obs_only: Columns to include in `obs` only and not `X`.
-
 
     Examples:
         >>> import ehrdata as ed

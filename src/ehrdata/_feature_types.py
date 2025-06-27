@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 def _detect_feature_type(col: pd.Series) -> tuple[Literal["date", "categorical", "numeric"], bool]:
-    """Detect the feature type of a column in a pandas DataFrame.
+    """Detect the feature type of a :class:`~pandas.Series`.
 
     Args:
         col: The column to detect the feature type for.
@@ -293,7 +293,6 @@ def harmonize_missing_values(
     """Harmonize missing values in the :class:`~ehrdata.EHRData` object.
 
     This function will replace strings that are considered to represent missing values with `np.nan`.
-
 
     Args:
         edata: Data object.
