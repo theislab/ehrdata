@@ -21,7 +21,7 @@ def read_zarr(
     harmonize_missing_values: bool = True,
     cast_variables_to_float: bool = True,
 ) -> EHRData:
-    """Reads an :class:`~ehrdata.EHRData` object from a zarr store.
+    """Read a zarr store into an :class:`~ehrdata.EHRData` object.
 
     Args:
         filename: The filename, or a Zarr storage class.

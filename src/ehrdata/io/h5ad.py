@@ -20,7 +20,7 @@ def read_h5ad(
     harmonize_missing_values: bool = True,
     cast_variables_to_float: bool = True,
 ) -> EHRData:
-    """Reads an h5ad file.
+    """Read a hdf5 (h5ad) file into an :class:`~ehrdata.EHRData` object.
 
     Args:
         filename: Path to the file or directory to read.
