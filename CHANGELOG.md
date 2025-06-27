@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.0.6] Not yet released
+## [0.0.6]
 
 ### Fixed
 - Cleaned up and updated tutorial notebooks ([#140](https://github.com/theislab/ehrdata/pull/140)) @agerardy
@@ -29,9 +29,6 @@ and this project adheres to [Semantic Versioning][].
 - {func}`~ehrdata.feature_type_overview` Overview of inferred feature types ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
 - {func}`~ehrdata.replace_feature_types` Replacing inferred feature types ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
 - {func}`~ehrdata.harmonize_missing_values` Harmonize missing values in an {class}`~ehrdata.EHRData` object ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
-
-
-### Modified
 
 ## [0.0.5]
 
