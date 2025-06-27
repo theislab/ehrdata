@@ -23,7 +23,7 @@ def read_csv(
     | None = None,
     **kwargs,
 ) -> EHRData:
-    """Reads a csv file.
+    """Read a comma-separated values (csv) file into an :class:`~ehrdata.EHRData` object.
 
     It first reads the csv file using :func:`pandas.read_csv`, and then passes the resulting :class:`~pandas.DataFrame` to :func:`ehrdata.io.from_pandas`.
     See the documentation of :func:`ehrdata.io.from_pandas` for more details of table layouts.
