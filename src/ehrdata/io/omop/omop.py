@@ -51,9 +51,9 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
     used_tables = []
     missing_tables = []
     unused_files = []
-    for file_name in os.listdir(path):  # noqa: PTH208
-        file_name_trunk = file_name.split(".")[0].lower()
-        regular_omop_table_name = file_name_trunk.replace(prefix, "")
+    for filename in os.listdir(path):  # noqa: PTH208
+        filename_trunk = filename.split(".")[0].lower()
+        regular_omop_table_name = filename_trunk.replace(prefix, "")
 
         if regular_omop_table_name in tables:
             used_tables.append(regular_omop_table_name)
@@ -61,7 +61,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
             dtype = {"measurement_source_value": str} if regular_omop_table_name == "measurement" else None
 
             # read raw csv as temporary table
-            temp_relation = backend_handle.read_csv(path / file_name, dtype=dtype)  # noqa: F841
+            temp_relation = backend_handle.read_csv(path / filename, dtype=dtype)  # noqa: F841
             backend_handle.execute("CREATE OR REPLACE TABLE temp_table AS SELECT * FROM temp_relation")
 
             # make query to create table with lowercase column names
@@ -81,8 +81,8 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
 
             backend_handle.execute("DROP TABLE temp_table")
 
-        elif file_name_trunk != DOWNLOAD_VERIFICATION_TAG:
-            unused_files.append(file_name)
+        elif filename_trunk != DOWNLOAD_VERIFICATION_TAG:
+            unused_files.append(filename)
 
     missing_tables = [table for table in tables if table not in used_tables]
 
@@ -151,7 +151,7 @@ def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.Dat
 
 
 def _create_enriched_var_with_unit_info(backend_handle, ds, var, unit_report) -> pd.DataFrame:
-    feature_concept_id_table = var  # ds["data_table_concept_id"].to_dataframe()
+    feature_concept_id_table = var  # ds["data_table_concept_id"].to_pandas()
 
     feature_concept_id_unit_table = pd.merge(
         feature_concept_id_table, unit_report, how="left", left_index=True, right_on="concept_id"
@@ -195,7 +195,7 @@ def setup_obs(
     *,
     death_table: bool = False,
 ):
-    """Setup the observation table for EHRData object.
+    """Setup the observation table for :class:`~ehrdata.EHRData` object.
 
     For this, a table from the OMOP CDM which represents the "observed unit" via an id should be selected.
     A unit can be a person, or the data of a person together with either the information from cohort, observation_period, or visit_occurrence.
@@ -270,7 +270,7 @@ def setup_variables(
     enrich_var_with_unit_info: bool = False,
     instantiate_tensor: bool = True,
 ):
-    """Extracts selected tables of a data-point character from the OMOP CDM..
+    """Extracts selected tables of a data-point character from the OMOP CDM.
 
     The distinct `concept_id` is encountered in the selected tables form the variables in the EHRData object.
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
@@ -285,7 +285,7 @@ def setup_variables(
 
     Args:
         backend_handle: The backend handle to the database.
-        edata: The EHRData object to which the variables should be added.
+        edata: Data object to which the variables should be added.
         data_tables: The tables to be used.
         data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
             'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
@@ -502,7 +502,7 @@ def setup_interval_variables(
 
     Args:
        backend_handle: The backend handle to the database.
-       edata: The EHRData object to which the variables should be added.
+       edata: Data object to which the variables should be added.
        data_tables: The tables to be used.
        data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
            'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
