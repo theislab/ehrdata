@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 from lamin_utils import logger
 
+from ehrdata.core.constants import DEFAULT_DATA_PATH
 from ehrdata.dt._dataloader import _download
 from ehrdata.io import read_csv, read_h5ad
 from ehrdata.io.omop import setup_connection
@@ -15,6 +15,7 @@ from ehrdata.io.omop._queries import _generate_timedeltas
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from pathlib import Path
 
     from duckdb.duckdb import DuckDBPyConnection
 
@@ -23,8 +24,6 @@ if TYPE_CHECKING:
 
 from scipy.sparse import csr_matrix
 from sparse import COO
-
-DEFAULT_DATA_PATH = Path("ehrapy_data")
 
 
 def ehrdata_blobs(
@@ -261,9 +260,7 @@ def _setup_eunomia_datasets(
 def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the MIMIC-IV demo data in the OMOP Common Data model.
 
-    Loads the MIMIC-IV demo dataset from its `physionet repository <https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel>`_.
-
-    DOI https://doi.org/10.13026/2d25-8g07.
+    Loads the MIMIC-IV demo dataset from its `physionet repository <https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel>`_ :cite:`kallfelz2021mimic`.
 
     Args:
         backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
@@ -381,14 +378,14 @@ def physionet2012(
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>`_.
 
-    If interval_length_number is 1, interval_length_unit is "h" (hour), and num_intervals is 48, this is the same as the `SAITS <https://arxiv.org/pdf/2202.08516>`_ preprocessing.
-    Truncated if a sample has more num_intervals steps; Padded if a sample has less than num_intervals steps.
+    If `interval_length_number` is 1, `interval_length_unit` is `"h"` (hour), and `num_intervals` is 48, this is the same as the `SAITS <https://arxiv.org/pdf/2202.08516>`_ preprocessing :cite:`du2023saits`.
+    Truncated if a sample has more `num_intervals` steps; Padded if a sample has less than `num_intervals` steps.
     Further, by default the following 12 samples are dropped since they have no time series information at all: 147514, 142731, 145611, 140501, 155655, 143656, 156254, 150309,
     140936, 141264, 150649, 142998.
-    Taken the defaults of interval_length_number, interval_length_unit, num_intervals, and drop_samples, the tensor stored in .r of edata is the same as when doing the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ preprocessing.
-    A simple deviation is that the tensor in ehrdata is of shape n_obs x n_vars x n_intervals (with defaults, 3000x37x48) while the tensor in PyPOTS is of shape n_obs x n_intervals x n_vars (3000x48x37).
-    The tensor stored in .r is hence also fully compatible with the PyPOTS package, as the .r tensor of EHRData objects generally is.
-    Note: In the original dataset, some missing values are encoded with a -1 for some entries of the variables 'DiasABP', 'NIDiasABP', and 'Weight'. Here, these are replaced with NaNs.
+    Taken the defaults of `interval_length_number`, `interval_length_unit`, `num_intervals`, and `drop_samples`, the tensor stored in `.R` of `edata` is the same as when doing the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ preprocessing :cite:`du2023pypots`.
+    A simple deviation is that the tensor in `ehrdata` is of shape `n_obs x n_vars x n_intervals` (with defaults, 3000x37x48) while the tensor in PyPOTS is of shape `n_obs x n_intervals x n_vars` (3000x48x37).
+    The tensor stored in `.R` is hence also fully compatible with the PyPOTS package, as the `.R` tensor of EHRData objects generally is.
+    Note: In the original dataset, some missing values are encoded with a -1 for some entries of the variables `'DiasABP'`, `'NIDiasABP'`, and `'Weight'`. Here, these are replaced with `NaN` s.
 
     Args:
        data_path: Path to the raw data. If the path exists, the data is loaded from there.
@@ -398,7 +395,7 @@ def physionet2012(
        num_intervals: Number of intervals.
        aggregation_strategy: Aggregation strategy for the time series data when multiple
            measurements for a person's parameter within a time interval is available.
-           Available are 'first' and 'last', as used in pandas.DataFrame.drop_duplicates.
+           Available are `'first'` and `'last'`, as used in :meth:`~pandas.DataFrame.drop_duplicates`.
        drop_samples: Samples to drop from the dataset (indicate their RecordID).
 
     Returns:
@@ -524,10 +521,12 @@ def mimic_2(
 ) -> EHRData:
     """Loads the MIMIC-II dataset.
 
-    This dataset was created for the purpose of a case study in the book: `Secondary Analysis of Electronic Health Records <https://link.springer.com/book/10.1007/978-3-319-43742-2>`_.
+    This dataset was created for the purpose of a case study in the book: `Secondary Analysis of Electronic Health Records <https://link.springer.com/book/10.1007/978-3-319-43742-2>`_ :cite:`critical2016secondary`.
     In particular, the dataset was used to investigate the effectiveness of indwelling arterial catheters in hemodynamically stable patients with respiratory failure for mortality outcomes.
-    The dataset is derived from MIMIC-II, the publicly-accessible critical care database. It contains summary clinical data and  outcomes for 1,776 patients.
-    More details: https://physionet.org/content/mimic2-iaccd/1.0/.
+    The dataset is derived from MIMIC-II, the publicly-accessible critical care database.
+    It contains summary clinical data and outcomes for 1,776 patients.
+
+    More details on the data can be found on `physionet <https://physionet.org/content/mimic2-iaccd/1.0/>`_.
 
     Args:
         columns_obs_only: Columns to include only in obs and not X.
@@ -555,11 +554,12 @@ def mimic_2_preprocessed() -> EHRData:
     This dataset is a preprocessed version of :func:`~ehrdata.dt.mimic_2`.
     The dataset was preprocessed according to: https://github.com/theislab/ehrapy-datasets/tree/main/mimic_2.
 
-    This dataset was created for the purpose of a case study in the book: `Secondary Analysis of Electronic Health Records <https://link.springer.com/book/10.1007/978-3-319-43742-2>`_.
+    This dataset was created for the purpose of a case study in the book: `Secondary Analysis of Electronic Health Records <https://link.springer.com/book/10.1007/978-3-319-43742-2>`_ :cite:`critical2016secondary`.
     In particular, the dataset was used to investigate the effectiveness of indwelling arterial catheters in hemodynamically stable patients with respiratory failure for mortality outcomes.
-    The dataset is derived from MIMIC-II, the publicly-accessible critical care database. It contains summary clinical data and  outcomes for 1,776 patients.
+    The dataset is derived from MIMIC-II, the publicly-accessible critical care database.
+    It contains summary clinical data and outcomes for 1,776 patients.
 
-    More details on the original dataset: https://physionet.org/content/mimic2-iaccd/1.0/.
+    More details on the data can be found on `physionet <https://physionet.org/content/mimic2-iaccd/1.0/>`_.
 
     Examples:
         >>> import ehrdata as ed
@@ -583,7 +583,7 @@ def diabetes_130_raw(
 ) -> EHRData:
     """Loads the raw diabetes-130 dataset.
 
-    More details: http://archive.ics.uci.edu/ml/datasets/Diabetes+130-US+hospitals+for+years+1999-2008 [1]
+    More details and the original dataset can be found `here <http://archive.ics.uci.edu/ml/datasets/Diabetes+130-US+hospitals+for+years+1999-2008>`_ :cite:`strack2014impact`.
 
     Args:
         columns_obs_only: Columns to include in `obs` only and not `X`.
@@ -592,8 +592,6 @@ def diabetes_130_raw(
         >>> import ehrdata as ed
         >>> edata = ed.dt.diabetes_130_raw()
 
-    References:
-        [1] Beata Strack, Jonathan P. DeShazo, Chris Gennings, Juan L. Olmo, Sebastian Ventura, Krzysztof J. Cios, and John N. Clore, “Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records,” BioMed Research International, vol. 2014, Article ID 781670, 11 pages, 2014.
     """
     _download(
         url="https://figshare.com/ndownloader/files/45110029",
@@ -614,11 +612,9 @@ def diabetes_130_fairlearn(
 ) -> EHRData:
     """Loads the preprocessed diabetes-130 dataset by fairlearn.
 
-    This loads the dataset from the `fairlearn.datasets.fetch_diabetes_hospital` function.
+    This loads the dataset from the `fairlearn.datasets.fetch_diabetes_hospital <https://fairlearn.org/v0.10/api_reference/generated/fairlearn.datasets.fetch_diabetes_hospital.html#fairlearn.datasets.fetch_diabetes_hospital>`_ function. :cite:`bird2020fairlearn`
 
-    More details: http://archive.ics.uci.edu/ml/datasets/Diabetes+130-US+hospitals+for+years+1999-2008 [1]
-
-    Preprocessing: https://fairlearn.org/v0.10/api_reference/generated/fairlearn.datasets.fetch_diabetes_hospital.html#fairlearn.datasets.fetch_diabetes_hospital [2]
+    More details and the original dataset can be found `here <http://archive.ics.uci.edu/ml/datasets/Diabetes+130-US+hospitals+for+years+1999-2008>`_.
 
     Args:
         columns_obs_only: Columns to include in `obs` only and not `X`.
@@ -627,10 +623,6 @@ def diabetes_130_fairlearn(
         >>> import ehrdata as ed
         >>> edata = ed.dt.diabetes_130_fairlearn()
 
-    References:
-        [1] Beata Strack, Jonathan P. DeShazo, Chris Gennings, Juan L. Olmo, Sebastian Ventura, Krzysztof J. Cios, and John N. Clore, “Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records,” BioMed Research International, vol. 2014, Article ID 781670, 11 pages, 2014.
-
-        [2] Bird, S., Dudík, M., Edgar, R., Horn, B., Lutz, R., Milan, V., ... & Walker, K. (2020). Fairlearn: A toolkit for assessing and improving fairness in AI. Microsoft, Tech. Rep. MSR-TR-2020-32.
     """
     _download(
         url="https://figshare.com/ndownloader/files/45110371",

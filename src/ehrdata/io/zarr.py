@@ -30,7 +30,7 @@ def read_zarr(
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ep.dt.mimic_2()
+        >>> edata = ed.dt.mimic_2()
         >>> ed.io.write_zarr("mimic_2.zarr", edata)
         >>> edata_from_zarr = ed.io.read_zarr("mimic_2.zarr")
     """

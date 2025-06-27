@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 from dateutil.parser import isoparse  # type: ignore
+from fast_array_utils.conv import to_dense
 from lamin_utils import logger
 from rich import print
 from rich.tree import Tree
@@ -23,7 +24,7 @@ def _detect_feature_type(col: pd.Series) -> tuple[Literal["date", "categorical",
     """Detect the feature type of a :class:`~pandas.Series`.
 
     Args:
-        col: The column to detect the feature type for.
+        col: The series to detect the feature type of.
 
     Returns:
         The detected feature type (one of 'date', 'categorical', or 'numeric') and a boolean, which is True if the feature type is uncertain.
@@ -102,7 +103,7 @@ def infer_feature_types(
     X = edata.X if layer is None else edata.layers[layer]
 
     if issparse(X):
-        X = X.toarray()
+        X = to_dense(X)
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
 
@@ -123,7 +124,7 @@ def infer_feature_types(
     if verbose:
         logger.warning(
             f"{'Features' if len(uncertain_features) > 1 else 'Feature'} {str(uncertain_features)[1:-1]} {'were' if len(uncertain_features) > 1 else 'was'} detected as categorical features stored numerically."
-            f"Please verify and correct using `ed.replace_feature_types` if necessary."
+            f"Please verify and adjust if necessary using `ed.replace_feature_types`."
         )
 
         logger.info(
@@ -224,7 +225,11 @@ def feature_type_overview(edata: EHRData) -> None:
 
     branch = tree.add("🗂️[b] Categorical features")
     cat_features = edata.var_names[edata.var[FEATURE_TYPE_KEY] == CATEGORICAL_TAG]
-    df = pd.DataFrame(edata[:, cat_features].X.toarray(), columns=cat_features)
+
+    df = pd.DataFrame(
+        to_dense(edata[:, cat_features].X) if issparse(edata[:, cat_features].X) else edata[:, cat_features].X,
+        columns=cat_features,
+    )
 
     if "encoding_mode" in edata.var:
         unencoded_vars = edata.var.loc[cat_features, "unencoded_var_names"].unique().tolist()
@@ -248,7 +253,7 @@ def feature_type_overview(edata: EHRData) -> None:
 def replace_feature_types(
     edata: EHRData,
     features: Iterable[str],
-    corrected_type: str,
+    corrected_type: Literal["categorical", "numeric", "date"],
 ) -> None:
     """Correct the feature types for a list of features inplace.
 

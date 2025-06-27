@@ -1,3 +1,5 @@
+from pathlib import Path
+
 R_LAYER_KEY = "R_layer"
 
 
@@ -28,3 +30,10 @@ MISSING_VALUES = (
 # The format of the pandas dataframe to be used in the to_pandas and from_pandas functions
 
 PANDAS_FORMATS = ["flat", "wide", "long"]
+
+
+# Default data path
+# ------------------
+# The default path to store and load data
+
+DEFAULT_DATA_PATH = Path("ehrapy_data")

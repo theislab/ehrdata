@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 from typing import TYPE_CHECKING
 
@@ -8,7 +10,7 @@ if TYPE_CHECKING:
 from lamin_utils import logger
 
 
-def _cast_variables_to_float(edata: "EHRData") -> None:
+def _cast_variables_to_float(edata: EHRData) -> None:
     """Cast the dtype of variables to float, and overwrite the values of the original arrays with the casted columns."""
     if edata.isbacked:
         msg = "Cannot cast variables to float when EHRData is backed."
@@ -26,7 +28,7 @@ def _cast_variables_to_float(edata: "EHRData") -> None:
                     edata.layers[key][:, column] = edata.layers[key][:, column].astype(np.float64)
 
 
-def _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata: "EHRData") -> "EHRData":
+def _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata: EHRData) -> EHRData:
     """Cast the dtype of object arrays to float, and if this fails, to str."""
     if edata.X is not None and edata.X.dtype == np.object_:
         edata = edata.copy()

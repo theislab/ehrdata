@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 import xarray as xr
+from fast_array_utils.conv import to_dense
 from scipy.sparse import issparse
 
 if TYPE_CHECKING:
@@ -28,15 +29,28 @@ def from_pandas(
     """Transform a given :class:`~pandas.DataFrame` into an :class:`~ehrdata.EHRData` object.
 
     Note that columns containing boolean values (either 0/1 or T(t)rue/F(f)alse)
-    will be stored as boolean columns whereas the other non-numerical columns will be stored as categorical values.
+    will be stored as boolean columns.
+    The other non-numerical columns will be stored as categorical values.
 
     Args:
         df: The dataframe to be transformed.
         columns_obs_only: Column names that should belong to `obs` only and not `X`.
-        index_column: The index column of `obs`. This can be either a column name (or its numerical index in the DataFrame) or the index of the dataframe.
-        format: The format of the input dataframe. If the data is not longitudinal, choose `format="flat"`. If the data is longitudinal in the long format, choose `format="long"`. If the data is longitudinal in a wide format, choose `format="wide"`.
-        wide_format_time_suffix: Use only if `format="wide"`. Suffices in the variable columns that indicate the time of the observation. The collected suffices will be sorted lexicographically, and the variables ordered accordingly along the 3rd axis of the :class:`~ehrdata.EHRData` object.
-        long_format_keys: Use only if `format="long"`. The keys of the dataframe in the long format. The dictionary should have the following structure: `{"observation_column": "<the column name of the observation ids>", "variable_column": "<the column name of the variable ids>", "time_column": "<the column name of the time>", "value_column": "<the column name of the values>"}`.
+        index_column: The index column of `obs`.
+            This can be either a column name (or its numerical index in the DataFrame) or the index of the dataframe.
+        format: The format of the input dataframe.
+            If the data is not longitudinal, choose `format="flat"`.
+            If the data is longitudinal in the long format, choose `format="long"`.
+            If the data is longitudinal in a wide format, choose `format="wide"`.
+        wide_format_time_suffix: Use only if `format="wide"`.
+            Suffices in the variable columns that indicate the time of the observation.
+            The collected suffices will be sorted lexicographically.
+            The variables will be ordered accordingly along the 3rd axis of the :class:`~ehrdata.EHRData` object.
+        long_format_keys: Use only if `format="long"`.
+            The keys of the dataframe in the long format.
+            The dictionary should have the following structure: `{"observation_column": "<the column name of the observation ids>",
+            "variable_column": "<the column name of the variable ids>",
+            "time_column": "<the column name of the time>",
+            "value_column": "<the column name of the values>"}`.
 
     Examples:
         >>> import ehrdata as ed
@@ -128,13 +142,14 @@ def from_pandas(
 
     # index column:
     if format in ["flat", "wide"]:
-        # Check and handle the overlap of index_column in columns_obs_only
         if index_column is not None:
+            # Because an integer is allowed to specify the index column, we need to check if it is out of bounds.
             if isinstance(index_column, int):
                 if index_column >= len(df.columns):
                     err_msg = f"index_column integer index is out of bounds. DataFrame has {len(df.columns)} columns."
                     raise IndexError(err_msg)
                 index_column = df.columns[index_column]
+            # Because the column name is allowed to specify the index column, we need to check it is a valid column name.
             if not df.index.name or df.index.name != index_column:
                 if index_column in df.columns:
                     df = df.set_index(index_column)
@@ -336,7 +351,7 @@ def to_pandas(
     var_names = edata.var_names if var_col is None else edata.var[var_col]
 
     if issparse(X):  # pragma: no cover
-        X = X.toarray()
+        X = to_dense(X)
 
     if format == "wide":
         if len(X.shape) == 2:
