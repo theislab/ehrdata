@@ -30,9 +30,9 @@ XDataType: TypeAlias = (
     | DaskArray
     | CupyArray
     | CupySparseMatrix
+    | COO
 )
 
-RDataType: TypeAlias = np.ndarray | COO | DaskArray
 
 EHRDataElem = Literal[
     "obs",

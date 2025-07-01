@@ -8,8 +8,8 @@ from anndata import AnnData
 from anndata._core.views import DataFrameView, _resolve_idx
 from sparse import COO
 
-from ehrdata._types import DaskArray, RDataType, XDataType
-from ehrdata.core.constants import R_LAYER_KEY
+from ehrdata._types import DaskArray, XDataType
+from ehrdata.core.constants import X_LAYER_KEY
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -19,6 +19,28 @@ if TYPE_CHECKING:
     from anndata._core.index import Index1D
 
     Index: TypeAlias = ADIndex | tuple[Index1D, Index1D, Index1D]
+
+
+def _get_array_3d_dim(X: XDataType | None) -> int | None:
+    if X is not None and len(X.shape) == 3 and X.shape[2] > 1:
+        return X.shape[2]
+    else:
+        return None
+
+
+def _get_layers_3d_dim(layers: Mapping[str, Any] | None) -> tuple[int, int, int] | tuple[int, int]:
+    if layers is None or len(layers) == 0:
+        return None
+    else:
+        shape_3d = {}
+        for key, value in layers.items():
+            shape_3d[key] = _get_array_3d_dim(value)
+
+        if len(set(shape_3d.values())) > 1:
+            msg = "All layer 3rd dimensions must have the same shape"
+            raise ValueError(msg)
+        else:
+            return set(shape_3d.values()).pop()
 
 
 class EHRData(AnnData):
@@ -56,7 +78,7 @@ class EHRData(AnnData):
         self,
         X: XDataType | pd.DataFrame | None = None,
         *,
-        R: RDataType | None = None,
+        # R: RDataType | None = None,
         obs: pd.DataFrame | Mapping[str, Iterable[Any]] | None = None,
         var: pd.DataFrame | Mapping[str, Iterable[Any]] | None = None,
         tem: pd.DataFrame | None = None,
@@ -79,36 +101,43 @@ class EHRData(AnnData):
         self._tidx = None
 
         # Check if r is already present in layers
-        R_existing = layers.get(R_LAYER_KEY) if layers is not None else None
-        if R is not None and R_existing is not None:
-            msg = f"`R` is both specified and already present in `layers[{R_LAYER_KEY}]`."
+        X_existing = layers.get(X_LAYER_KEY) if layers is not None else None
+        if X is not None and X_existing is not None:
+            msg = f"`X` is both specified and already present in `layers[{X_LAYER_KEY}]`."
             raise ValueError(msg)
 
-        R = R if R is not None else R_existing
+        X = X if X is not None else X_existing
 
-        # Type checking for r
-        if R is not None and not isinstance(R, (np.ndarray, COO, DaskArray)):  # type: ignore  # noqa: UP038
-            msg = f"`R` must be numpy.ndarray, sparse.COO, or dask.array.Array, got {type(R)}"
+        # Type checking for X
+        if X is not None and not isinstance(X, (np.ndarray, COO, DaskArray)):  # type: ignore  # noqa: UP038
+            msg = f"`X` must be numpy.ndarray, sparse.COO, or dask.array.Array, got {type(X)}"
             raise TypeError(msg)
 
         # Shape handling
-        if R is not None:
-            if len(R.shape) != 3:
-                msg = f"`R` must be 3-dimensional, got shape {R.shape}"
-                raise ValueError(msg)
+        # if X is not None:
+        # if len(R.shape) != 3:
+        #     msg = f"`R` must be 3-dimensional, got shape {R.shape}"
+        #     raise ValueError(msg)
+        self._n_t = _get_array_3d_dim(X)
+        # if X is not None and len(X.shape) == 3 and X.shape[2] > 1:
+        #     self._n_t = X.shape[2]
 
-            self._n_t = R.shape[2]
+        # if X is not None:
+        #     if X.shape[:2] != R.shape[:2]:
+        #         msg = f"Shape mismatch between X {X.shape} and R {R.shape}"
+        #         raise ValueError(msg)
+        # else:
+        #     # Create empty X matching R's shape
+        #     X = np.nan * np.empty((R.shape[0], R.shape[1]))
 
-            if X is not None:
-                if X.shape[:2] != R.shape[:2]:
-                    msg = f"Shape mismatch between X {X.shape} and R {R.shape}"
-                    raise ValueError(msg)
+        if X is not None:
+            if layers is None:
+                layers = {X_LAYER_KEY: X}
             else:
-                # Create empty X matching R's shape
-                X = np.nan * np.empty((R.shape[0], R.shape[1]))
+                layers.update({X_LAYER_KEY: X})
 
         super().__init__(
-            X=X,
+            X=None,
             obs=obs,
             var=var,
             uns=uns,
@@ -128,31 +157,31 @@ class EHRData(AnnData):
         )
 
         # Can set r, tidx only after AnnData initialization
-        self.R = R
+        # self.R = R
         self._tidx = tidx
 
         # Handle tem
-        if R is None and tem is None:
+        if self.n_t is None and tem is not None:
             self.tem = pd.DataFrame([])
 
-        elif R is None and tem is not None:
+        elif self.n_t is None and tem is not None:
             self._n_t = len(tem)
             self.tem = tem
 
-        elif R is not None and tem is not None:
+        elif self.n_t is not None and tem is not None:
             if not isinstance(tem, pd.DataFrame):
                 msg = f"`tem` must be pandas.DataFrame, got {type(tem)}"
                 raise TypeError(msg)
 
-            if len(tem) != R.shape[2]:
-                msg = f"Shape mismatch between R's third dimension {R.shape[2]} and tem {len(tem)}"
+            if len(tem) != self.n_t:
+                msg = f"Shape mismatch between X's third dimension {X.shape[2]} and tem {len(tem)}"
                 raise ValueError(msg)
 
             self.tem = tem
 
-        elif R is not None:
+        elif self.n_t is not None:
             # Default tem with RangeIndex
-            l = 1 if R is None or len(R.shape) <= 2 else R.shape[2]
+            l = 1 if X is None or len(X.shape) <= 2 else X.shape[2]
             self.tem = pd.DataFrame(index=pd.RangeIndex(l))
 
     @classmethod
@@ -160,7 +189,8 @@ class EHRData(AnnData):
         cls,
         adata: AnnData,
         *,
-        R: np.ndarray | None = None,
+        # R: np.ndarray | None = None,
+        layers: Mapping[str, np.ndarray] | None = None,
         tem: pd.DataFrame | None = None,
         tidx: slice | None = None,
     ) -> EHRData:
@@ -183,7 +213,7 @@ class EHRData(AnnData):
             # The tidx is not part of AnnData, so we need to set it separately. Setting it is required for the getter of r
             instance._tidx = tidx
             # _n_t is not part of AnnData, so need to set it separately
-            instance._n_t = None if R is None else R.shape[2]
+            instance._n_t = _get_array_3d_dim(layers.get(X_LAYER_KEY) if layers is not None else None)
 
             # tem is not part of AnnData, so we need to set it separately
             if tem is not None:
@@ -192,7 +222,7 @@ class EHRData(AnnData):
         else:
             # For actual objects, initialize normally
             instance._init_as_actual(
-                X=adata.X,
+                X=None,  # TODO: or layers, or error if both exist?
                 obs=adata.obs,
                 var=adata.var,
                 uns=adata.uns,
@@ -202,53 +232,54 @@ class EHRData(AnnData):
                 varp=adata.varp,
                 raw=adata.raw,
                 layers=adata.layers,
+                # if adata.layers is not None
+                # else {X_LAYER_KEY: adata.X},  # TODO raise error if X layer key in layers?
                 shape=adata.shape if adata.X is None else None,
                 filename=adata.filename,
                 filemode=adata.file._filemode,
             )
-            # Set R and tem directly for actual objects
-            if R is None:
-                instance._n_t = 0
-            else:
-                instance._n_t = R.shape[2]
-                instance.layers[R_LAYER_KEY] = R
+
+            instance._n_t = _get_layers_3d_dim(layers)
+            if layers is not None:
+                for key, value in layers.items():
+                    instance.layers[key] = value
             if tem is not None:
                 instance.tem = tem
 
         return instance
 
-    @property
-    def R(self) -> np.ndarray | None:
-        """3-Dimensional tensor, aligned with obs along first axis, var along second axis, with a third time axis."""
-        if self.is_view:
-            if self._adata_ref.layers.get(R_LAYER_KEY) is None:
-                return None
-            else:
-                return self.layers.get(R_LAYER_KEY)[:, :, self._tidx]
-        else:
-            return self.layers.get(R_LAYER_KEY)
+    # @property
+    # def R(self) -> np.ndarray | None:
+    #     """3-Dimensional tensor, aligned with obs along first axis, var along second axis, with a third time axis."""
+    #     if self.is_view:
+    #         if self._adata_ref.layers.get(R_LAYER_KEY) is None:
+    #             return None
+    #         else:
+    #             return self.layers.get(R_LAYER_KEY)[:, :, self._tidx]
+    #     else:
+    #         return self.layers.get(R_LAYER_KEY)
 
-    @R.setter
-    def R(self, input: RDataType | None) -> None:
-        if input is not None and len(input.shape) != 3:
-            msg = f"`R` must be 3-dimensional, got shape {input.shape}"
-            raise ValueError(msg)
-        if input is not None and input.shape != self.shape:
-            msg = f"`R` must be of shape of EHRData {self.shape}, but is {input.shape}"
-            raise ValueError(msg)
+    # @R.setter
+    # def R(self, input: RDataType | None) -> None:
+    #     if input is not None and len(input.shape) != 3:
+    #         msg = f"`R` must be 3-dimensional, got shape {input.shape}"
+    #         raise ValueError(msg)
+    #     if input is not None and input.shape != self.shape:
+    #         msg = f"`R` must be of shape of EHRData {self.shape}, but is {input.shape}"
+    #         raise ValueError(msg)
 
-        self._n_t = 0 if input is None else input.shape[2]
+    #     self._n_t = 0 if input is None else input.shape[2]
 
-        if input is None:
-            del self.R
-        else:
-            self.layers[R_LAYER_KEY] = input
+    #     if input is None:
+    #         del self.R
+    #     else:
+    #         self.layers[R_LAYER_KEY] = input
 
-    @R.deleter
-    def R(self) -> None:
-        self.layers.pop(R_LAYER_KEY, None)
-        self._n_t = 0
-        self.tem = pd.DataFrame([])
+    # @R.deleter
+    # def R(self) -> None:
+    #     self.layers.pop(R_LAYER_KEY, None)
+    #     self._n_t = 0
+    #     self.tem = pd.DataFrame([])
 
     @property
     def tem(self) -> pd.DataFrame:
@@ -283,17 +314,53 @@ class EHRData(AnnData):
     @property
     def X(self):
         """Data matrix."""
-        return super().X
+        if self.is_view:
+            if self._adata_ref.layers.get(X_LAYER_KEY) is None:
+                return None
+            elif _get_array_3d_dim(self.layers.get(X_LAYER_KEY)) is None:
+                return self.layers.get(X_LAYER_KEY)
+            else:
+                return self.layers.get(X_LAYER_KEY)[:, :, self._tidx]
+        else:
+            return self.layers.get(X_LAYER_KEY)
+        # return self.layers.get(X_LAYER_KEY)
 
+    ############################################################
+    # @R.setter
+    # def R(self, input: RDataType | None) -> None:
+    #     if input is not None and len(input.shape) != 3:
+    #         msg = f"`R` must be 3-dimensional, got shape {input.shape}"
+    #         raise ValueError(msg)
+
+    #     self._n_t = 0 if input is None else input.shape[2]
+
+    #     if input is None:
+    #         del self.R
+    #     else:
+    #         self.layers[R_LAYER_KEY] = input
+
+    ############################################################
     @X.setter
-    def X(self, value):
-        # this is a bit hacky, but anndata checks its own shape to match the shape of X
-        n_t = self.n_t
-        self._n_t = None
+    def X(self, value: XDataType | None) -> None:
+        # this is a bit hacky, but anndata checks its own shape to match the shape of X. TODO Think can be deleted now?
+        # n_t = self.n_t
+        # self._n_t = None
 
-        super(EHRData, self.__class__).X.fset(self, value)
+        shape_2d = _get_array_3d_dim(value)
+        if value is not None and shape_2d is not None and shape_2d != self.n_t:
+            msg = f"`X` must be of shape of EHRData {self.shape}, but is {value.shape}"
+            raise ValueError(msg)
 
-        self._n_t = n_t
+        if value is None:
+            del self.X
+        else:
+            self.layers[X_LAYER_KEY] = value
+
+        # self._n_t = n_t
+
+    @X.deleter
+    def X(self) -> None:
+        del self.layers[X_LAYER_KEY]
 
     @property
     def shape(self) -> tuple[int, int] | tuple[int, int, int]:
@@ -317,16 +384,16 @@ class EHRData(AnnData):
         lines_ehrdata = []
         position_of_t = 1
         for line in lines_anndata:
-            if "layers:" in line and R_LAYER_KEY in line:
-                # Handle case where r_layer is the only layer
-                if line == f"    layers: '{R_LAYER_KEY}'":
+            if "layers:" in line and X_LAYER_KEY in line:
+                # Handle case where X_layer is the only layer
+                if line == f"    layers: '{X_LAYER_KEY}'":
                     # Skip this line completely
                     continue
-                # Handle case where r_layer is among other layers
-                line = line.replace(f"'{R_LAYER_KEY}', ", "")
-                line = line.replace(f", '{R_LAYER_KEY}'", "")
+                # Handle case where X_layer is among other layers
+                line = line.replace(f"'{X_LAYER_KEY}', ", "")
+                line = line.replace(f", '{X_LAYER_KEY}'", "")
 
-            if self.R is not None and "n_obs × n_vars" in line:
+            if self.X is not None and "n_obs × n_vars" in line:
                 line_splits = line.split("object with")
                 line = line_splits[0] + f"object with n_obs × n_vars × n_t = {self.n_obs} × {self.n_vars} × {self.n_t}"
 
@@ -344,8 +411,8 @@ class EHRData(AnnData):
         shape_info = []
         if self.X is not None:
             shape_info.append(f"shape of .X: {self.X.shape}")
-        if self.R is not None:
-            shape_info.append(f"shape of .R: {self.R.shape}")
+        # if self.R is not None:
+        #     shape_info.append(f"shape of .R: {self.R.shape}")
 
         if shape_info:
             lines_ehrdata.extend(["    " + info for info in shape_info])
@@ -377,8 +444,15 @@ class EHRData(AnnData):
         if isinstance(tidx, (int | np.integer)):
             tidx = slice(tidx, tidx + 1)
 
-        r_sliced = None if self.R is None else adata_sliced.layers[R_LAYER_KEY][:, :, tidx]
-        return EHRData.from_adata(adata=adata_sliced, R=r_sliced, tem=tem_sliced, tidx=tidx)
+        # r_sliced = None if self.R is None else adata_sliced.layers[R_LAYER_KEY][:, :, tidx]
+        sliced_layers = {}
+        for key, value in adata_sliced.layers.items():
+            if _get_array_3d_dim(value) is not None:
+                sliced_layers[key] = value[:, :, tidx]
+            else:
+                sliced_layers[key] = value
+
+        return EHRData.from_adata(adata=adata_sliced, layers=sliced_layers, tem=tem_sliced, tidx=tidx)
 
     def _unpack_index(self, index: Index) -> tuple[Index1D, Index1D, Index1D]:
         if not isinstance(index, tuple):
@@ -395,9 +469,17 @@ class EHRData(AnnData):
 
     def copy(self) -> EHRData:
         """Returns a copy of the EHRData object."""
-        return EHRData.from_adata(
+        # Because anndata's copy only accepts 2D X, need to hide X from it.
+        X = self.X
+        self.X = None
+        edata_copy = EHRData.from_adata(
             super().copy(),
-            R=None if self.R is None else self.R.copy(),
+            # R=None if self.R is None else self.R.copy(),
+            layers=self.layers.copy(),
             tem=None if self.tem is None else self.tem.copy(),
             tidx=self._tidx,
         )
+        self.X = X
+        edata_copy.X = X.copy() if X is not None else None
+
+        return edata_copy
