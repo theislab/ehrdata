@@ -1,7 +1,6 @@
 from pathlib import Path
 
 R_LAYER_KEY = "R_layer"
-X_LAYER_KEY = "_X_layer"
 
 
 # Typing Column
