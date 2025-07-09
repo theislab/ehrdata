@@ -269,6 +269,7 @@ def setup_variables(
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
     instantiate_tensor: bool = True,
+    layer_name: str = "tem_layer",
 ):
     """Extracts selected tables of a data-point character from the OMOP CDM.
 
@@ -307,6 +308,7 @@ def setup_variables(
             data points with missing unit information (NULL in either 'unit_concept_id'
             or 'unit_source_value'), the value NULL/NaN is considered a single unit.
         instantiate_tensor: Whether to instantiate the tensor into the .r field of the EHRData object.
+        layer_name: The name of the layer to be used for the tensor.
 
     Returns:
         An :class:`~ehrdata.EHRData` object with populated `.r` and `.var` field.
@@ -437,13 +439,13 @@ def setup_variables(
 
     var = pd.concat(var_collector.values(), axis=0)
 
-    r = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
+    tem_layer = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
 
     tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
     var.index = var.index.astype(str)
 
-    edata = EHRData(R=r, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+    edata = EHRData(layers={layer_name: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
     for data_table in data_tables:
         edata.uns[f"unit_report_{data_table}"] = unit_report_collector[data_table]
@@ -488,6 +490,7 @@ def setup_interval_variables(
     enrich_var_with_feature_info: bool = False,
     keep_date: Literal["start", "end", "interval"] = "start",
     instantiate_tensor: bool = True,
+    layer_name: str = "tem_layer",
 ):
     """Extracts selected tables of a time-span character from the OMOP CDM.
 
@@ -520,6 +523,7 @@ def setup_interval_variables(
            information. If a concept_id is not found in the concept table, the feature information will be NaN.
        keep_date: Whether to keep the start or end date, or the interval span.
        instantiate_tensor: Whether to instantiate the tensor into the .r field of the EHRData object.
+       layer_name: The name of the layer to be used for the tensor.
 
     Returns:
         An EHRData object with populated `.r` and `.var` field.
@@ -621,13 +625,13 @@ def setup_interval_variables(
 
     var = pd.concat(var_collector.values(), axis=0)
 
-    r = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
+    tem_layer = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
 
     tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
     var.index = var.index.astype(str)
 
-    edata = EHRData(R=r, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+    edata = EHRData(layers={layer_name: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
     return edata
 

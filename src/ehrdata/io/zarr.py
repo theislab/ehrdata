@@ -71,7 +71,7 @@ def write_zarr(
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
-    To write to a `.zarr` file, `X`, `R`, and `layers` cannot be written as  `object` dtype.
+    To write to a `.zarr` file, `X` and `layers` cannot be written as  `object` dtype.
     If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
 
     Args:

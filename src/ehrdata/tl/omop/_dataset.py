@@ -30,7 +30,7 @@ class EHRDataset(torch.utils.data.Dataset):
         """:class:`~torch.utils.data.Dataset` for a :class:`~ehrdata.EHRData` object.
 
         This function builds a :class:`~torch.utils.data.Dataset` for a :class:`~ehrdata.EHRData` object. The :class:`~ehrdata.EHRData` object is assumed to be in the OMOP CDM format.
-        It is a Dataset structure for the tensor in ehrdata.R, in a suitable format for :class:`~pytorch.utils.data.DataLoader`.
+        It is a Dataset structure for the tensor, in a suitable format for :class:`~pytorch.utils.data.DataLoader`.
         This allows to stream the data in batches from the RDBMS, not requiring to load the entire dataset in memory.
 
         Args:

@@ -30,7 +30,7 @@ def test_read_h5ad_basic(backed, harmonize_missing_values, cast_variables_to_flo
         cast_variables_to_float=cast_variables_to_float,
     )
 
-    _assert_shape_matches(edata, (5, 4, 0), check_R_None=True)
+    _assert_shape_matches(edata, (5, 4, 1))
     _assert_io_read(edata)
 
 

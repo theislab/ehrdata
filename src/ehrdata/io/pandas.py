@@ -202,11 +202,13 @@ def from_pandas(
         variables = np.array(variables)
         timepoints = np.array(timepoints)
 
-        R = np.full((len(df), len(unique_variables), len(unique_timepoints)), np.nan)
+        tem_layer = np.full((len(df), len(unique_variables), len(unique_timepoints)), np.nan)
         for i, timepoint in enumerate(unique_timepoints):
             for j, variable in enumerate(unique_variables):
                 if variable + wide_format_time_suffix + timepoint in df.columns:
-                    R[:, j, i] = df.loc[:, (variables == variable) & (timepoints == timepoint)].to_numpy().flatten()
+                    tem_layer[:, j, i] = (
+                        df.loc[:, (variables == variable) & (timepoints == timepoint)].to_numpy().flatten()
+                    )
 
         obs.index = obs.index.astype(str)
         var = pd.DataFrame(index=unique_variables)
@@ -214,7 +216,7 @@ def from_pandas(
         tem = pd.DataFrame(index=unique_timepoints)
         tem.index = tem.index.astype(str)
 
-        edata = EHRData(R=R, obs=obs, var=var, tem=tem)
+        edata = EHRData(layers={"tem_layer": tem_layer}, obs=obs, var=var, tem=tem)
 
     elif format == "long":
         if index_column is not None:
@@ -248,14 +250,14 @@ def from_pandas(
             ]
         ).to_xarray()
 
-        R = xr_dataarray[long_format_keys["value_column"]].values
+        tem_layer = xr_dataarray[long_format_keys["value_column"]].values
 
         var = pd.DataFrame(index=xr_dataarray[long_format_keys["variable_column"]].values)
         var.index = var.index.astype(str)
         tem = pd.DataFrame(index=xr_dataarray[long_format_keys["time_column"]].values)
         tem.index = tem.index.astype(str)
 
-        edata = EHRData(R=R, obs=obs, var=var, tem=tem)
+        edata = EHRData(layers={"tem_layer": tem_layer}, obs=obs, var=var, tem=tem)
 
     edata.obs_names = edata.obs_names.astype(str)
     edata.var_names = edata.var_names.astype(str)
@@ -345,11 +347,8 @@ def to_pandas(
         err_msg = f"Variable column {var_col} not found in edata.var"
         raise ValueError(err_msg)
 
-    if layer is not None:
-        if layer == "X":
-            layer = None
-        if layer == "R":
-            layer = "R_layer"
+    if layer == "X":
+        layer = None
     X = edata.layers[layer] if layer is not None else edata.X
 
     var_names = edata.var_names if var_col is None else edata.var[var_col]

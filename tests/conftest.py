@@ -9,24 +9,16 @@ import pytest
 import sparse as sp
 
 from ehrdata import EHRData
-from ehrdata.core.constants import R_LAYER_KEY
 from ehrdata.io.omop import setup_connection
 
 
-def _assert_shape_matches(
-    edata: EHRData, shape: tuple[int, int, int], *, check_X_None: bool = False, check_R_None: bool = False
-):
+def _assert_shape_matches(edata: EHRData, shape: tuple[int, int, int], *, check_X_None: bool = False):
     assert edata.shape == shape
 
     if check_X_None:
         assert edata.X is None
     else:
         assert edata.X.shape == shape[0:2]
-
-    if check_R_None:
-        assert edata.R is None
-    else:
-        assert edata.R.shape == shape
 
     assert isinstance(edata.obs, pd.DataFrame)
     assert len(edata.obs) == shape[0]
@@ -41,8 +33,7 @@ def _assert_shape_matches(
     assert edata.n_t == shape[2]
 
     for key in edata.layers:
-        if key != R_LAYER_KEY:
-            assert edata.layers[key].shape == shape[0:2]
+        assert edata.layers[key].shape in [shape, shape[0:2], (shape[0], shape[1], 1)]
 
 
 def _assert_dtype_object_array_with_missing_values_equal(a: np.ndarray, b: np.ndarray):
@@ -82,22 +73,22 @@ def X_numpy_33():
 
 
 @pytest.fixture
-def R_numpy_322():
+def X_numpy_322():
     return np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]])
 
 
 @pytest.fixture
-def R_sparse_322():
+def X_sparse_322():
     return sp.COO(np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]))
 
 
 @pytest.fixture
-def R_dask_322():
+def X_dask_322():
     return da.from_array(np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]), chunks=(3, 2, 2))
 
 
 @pytest.fixture
-def R_numpy_333():
+def X_numpy_333():
     return np.arange(1, 28).reshape(3, 3, 3)
 
 
@@ -132,8 +123,8 @@ def tem_31():
 
 
 @pytest.fixture
-def edata_333(X_numpy_33, R_numpy_333, obs_31, var_31, tem_31):
-    return EHRData(X=X_numpy_33, R=R_numpy_333, obs=obs_31, var=var_31, tem=tem_31)
+def edata_333(X_numpy_33, X_numpy_333, obs_31, var_31, tem_31):
+    return EHRData(X=X_numpy_33, layers={"tem_layer": X_numpy_333}, obs=obs_31, var=var_31, tem=tem_31)
 
 
 @pytest.fixture
@@ -204,12 +195,11 @@ def edata_nonnumeric_missing_330(obs_31, var_31):
 def edata_basic_with_tem_full():
     edata_basic_with_tem_dict = {
         "X": np.ones((5, 4)),
-        "R": np.ones((5, 4, 2)),
         "obs": pd.DataFrame({"survival": [1, 2, 3, 4, 5]}),
         "var": pd.DataFrame({"variables": ["var_1", "var_2", "var_3", "var_4"]}),
         "obsm": {"obs_level_representation": np.ones((5, 2))},
         "varm": {"var_level_representation": np.ones((4, 2))},
-        "layers": {"other_layer": np.ones((5, 4))},
+        "layers": {"tem_layer": np.ones((5, 4)), "other_layer": np.ones((5, 4))},
         "obsp": {"obs_level_connectivities": np.ones((5, 5))},
         "varp": {"var_level_connectivities": np.random.randn(4, 4)},
         "uns": {"information": ["info1"]},

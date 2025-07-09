@@ -224,6 +224,7 @@ class EHRData(AnnData):
         if adata.is_view:
             # use _init_as_view of adata, but don't subset since already sliced in __getitem__
             instance._init_as_view(adata, slice(None), slice(None))
+
             # The tidx is not part of AnnData, so we need to set it separately. Setting it is required for the getter of r
             instance._tidx = tidx
             # _n_t is not part of AnnData, so need to set it separately
@@ -266,7 +267,7 @@ class EHRData(AnnData):
         if not isinstance(input, pd.DataFrame):
             msg = "Can only assign pd.DataFrame to tem."
             raise ValueError(msg)
-        if self.n_t != len(input):
+        if (self.n_t != len(input)) and (self.n_t != 1):
             msg = f"Length of passed value for tem is {len(input)}, but this EHRData has shape: {self.shape}"
             raise ValueError(msg)
 
@@ -304,7 +305,7 @@ class EHRData(AnnData):
     @property
     def shape(self) -> tuple[int, int] | tuple[int, int, int]:
         """Shape of data (`n_obs`, `n_vars`, `n_t`)."""
-        return self.n_obs, self.n_vars, self.n_t
+        return (self.n_obs, self.n_vars) if self._n_t is None else (self.n_obs, self.n_vars, self.n_t)
 
     def __repr__(self) -> str:
         parent_repr = super().__repr__()
@@ -316,7 +317,6 @@ class EHRData(AnnData):
 
         lines_anndata = parent_repr.splitlines()
 
-        # Filter out R_LAYER_KEY from layers line because it's a special layer called r
         lines_ehrdata = []
         position_of_t = 1
         for line in lines_anndata:

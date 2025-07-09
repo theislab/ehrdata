@@ -49,11 +49,11 @@ def test_harmonize_missing_values_layer(sample_dataset, request):
 def test_harmonize_missing_values_3D(sample_dataset, request):
     data, _ = request.getfixturevalue(sample_dataset)
     data = pd.DataFrame(data)
-    R = data.values.reshape(2, -1, 2)
-    edata = EHRData(R=R)
-    harmonize_missing_values(edata, layer="R_layer")
+    tem_layer = data.values.reshape(2, -1, 2)
+    edata = EHRData(layers={"tem_layer": tem_layer})
+    harmonize_missing_values(edata, layer="tem_layer")
     for missing_value_string in MISSING_VALUES:
-        assert missing_value_string not in edata.R.flatten()
+        assert missing_value_string not in edata.layers["tem_layer"].flatten()
 
 
 @pytest.mark.parametrize(
@@ -100,9 +100,9 @@ def test_feature_type_inference_layer(sample_dataset, request):
 def test_feature_type_inference_3D(sample_dataset, request):
     data, target_types = request.getfixturevalue(sample_dataset)
     data = pd.DataFrame(data)
-    R = data.values.reshape(2, -1, 2)
-    edata = EHRData(R=R)
-    infer_feature_types(edata, layer="R_layer")
+    tem_layer = data.values.reshape(2, -1, 2)
+    edata = EHRData(layers={"tem_layer": tem_layer})
+    infer_feature_types(edata, layer="tem_layer")
 
     assert "feature_type" in edata.var.columns
     assert all(edata.var["feature_type"] == list(target_types.values()))
