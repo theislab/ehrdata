@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar
 
@@ -14,7 +15,8 @@ from anndata._core.aligned_mapping import (
     LayersBase,
     Value,
 )
-from anndata._core.index import _subset
+
+# from anndata._core.index import _subset
 from anndata._core.views import (
     DataFrameView,
     ElementRef,
@@ -23,7 +25,7 @@ from anndata._core.views import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Mapping, Sequence
     from os import PathLike
 
     from anndata._core.index import Index as ADIndex
@@ -34,6 +36,16 @@ if TYPE_CHECKING:
     Index: TypeAlias = ADIndex | tuple[Index1D, Index1D, Index1D]
 
 T = TypeVar("T", bound=AlignedMapping)
+
+
+def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
+    # Select as combination of indexes, not coordinates
+    # Correcting for indexing behaviour of np.ndarray
+    # TODO: how to generalize this really?
+    # also should not just keep like that, since dispatch in anndata of this function available
+    if all(isinstance(x, Iterable) for x in subset_idx[:2]):
+        subset_idx = np.ix_(*subset_idx[:2])
+    return a[subset_idx] if len(subset_idx) == 2 else a[subset_idx[:2]][subset_idx[2]]
 
 
 class AlignedView3D(AlignedView):
@@ -214,7 +226,7 @@ class EHRData(AnnData):
         Args:
             adata: Annotated data object.
             tem: Time dataframe for describing third axis, see tem attribute.
-            tidx: A slice for the 3rd dimension R. Usually, this will be None here.
+            tidx: A slice for the 3rd dimension. Usually, this will be None here.
 
         Returns:
             An EHRData object extending the AnnData object.
@@ -350,6 +362,7 @@ class EHRData(AnnData):
             An EHRData view object.
         """
         oidx, vidx, tidx = self._unpack_index(index)
+
         adata_sliced = super().__getitem__((oidx, vidx))
 
         tem_sliced = None if self.tem is None else self.tem.iloc[tidx]
@@ -360,6 +373,8 @@ class EHRData(AnnData):
             tidx = _resolve_idx(slice(None), tidx, self.n_t)
         if self._tidx is not None:
             tidx = _resolve_idx(self._tidx, tidx, self._adata_ref.n_t)
+
+        # tidx = _get_iterable_index(tidx)
 
         # if tidx is an integer, numpy's automatic dimension reduction by drops an axis
         if isinstance(tidx, (int | np.integer)):
@@ -387,3 +402,12 @@ class EHRData(AnnData):
             tem=None if self.tem is None else self.tem.copy(),
             tidx=self._tidx,
         )
+
+
+def _get_iterable_index(index: int | slice | Iterable[int]) -> Iterable[int]:
+    if isinstance(index, int | np.integer):
+        return [index]
+    elif isinstance(index, slice):
+        return range(index.start, index.stop, index.step)
+    else:
+        return index

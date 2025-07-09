@@ -370,8 +370,8 @@ def test_ehrdata_subset_obsvar_names_vanilla(edata_333):
     _assert_fields_are_view(edata_ab)
     _assert_shape_matches(edata_ab, (3, 2, 3))
 
-    # TODO why does this fail
     edata_a = edata[["obs1", "obs2"], ["var1", "var2"]]
+    edata_a.layers["tem_layer"]
 
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (2, 2, 3))
