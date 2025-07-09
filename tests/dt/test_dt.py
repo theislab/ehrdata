@@ -8,7 +8,7 @@ import ehrdata as ed
 
 def test_mimic_2():
     edata = ed.dt.mimic_2()
-    assert edata.shape == (1776, 46, 0)
+    assert edata.shape == (1776, 46, 1)
     expected_first_two_vars = ["aline_flg", "icu_los_day"]
     assert list(edata.var.index.values[:2]) == expected_first_two_vars
     expected_first_four_X = np.array([[1, 7.63], [0, 1.14]])
@@ -17,7 +17,7 @@ def test_mimic_2():
 
 def test_mimic_2_preprocessed():
     edata = ed.dt.mimic_2_preprocessed()
-    assert edata.shape == (1776, 46, 0)
+    assert edata.shape == (1776, 46, 1)
     expected_first_two_vars = ["ehrapycat_service_unit", "ehrapycat_day_icu_intime"]
     assert list(edata.var.index.values[:2]) == expected_first_two_vars
     expected_first_four_X = np.array([[2.0, 0.0], [1.0, 2.0]])
@@ -26,7 +26,7 @@ def test_mimic_2_preprocessed():
 
 def test_diabetes_130_raw():
     edata = ed.dt.diabetes_130_raw()
-    assert edata.shape == (101766, 50, 0)
+    assert edata.shape == (101766, 50, 1)
     expected_first_two_vars = ["encounter_id", "patient_nbr"]
     assert list(edata.var.index.values[:2]) == expected_first_two_vars
     expected_first_four_X = np.array([[2278392, 8222157], [149190, 55629189]])
@@ -35,7 +35,7 @@ def test_diabetes_130_raw():
 
 def test_diabetes_130_fairlearn():
     edata = ed.dt.diabetes_130_fairlearn()
-    assert edata.shape == (101766, 24, 0)
+    assert edata.shape == (101766, 24, 1)
     expected_first_two_vars = ["race", "gender"]
     assert list(edata.var.index.values[:2]) == expected_first_two_vars
     expected_first_four_X = np.array([["Caucasian", "Female"], ["Caucasian", "Female"]])
@@ -108,8 +108,8 @@ def test_physionet2012():
     )
 
     # first entry c two different HR value
-    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 0].R.item(), 65)
-    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 28].R.item(), 68)
+    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 0].layers["tem_layer"].item(), 65)
+    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 28].layers["tem_layer"].item(), 68)
 
 
 def test_physionet2012_arguments():

@@ -1182,7 +1182,7 @@ def test_setup_variables_empty_observation(omop_connection_empty_observation, ca
         enrich_var_with_feature_info=False,
         enrich_var_with_unit_info=False,
     )
-    assert edata.shape == (1, 0, 0)
+    assert edata.shape == (1, 0, 1)
     assert "No data found in observation. Returning edata without data of observation." in caplog.text
     assert "No data found in any of the data tables. Returning edata without data." in caplog.text
 
@@ -1200,7 +1200,7 @@ def test_setup_interval_variables_empty_observation(omop_connection_empty_observ
         num_intervals=1,
         enrich_var_with_feature_info=False,
     )
-    assert edata.shape == (1, 0, 0)
+    assert edata.shape == (1, 0, 1)
     assert "No data found in drug_exposure. Returning edata without data of drug_exposure." in caplog.text
     assert "No data found in any of the data tables. Returning edata without data." in caplog.text
 

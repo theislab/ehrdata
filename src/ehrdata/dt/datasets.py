@@ -136,8 +136,8 @@ def ehrdata_blobs(
     )
 
     # Prepare 3D array to store all time series
-    R = np.zeros((n_observations, n_variables, n_total_timepoints))
-    R.fill(np.nan)
+    tem_layer = np.zeros((n_observations, n_variables, n_total_timepoints))
+    tem_layer.fill(np.nan)
 
     # Generate time series for each observation
     for i in range(n_observations):
@@ -179,19 +179,19 @@ def ehrdata_blobs(
 
             time_series += base_value
 
-            R[i, v, time_indices] = time_series
+            tem_layer[i, v, time_indices] = time_series
 
     # Add random missing values if requested
     if missing_values > 0:
         # Create a mask for random missing values (ignoring already missing values)
-        missing_mask = rng.random(R.shape) < missing_values
-        not_nan_mask = ~np.isnan(R)
-        R[missing_mask & not_nan_mask] = np.nan
+        missing_mask = rng.random(tem_layer.shape) < missing_values
+        not_nan_mask = ~np.isnan(tem_layer)
+        tem_layer[missing_mask & not_nan_mask] = np.nan
 
     # Ensure that X contains a snapshot of R at a common time index
     # Use the middle timepoint if available for each observation
     for i in range(n_observations):
-        valid_times = ~np.isnan(R[i, 0, :])
+        valid_times = ~np.isnan(tem_layer[i, 0, :])
         if np.any(valid_times):
             # Find middle timepoint for this observation
             valid_indices = np.where(valid_times)[0]
@@ -199,7 +199,7 @@ def ehrdata_blobs(
 
             # Update X to contain this snapshot
             for v in range(n_variables):
-                X[i, v] = R[i, v, mid_idx]
+                X[i, v] = tem_layer[i, v, mid_idx]
 
     if sparse:
         mask_x = rng.random(X.shape) > sparsity
@@ -207,18 +207,18 @@ def ehrdata_blobs(
         data_x[~mask_x] = 0
         X = csr_matrix(data_x)
 
-        # For R, handle both NaN and sparsity
+        # For tem_layer, handle both NaN and sparsity
         # First replace NaN with 0 where we're keeping values
-        mask_r = rng.random(R.shape) > sparsity
-        R_copy = R.copy()
-        R_copy[np.isnan(R)] = 0
-        R_copy[~mask_r] = 0
+        mask_r = rng.random(tem_layer.shape) > sparsity
+        tem_layer_copy = tem_layer.copy()
+        tem_layer_copy[np.isnan(tem_layer)] = 0
+        tem_layer_copy[~mask_r] = 0
 
         # Get coordinates and values for non-zero entries
-        coords = np.where(R_copy != 0)
-        values = R_copy[coords]
+        coords = np.where(tem_layer_copy != 0)
+        values = tem_layer_copy[coords]
 
-        R = COO(coords, values, shape=R.shape)
+        tem_layer = COO(coords, values, shape=tem_layer.shape)
 
     from ehrdata import EHRData
 
@@ -226,7 +226,7 @@ def ehrdata_blobs(
         X=X,
         obs=pd.DataFrame({"cluster": y.astype(str)}, index=pd.Index([str(i) for i in range(n_observations)])),
         var=pd.DataFrame(index=pd.Index([f"feature_{i}" for i in range(n_variables)])),
-        R=R,
+        layers={"tem_layer": tem_layer},
         tem=t_df,
     )
 
@@ -375,6 +375,7 @@ def physionet2012(
         "150649",
         "142998",
     ],
+    layer_name: str = "tem_layer",
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>`_.
 
@@ -382,9 +383,9 @@ def physionet2012(
     Truncated if a sample has more `num_intervals` steps; Padded if a sample has less than `num_intervals` steps.
     Further, by default the following 12 samples are dropped since they have no time series information at all: 147514, 142731, 145611, 140501, 155655, 143656, 156254, 150309,
     140936, 141264, 150649, 142998.
-    Taken the defaults of `interval_length_number`, `interval_length_unit`, `num_intervals`, and `drop_samples`, the tensor stored in `.R` of `edata` is the same as when doing the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ preprocessing :cite:`du2023pypots`.
+    Taken the defaults of `interval_length_number`, `interval_length_unit`, `num_intervals`, and `drop_samples`, the tensor stored in `.layers[layer_name]` of `edata` is the same as when doing the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ preprocessing :cite:`du2023pypots`.
     A simple deviation is that the tensor in `ehrdata` is of shape `n_obs x n_vars x n_intervals` (with defaults, 3000x37x48) while the tensor in PyPOTS is of shape `n_obs x n_intervals x n_vars` (3000x48x37).
-    The tensor stored in `.R` is hence also fully compatible with the PyPOTS package, as the `.R` tensor of EHRData objects generally is.
+    The tensor stored in `.layers[layer_name]` is hence also fully compatible with the PyPOTS package, as the `.layers` field of EHRData objects generally is.
     Note: In the original dataset, some missing values are encoded with a -1 for some entries of the variables `'DiasABP'`, `'NIDiasABP'`, and `'Weight'`. Here, these are replaced with `NaN` s.
 
     Args:
@@ -397,6 +398,7 @@ def physionet2012(
            measurements for a person's parameter within a time interval is available.
            Available are `'first'` and `'last'`, as used in :meth:`~pandas.DataFrame.drop_duplicates`.
        drop_samples: Samples to drop from the dataset (indicate their RecordID).
+       layer_name: Name of the layer in the EHRData object that will store the time series data.
 
     Returns:
         The processed physionet2012 dataset.
@@ -502,16 +504,16 @@ def physionet2012(
 
     var = xa["Parameter"].to_dataframe()
     tem = xa["interval_step"].to_dataframe()
-    r = xa["Value"].values
+    tem_layer = xa["Value"].values
 
     # Three time series variables in the original dataset ['DiasABP', 'NIDiasABP', 'Weight'] have -1 instead of NaN for some missing values
     # No -1 value in the original dataset represents a valid measurement, so we can safely replace -1 with NaN
-    r[r == -1] = np.nan
+    tem_layer[tem_layer == -1] = np.nan
 
     obs.index = obs.index.astype(str)
     var.index = var.index.astype(str)
 
-    edata = EHRData(R=r, obs=obs, var=var, tem=tem)
+    edata = EHRData(layers={layer_name: tem_layer}, obs=obs, var=var, tem=tem)
 
     return edata[~edata.obs.index.isin(drop_samples or [])]
 

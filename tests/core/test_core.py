@@ -39,7 +39,7 @@ def test_ehrdata_init_vanilla_X(X_numpy_32):
 
 def test_ehrdata_init_vanilla_3dlayer(X_numpy_322):
     edata = EHRData(layers={"tem_layer": X_numpy_322})
-    _assert_shape_matches(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2), check_X_None=True)
 
     assert edata.layers is not None
     assert edata.layers["tem_layer"] is not None
@@ -241,6 +241,66 @@ def test_ehrdata_X_data_types(X_fixture_name, request):
     X = request.getfixturevalue(X_fixture_name)
     edata = EHRData(layers={"tem_layer": X})
     _assert_shape_matches(edata, (3, 2, 2), check_X_None=True)
+
+
+#################################################################
+### Test assignment operations
+#################################################################
+def test_ehrdata_assignments(X_numpy_32, X_numpy_322, obs_31, var_21):
+    edata = EHRData(X=X_numpy_32, obs=obs_31, var=var_21, layers={"tem_layer": X_numpy_322})
+
+    edata.X[0, 0] = 100
+
+    edata.obs["new_obs_col"] = [1, 2, 3]
+    edata.var["new_var_col"] = ["a", "b"]
+    edata.tem["new_tem_col"] = [1, 2]
+
+    edata.obs["new_obs_col"].iloc[0] = "obs_entry"
+    edata.var["new_var_col"].iloc[0] = "var_entry"
+    edata.tem["new_tem_col"].iloc[0] = "tem_entry"
+
+    edata.varm["varm_entry"] = np.array([[1, 2], [3, 4]])
+    edata.obsm["obsm_entry"] = np.array([[1, 2], [3, 4], [5, 6]])
+    edata.varp["varp_entry"] = np.array([[1, 2], [3, 4]])
+    edata.obsp["obsp_entry"] = np.array([[1, 2, 3], [3, 4, 5], [5, 6, 7]])
+
+
+def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
+    # TODO: fix tests this checks ehrdata is robust for view behvaior
+    edata = EHRData(X=X_numpy_32, obs=obs_31, var=var_21, layers={"tem_layer": X_numpy_322})
+    edata_view = edata[:2, :1, :1]
+
+    edata_view.X[0, 0] = 100
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.obs["new_obs_col"] = [1, 2]
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.var["new_var_col"] = ["a"]
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.tem["new_tem_col"] = [1]
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.obs["new_obs_col"].iloc[0] = "obs_entry"
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.var["new_var_col"].iloc[0] = "var_entry"
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.tem["new_tem_col"].iloc[0] = "tem_entry"
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.varm["varm_entry"] = np.array([[1], [3]])
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.obsm["obsm_entry"] = np.array([[1, 2], [5, 6]])
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.varp["varp_entry"] = np.array([[1], [4]])
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.obsp["obsp_entry"] = np.array([[1, 2], [3, 4]])
 
 
 #################################################################
