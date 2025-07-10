@@ -41,7 +41,7 @@ T = TypeVar("T", bound=AlignedMapping)
 def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
     # Select as combination of indexes, not coordinates
     # Correcting for indexing behaviour of np.ndarray
-    # TODO: how to generalize this really?
+    # TODO: how to generalize this really? this is not working yet.
     # also should not just keep like that, since dispatch in anndata of this function available
     if all(isinstance(x, Iterable) for x in subset_idx[:2]):
         subset_idx = np.ix_(*subset_idx[:2])
