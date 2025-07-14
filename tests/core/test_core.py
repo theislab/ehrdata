@@ -183,7 +183,7 @@ def test_ehrdata_init_X_t_assign_3dlayer(X_numpy_32, X_numpy_322, tem_21):
 
     edata.layers["tem_layer"] = X_numpy_322
     _assert_shape_matches(edata, (3, 2, 2))
-    assert edata.tem.shape == (2, 1)
+    assert edata.tem.shape == (2, 0)
 
 
 def test_ehrdata_init_3dlayer_t_assign_X(X_numpy_32, X_numpy_322, tem_21):
@@ -275,6 +275,7 @@ def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
     edata_view.X[0, 0] = 100
 
     edata_view = edata[:2, :1, :1]
+    # TODO: does not trigger creation of actual
     edata_view.obs["new_obs_col"] = [1, 2]
 
     edata_view = edata[:2, :1, :1]
@@ -497,7 +498,6 @@ def test_copy_of_slice(edata_333):
     assert edata_sliced_copy.tem.shape == (2, 1)
 
 
-# TODO why does this fail
 def test_copy_of_obsvar_names(edata_333):
     edata = edata_333
 

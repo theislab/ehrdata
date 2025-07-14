@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 from anndata._core.aligned_mapping import (
+    AlignedActual,
     AlignedMapping,
     AlignedMappingProperty,
     AlignedView,
@@ -39,9 +40,15 @@ if TYPE_CHECKING:
 T = TypeVar("T", bound=AlignedMapping)
 
 
-def _validate_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
+def _validate_layers_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
     if obj.n_t is not None and obj.n_t > 1 and _get_layers_3d_dim(value) != obj.n_t:
-        msg = f"Length of passed value for {self.name} is {len(value)}, but this EHRData has shape: {obj.shape}"
+        msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
+        raise ValueError(msg)
+
+
+def _validate_array_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
+    if obj.n_t is not None and obj.n_t > 1 and _get_array_3d_dim(value) != obj.n_t:
+        msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
         raise ValueError(msg)
 
 
@@ -50,9 +57,33 @@ def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
     # Correcting for indexing behaviour of np.ndarray
     # TODO: how to generalize this really? this is not working yet.
     # also should not just keep like that, since dispatch in anndata of this function available
-    if all(isinstance(x, Iterable) for x in subset_idx[:2]):
-        subset_idx = np.ix_(*subset_idx[:2])
-    return a[subset_idx] if len(subset_idx) == 2 else a[subset_idx[:2]][subset_idx[2]]
+    if (len(subset_idx) == 2 and all(isinstance(x, Iterable) for x in subset_idx)) or (
+        len(subset_idx) == 3 and all(isinstance(x, Iterable) for x in subset_idx)
+    ):
+        subset_idx = np.ix_(*subset_idx)
+        return a[subset_idx]  # if len(subset_idx) == 2 else a[subset_idx[:2]][subset_idx[2]]
+    elif len(subset_idx) == 3 and all(isinstance(x, Iterable) for x in subset_idx[:2]):
+        return a[np.ix_(*subset_idx[:2])][subset_idx[2]]
+    else:
+        return a[subset_idx]
+        # subset_idx = np.ix_(*subset_idx[:2])
+    # if all(isinstance(x, Iterable) for x in subset_idx[:2]):
+    #     subset_idx = np.ix_(*subset_idx[:2])
+
+
+class AlignedActual3D(AlignedActual):
+    """AlignedActual for 3D data."""
+
+    def __setitem__(self, key: str, value: Value) -> None:
+        _validate_array_3d(self.parent, value)
+        # todo: is this a good behavior?
+        self.parent._n_t = _get_array_3d_dim(value)
+        self.parent.tem = pd.DataFrame(index=pd.RangeIndex(self.parent._n_t).astype(str))
+        super().__setitem__(key, value)
+
+
+class Layers3D(AlignedActual3D, Layers):
+    """Layers for 3D data."""
 
 
 class AlignedView3D(AlignedView):
@@ -102,7 +133,7 @@ class AlignedMappingProperty3D(AlignedMappingProperty):
         return parent._view(obj, (tuple(idxs[ax] for ax in (0, 1, 2))))
 
     def __set__(self, obj: AnnData, value: Mapping[str, Value] | Iterable[tuple[str, Value]]) -> None:
-        _validate_3d(obj, value)
+        _validate_layers_3d(obj, value)
         obj._n_t = _get_layers_3d_dim(value)
         value = convert_to_dict(value)
         _ = self.construct(obj, store=value)  # Validate
@@ -183,7 +214,7 @@ class EHRData(AnnData):
     _t: pd.DataFrame | None
     _n_t: int
 
-    layers: AlignedMappingProperty3D = AlignedMappingProperty3D("layers", Layers)
+    layers: AlignedMappingProperty3D = AlignedMappingProperty3D("layers", Layers3D)
 
     def __init__(
         self,
