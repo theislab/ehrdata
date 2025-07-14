@@ -29,8 +29,9 @@ def _assert_shape_matches(edata: EHRData, shape: tuple[int, int, int], *, check_
     assert edata.n_vars == shape[1]
 
     assert isinstance(edata.tem, pd.DataFrame)
-    assert len(edata.tem) == shape[2]
-    assert edata.n_t == shape[2]
+    if len(shape) > 2:
+        assert len(edata.tem) == shape[2]
+        assert edata.n_t == shape[2]
 
     for key in edata.layers:
         assert edata.layers[key].shape in [shape, shape[0:2], (shape[0], shape[1], 1)]

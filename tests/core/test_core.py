@@ -19,22 +19,22 @@ def _assert_fields_are_view(edata: EHRData):
 def test_ehrdata_init_vanilla_empty():
     edata = EHRData()
 
-    _assert_shape_matches(edata, (0, 0, 1), check_X_None=True)
+    _assert_shape_matches(edata, (0, 0), check_X_None=True)
     assert edata.X is None
     assert edata.obs.shape == (0, 0)
     assert edata.var.shape == (0, 0)
-    assert edata.tem.shape == (1, 0)
+    assert edata.tem.shape == (0, 0)
 
 
 def test_ehrdata_init_vanilla_X(X_numpy_32):
     edata = EHRData(X=X_numpy_32)
-    _assert_shape_matches(edata, (3, 2, 1))
+    _assert_shape_matches(edata, (3, 2))
 
     assert edata.obs.shape == (3, 0)
 
     assert edata.var.shape == (2, 0)
 
-    assert edata.tem.shape == (1, 0)
+    assert edata.tem.shape == (0, 0)
 
 
 def test_ehrdata_init_vanilla_3dlayer(X_numpy_322):
@@ -95,11 +95,11 @@ def test_ehrdata_init_vanilla_X_and_3dlayer_and_t(X_numpy_32, X_numpy_322, tem_2
 def test_ehrdata_init_vanilla_X_and_layers(X_numpy_32):
     edata = EHRData(X=X_numpy_32, layers={"some_layer": X_numpy_32})
 
-    _assert_shape_matches(edata, (3, 2, 1))
+    _assert_shape_matches(edata, (3, 2))
 
     assert edata.obs.shape == (3, 0)
     assert edata.var.shape == (2, 0)
-    assert edata.tem.shape == (1, 0)
+    assert edata.tem.shape == (0, 0)
 
 
 #################################################################
@@ -107,12 +107,12 @@ def test_ehrdata_init_vanilla_X_and_layers(X_numpy_32):
 #################################################################
 def test_ehrdata_init_vanilla_obs(obs_31):
     edata = EHRData(obs=obs_31)
-    _assert_shape_matches(edata, (3, 0, 1), check_X_None=True)
+    _assert_shape_matches(edata, (3, 0), check_X_None=True)
 
 
 def test_ehrdata_init_vanilla_var(var_31):
     edata = EHRData(var=var_31)
-    _assert_shape_matches(edata, (0, 3, 1), check_X_None=True)
+    _assert_shape_matches(edata, (0, 3), check_X_None=True)
 
 
 def test_ehrdata_init_vanilla_tem(tem_31):
@@ -148,14 +148,16 @@ def test_ehrdata_init_3dlayer_assign_X_tem(X_numpy_32, X_numpy_322, tem_21):
     assert edata.tem.shape == (2, 1)
 
 
-# def test_ehrdata_init_X_assign_3dlayer_t(X_numpy_32, X_numpy_322, tem_21):
-#     edata = EHRData(X=X_numpy_32)
-#     with pytest.raises(ValueError):
-#         edata.layers["tem_layer"] = X_numpy_322
+def test_ehrdata_init_X_assign_3dlayer_t(X_numpy_32, X_numpy_322, tem_21):
+    edata = EHRData(X=X_numpy_32)
+    _assert_shape_matches(edata, (3, 2))
+    # TODO: overwrite the constructor to check and update n_t
+    edata.layers["tem_layer"] = X_numpy_322
+    _assert_shape_matches(edata, (3, 2, 2))
 
-#     edata = EHRData(X=X_numpy_32)
-#     with pytest.raises(ValueError):
-#         edata.tem = tem_21
+    edata = EHRData(X=X_numpy_32)
+    edata.tem = tem_21
+    _assert_shape_matches(edata, (3, 2, 2))
 
 
 # def test_ehrdata_init_t_assign_X_3dlayer(X_numpy_32, X_numpy_322, tem_21):

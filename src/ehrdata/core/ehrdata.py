@@ -14,6 +14,7 @@ from anndata._core.aligned_mapping import (
     Layers,
     LayersBase,
     Value,
+    convert_to_dict,
 )
 
 # from anndata._core.index import _subset
@@ -36,6 +37,12 @@ if TYPE_CHECKING:
     Index: TypeAlias = ADIndex | tuple[Index1D, Index1D, Index1D]
 
 T = TypeVar("T", bound=AlignedMapping)
+
+
+def _validate_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
+    if obj.n_t is not None and obj.n_t > 1 and _get_layers_3d_dim(value) != obj.n_t:
+        msg = f"Length of passed value for {self.name} is {len(value)}, but this EHRData has shape: {obj.shape}"
+        raise ValueError(msg)
 
 
 def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
@@ -76,36 +83,51 @@ class AlignedMappingProperty3D(AlignedMappingProperty):
     and overridethe axes of the AlignedMapping in __get__.
     """
 
+    # def construct(self, obj: AnnData, *, store: MutableMapping[str, Value]) -> T:
+    #     if self.axis is None:
+    #         return self.cls(obj, store=store)
+    #     return self.cls(obj, axis=self.axis, store=store)
+
     def __get__(self, obj: None | AnnData, objtype: type | None = None) -> T:
         if obj is None:
             # When accessed from the class, e.g. via `AnnData.obs`,
             # this needs to return a `property` instance, e.g. for Sphinx
             return self  # type: ignore
         if not obj.is_view:
+            # _validate_3d(obj, value)
             return self.construct(obj, store=getattr(obj, f"_{self.name}"))
         parent_anndata = obj._adata_ref
         idxs = (obj._oidx, obj._vidx, obj._tidx)
         parent: AlignedMapping = getattr(parent_anndata, self.name)
         return parent._view(obj, (tuple(idxs[ax] for ax in (0, 1, 2))))
 
+    def __set__(self, obj: AnnData, value: Mapping[str, Value] | Iterable[tuple[str, Value]]) -> None:
+        _validate_3d(obj, value)
+        obj._n_t = _get_layers_3d_dim(value)
+        value = convert_to_dict(value)
+        _ = self.construct(obj, store=value)  # Validate
+        if obj.is_view:
+            obj._init_as_actual(obj.copy())
+        setattr(obj, f"_{self.name}", value)
 
-def _get_array_3d_dim(X: XDataType | None) -> int:
+
+def _get_array_3d_dim(X: XDataType | None) -> int | None:
     """Get the 3rd dimension of an array."""
     if X is not None and len(X.shape) == 3 and X.shape[2] > 1:
         return X.shape[2]
 
     else:
-        return 1
+        return None
 
 
-def _get_layers_3d_dim(layers: Mapping[str, Any] | None) -> int:
+def _get_layers_3d_dim(layers: Mapping[str, Any] | None) -> int | None:
     """Get the 3rd dimension consensus of all arrays in the layers.
 
     All arrays in layers need to match on the first two axes, which is checked in AnnData.
     Further, all arrays in layers need to have the same 3rd axis dimension, unless they are 2D.
     """
     if layers is None or len(layers) == 0:
-        return 1
+        return None
 
     else:
         shape_3d = {}
@@ -113,7 +135,10 @@ def _get_layers_3d_dim(layers: Mapping[str, Any] | None) -> int:
         for key, value in layers.items():
             shape_3d[key] = _get_array_3d_dim(value)
 
-        shape_3d_values = set(shape_3d.values())
+        shape_3d_values = set(shape_3d.values()).difference({None})
+
+        if len(shape_3d_values) == 0:
+            return None
 
         if len(shape_3d_values) == 1:
             return shape_3d_values.pop()
@@ -209,7 +234,9 @@ class EHRData(AnnData):
         self._tidx = tidx
 
         if tem is None:
-            self.tem = pd.DataFrame(index=pd.RangeIndex(self.n_t).astype(str))
+            self.tem = (
+                pd.DataFrame(index=pd.RangeIndex(self.n_t).astype(str)) if self.n_t is not None else pd.DataFrame([])
+            )
         else:
             self.tem = tem
 
@@ -279,17 +306,17 @@ class EHRData(AnnData):
         if not isinstance(input, pd.DataFrame):
             msg = "Can only assign pd.DataFrame to tem."
             raise ValueError(msg)
-        if (self.n_t != len(input)) and (self.n_t != 1):
+        if self.n_t is not None and (self.n_t != len(input)):
             msg = f"Length of passed value for tem is {len(input)}, but this EHRData has shape: {self.shape}"
             raise ValueError(msg)
 
         self._tem = input
-        self._n_t = len(input)
+        self._n_t = len(input) if input.shape[0] > 0 else None
 
     @property
     def n_t(self) -> int:
         """Number of time points."""
-        return self._n_t if hasattr(self, "_n_t") else 1
+        return self._n_t if hasattr(self, "_n_t") else None
 
     @property
     def _tidx(self) -> slice | None:
@@ -332,6 +359,10 @@ class EHRData(AnnData):
         lines_ehrdata = []
         position_of_t = 1
         for line in lines_anndata:
+            if self.n_t is not None and "n_obs × n_vars" in line:
+                line_splits = line.split("object with")
+                line = line_splits[0] + f"object with n_obs × n_vars × n_t = {self.n_obs} × {self.n_vars} × {self.n_t}"
+
             if "obs:" in line or "var:" in line:
                 position_of_t += 1
 
