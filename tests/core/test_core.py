@@ -309,6 +309,16 @@ def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
 #################################################################
 ### Test slicing
 #################################################################
+# test sliceing:
+# 1D each axis, 2D each combination, 3D
+# crossproduct
+# slice index, boolean index, number index
+
+# @pytest.mark.parametrize("subset_idx", [
+#     [False, True, True],
+# ])
+
+
 def test_ehrdata_subset_slice_2D_vanilla(X_numpy_32, X_numpy_322, obs_31, var_21):
     edata = EHRData(X=X_numpy_32, layers={"tem_layer": X_numpy_322}, obs=obs_31, var=var_21)
     edata_sliced = edata[:2, :1]
