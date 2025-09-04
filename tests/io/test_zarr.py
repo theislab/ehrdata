@@ -79,6 +79,7 @@ def test_write_zarr_basic(edata_name, request, tmp_path):
         "layers",
         "obsp",
         "varp",
+        "raw",
         "uns",
         "tem",
     }

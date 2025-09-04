@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
 
-    from duckdb.duckdb import DuckDBPyConnection
+    from duckdb import DuckDBPyConnection
 
     from ehrdata import EHRData
 
