@@ -190,7 +190,7 @@ def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefi
 
 
 def setup_obs(
-    backend_handle: duckdb.duckdb.DuckDBPyConnection,
+    backend_handle: duckdb.DuckDBPyConnection,
     observation_table: Literal["person", "person_cohort", "person_observation_period", "person_visit_occurrence"],
     *,
     death_table: bool = False,
@@ -255,7 +255,7 @@ def setup_obs(
 def setup_variables(
     edata,
     *,
-    backend_handle: duckdb.duckdb.DuckDBPyConnection,
+    backend_handle: duckdb.DuckDBPyConnection,
     data_tables: Sequence[Literal["measurement", "observation", "specimen"]]
     | Literal["measurement", "observation", "specimen"],
     data_field_to_keep: str | Sequence[str] | dict[str, str | Sequence[str]],
@@ -454,7 +454,7 @@ def setup_variables(
 def setup_interval_variables(
     edata,
     *,
-    backend_handle: duckdb.duckdb.DuckDBPyConnection,
+    backend_handle: duckdb.DuckDBPyConnection,
     data_tables: Sequence[
         Literal[
             "drug_exposure",

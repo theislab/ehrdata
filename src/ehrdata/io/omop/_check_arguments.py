@@ -26,7 +26,7 @@ VALID_KEEP_DATES = ["start", "end", "interval"]
 
 
 def _check_valid_backend_handle(backend_handle) -> None:
-    if not isinstance(backend_handle, duckdb.duckdb.DuckDBPyConnection):
+    if not isinstance(backend_handle, duckdb.DuckDBPyConnection):
         msg = "Expected backend_handle to be of type DuckDBPyConnection."
         raise TypeError(msg)
 

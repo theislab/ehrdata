@@ -103,7 +103,7 @@ def _write_timedeltas_to_db(
     backend_handle.execute("INSERT INTO timedeltas SELECT * FROM timedeltas_dataframe")
 
 
-def _drop_timedeltas(backend_handle: duckdb.duckdb.DuckDBPyConnection):
+def _drop_timedeltas(backend_handle: duckdb.DuckDBPyConnection):
     backend_handle.execute("DROP TABLE IF EXISTS timedeltas")
 
 
@@ -116,7 +116,7 @@ def _generate_value_query(data_table: str, data_field_to_keep: Sequence, aggrega
 
 
 def _write_long_time_interval_table(
-    backend_handle: duckdb.duckdb.DuckDBPyConnection,
+    backend_handle: duckdb.DuckDBPyConnection,
     time_defining_table: str,
     data_table: str,
     interval_length_number: int,
