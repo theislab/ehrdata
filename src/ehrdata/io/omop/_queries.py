@@ -87,7 +87,7 @@ def _generate_timedeltas(interval_length_number: int, interval_length_unit: str,
 
 
 def _write_timedeltas_to_db(
-    backend_handle: duckdb.duckdb.DuckDBPyConnection,
+    backend_handle: duckdb.DuckDBPyConnection,
     timedeltas_dataframe,
 ) -> None:
     backend_handle.execute("DROP TABLE IF EXISTS timedeltas")
