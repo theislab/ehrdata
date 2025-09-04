@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     import duckdb
-    from duckdb.duckdb import DuckDBPyConnection
+    from duckdb import DuckDBPyConnection
 
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 

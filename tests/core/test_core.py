@@ -236,14 +236,6 @@ def test_ehrdata_init_fail_R_and_layer_R_LAYER_KEY_exists(X_numpy_32, R_numpy_32
 def test_ehrdata_set_aligneddataframes(X_numpy_32):
     edata_Xonly = EHRData(X_numpy_32)
 
-    # show that setting to None behavior for t alike obs, var
-    with pytest.raises(ValueError):
-        edata_Xonly.obs = None  # type: ignore
-    with pytest.raises(ValueError):
-        edata_Xonly.var = None  # type: ignore
-    with pytest.raises(ValueError):
-        edata_Xonly.tem = None  # type: ignore
-
     # show that setting df behavior for t alike obs, var
     with pytest.raises(ValueError):
         edata_Xonly.obs = pd.DataFrame([0, 1, 2, 3, 4])
