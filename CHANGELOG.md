@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.0.8]
+
+### Fixed
+- Update duckdb imports for future (#157) @eroell
+
+### Maintenance
+- Private subset method for `EHRData` (#160) @eroell
+- Remove `omop` package dependency (#160) @eroell
+
+## [0.0.7]
+
+### Fixed
+- Fix tests and Getting Started Notebook (#155) @eroell
+
+### Maintenance
+- Update duckdb imports for future (#155) @eroell
+
 ## [0.0.6]
 
 ### Fixed
