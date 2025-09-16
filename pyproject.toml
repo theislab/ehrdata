@@ -62,8 +62,8 @@ optional-dependencies.ehrapy = [
   "ehrapy",
 ]
 optional-dependencies.lamin = [
-  "lamindb[bionty,jupyter]",
-  "omop",
+  "lamindb",
+  #"omop", # Not needed and causing an issue in the readthedocs build https://github.com/laminlabs/lamindb/issues/3081
   "rich",
 ]
 optional-dependencies.test = [
