@@ -393,6 +393,30 @@ class EHRData(AnnData):
             msg = "invalid number of indices"
             raise IndexError(msg)
 
+    def _inplace_subset_obs(self, index: Index1D):
+        """Inplace subsetting along observations dimension.
+
+        Same as `edata = edata[index, :]`, but inplace.
+
+        Args:
+            index: Index to subset along variables dimension.
+        """
+        edata_subset = self[index].copy()
+
+        self._init_as_actual(edata_subset)
+
+    def _inplace_subset_var(self, index: Index1D):
+        """Inplace subsetting along variables dimension.
+
+        Same as `edata = edata[:, index]`, but inplace.
+
+        Args:
+            index: Index to subset along variables dimension.
+        """
+        edata_subset = self[:, index].copy()
+
+        self._init_as_actual(edata_subset)
+
     def copy(self) -> EHRData:
         """Returns a copy of the EHRData object."""
         return EHRData.from_adata(
