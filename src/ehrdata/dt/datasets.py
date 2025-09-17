@@ -593,11 +593,26 @@ def diabetes_130_raw(
         >>> edata = ed.dt.diabetes_130_raw()
 
     """
+    import os
+
+    # Use more aggressive retry settings in CI environments
+    is_ci = os.getenv("CI", "false").lower() == "true"
+    download_kwargs = {}
+    if is_ci:
+        download_kwargs.update(
+            {
+                "timeout": 120,
+                "max_retries": 8,
+                "retry_delay": 15,
+            }
+        )
+
     _download(
         url="https://figshare.com/ndownloader/files/45110029",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_raw.csv",
         raw_format="csv",
+        **download_kwargs,
     )
     adata = read_csv(
         filename=f"{DEFAULT_DATA_PATH}/diabetes_130_raw.csv",
@@ -624,11 +639,26 @@ def diabetes_130_fairlearn(
         >>> edata = ed.dt.diabetes_130_fairlearn()
 
     """
+    import os
+
+    # Use more aggressive retry settings in CI environments
+    is_ci = os.getenv("CI", "false").lower() == "true"
+    download_kwargs = {}
+    if is_ci:
+        download_kwargs.update(
+            {
+                "timeout": 120,
+                "max_retries": 8,
+                "retry_delay": 15,
+            }
+        )
+
     _download(
         url="https://figshare.com/ndownloader/files/45110371",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_fairlearn.csv",
         raw_format="csv",
+        **download_kwargs,
     )
     edata = read_csv(
         filename=f"{DEFAULT_DATA_PATH}/diabetes_130_fairlearn.csv",

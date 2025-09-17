@@ -98,7 +98,7 @@ def write_h5ad(
 
     Args:
         filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
-        edata: Data object.
+        edata: Central data object.
         compression: Optional file compression.
             Setting compression to 'gzip' can save disk space but will slow down writing and subsequent reading.
         compression_opts: See http://docs.h5py.org/en/latest/high/dataset.html.

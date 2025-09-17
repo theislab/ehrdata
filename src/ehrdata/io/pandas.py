@@ -274,7 +274,7 @@ def to_pandas(
     """Transform an :class:`~ehrdata.EHRData` object to a :class:`~pandas.DataFrame`.
 
     Args:
-        edata: Data object.
+        edata: Central data object.
         layer: The layer to access the values of. If not specified, it uses the `X` matrix.
         obs_cols: The columns of `obs` to add to the dataframe.
         var_col: The column of `var` to create the column names from in the created dataframe.
