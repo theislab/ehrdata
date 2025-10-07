@@ -42,7 +42,7 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
-  "ehrdata[torch,lamin,vitessce]",
+  "ehrdata[lamin,torch,vitessce]",
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
@@ -68,7 +68,7 @@ optional-dependencies.lamin = [
 ]
 optional-dependencies.test = [
   "coverage",
-  "ehrdata[torch,vitessce,lamin]",
+  "ehrdata[lamin,torch,vitessce]",
   "pytest",
   "pytest-cov",
 ]
