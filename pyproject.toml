@@ -34,7 +34,7 @@ dependencies = [
   "session-info2",
   "sparse",
   "xarray",
-  "zarr<3",
+  "zarr<4",
 ]
 optional-dependencies.dev = [
   "pre-commit",

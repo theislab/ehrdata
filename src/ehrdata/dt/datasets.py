@@ -224,7 +224,7 @@ def ehrdata_blobs(
 
     return EHRData(
         X=X,
-        obs=pd.DataFrame({"cluster": y.astype(str)}, index=pd.Index([str(i) for i in range(n_observations)])),
+        obs=pd.DataFrame({"cluster": pd.Categorical(y)}, index=pd.Index([str(i) for i in range(n_observations)])),
         var=pd.DataFrame(index=pd.Index([f"feature_{i}" for i in range(n_variables)])),
         R=R,
         tem=t_df,

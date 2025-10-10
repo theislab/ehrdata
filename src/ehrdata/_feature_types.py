@@ -31,6 +31,7 @@ def _detect_feature_type(col: pd.Series) -> tuple[Literal["date", "categorical",
     """
     n_elements = len(col)
     col = col.replace(MISSING_VALUES, np.nan)
+    col = col.infer_objects(copy=False)
     col = col.dropna()
     if len(col) == 0:
         err_msg = f"Feature '{col.name}' contains only NaN values. Please drop this feature to infer the feature type."
@@ -321,6 +322,7 @@ def harmonize_missing_values(
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
     df.replace(missing_values, np.nan, inplace=True)
+    df.infer_objects(copy=False)
 
     if layer is None:
         edata.X = df.values.reshape(X.shape)

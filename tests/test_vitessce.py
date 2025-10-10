@@ -2,6 +2,8 @@ import numpy as np
 import pytest
 from anndata import AnnData
 
+pytest.importorskip("vitessce")
+
 from ehrdata.pl.vitessce import gen_config
 
 

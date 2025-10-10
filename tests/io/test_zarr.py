@@ -65,10 +65,11 @@ def test_read_zarr_sparse_with_tem(harmonize_missing_values, cast_variables_to_f
 @pytest.mark.parametrize("edata_name", ["edata_333", "edata_basic_with_tem_full", "edata_nonnumeric_missing_330"])
 def test_write_zarr_basic(edata_name, request, tmp_path):
     edata = request.getfixturevalue(edata_name)
+    store_path = tmp_path / f"{edata_name}.zarr"
 
-    write_zarr(edata, f"{tmp_path}/{edata_name}.zarr")
+    write_zarr(edata, store_path)
 
-    zarr_file = zarr.open(f"{tmp_path}/{edata_name}.zarr", mode="r")
+    zarr_file = zarr.open(store_path, mode="r")
     # Note that R is not included in the list because it is just a value of the .layers field
     assert set(dict(zarr_file).keys()) == {
         "X",
@@ -108,8 +109,10 @@ def test_write_zarr_basic(edata_name, request, tmp_path):
 @pytest.mark.parametrize("edata_name", ["edata_333", "edata_basic_with_tem_full", "edata_nonnumeric_missing_330"])
 def test_write_read_zarr_basic(edata_name, request, tmp_path):
     edata = request.getfixturevalue(edata_name)
-    write_zarr(edata.copy(), f"{tmp_path}/{edata_name}.zarr")
-    edata_read = read_zarr(f"{tmp_path}/{edata_name}.zarr")
+    store_path = tmp_path / f"{edata_name}.zarr"
+
+    write_zarr(edata.copy(), store_path)
+    edata_read = read_zarr(store_path)
 
     assert edata.shape == edata_read.shape
 
