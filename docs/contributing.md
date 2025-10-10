@@ -309,6 +309,9 @@ hatch run docs:open
 
 ::::{group-tab} uv
 
+:::::{tabs}
+::::{group-tab} Hatch
+
 ```bash
 cd docs
 uv run sphinx-build -M html . _build -W

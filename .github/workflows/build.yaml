@@ -27,7 +27,9 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           cache-dependency-glob: pyproject.toml
+
       - name: Build package
         run: uv build
+
       - name: Check package
         run: uvx twine check --strict dist/*.whl

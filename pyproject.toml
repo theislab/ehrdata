@@ -4,42 +4,51 @@ requires = [ "hatchling" ]
 
 [project]
 name = "ehrdata"
-version = "0.0.1"
+version = "0.0.8"
 description = "A Python package for EHR data"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
 maintainers = [
-  { name = "Eljas Roellin, Lukas Heumos, Xinyue Zhang", email = "eljas.roellin@helmholtz-munich.de" },
+  { name = "Eljas Roellin", email = "eljas.roellin@helmholtz-munich.de" },
+  { name = "Lukas Heumos", email = "lukas.heumos@posteo.net" },
 ]
 authors = [
   { name = "Eljas Roellin, Lukas Heumos, Xinyue Zhang" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.14"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-  "anndata",
+  "anndata>=0.11",
+  "duckdb",
+  "fast-array-utils[sparse]",
+  "filelock",
   # for debug logging (referenced from the issue template)
+  "lamin-utils",
+  "requests",
+  "rich",
   "session-info2",
+  "sparse",
+  "xarray",
+  "zarr<3",
 ]
 optional-dependencies.dev = [
   "pre-commit",
-  "twine>=4.0.2",
+  "twine",
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
+  "ehrdata[lamin,torch,vitessce]",
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
   "pandas",
-  # Until pybtex >0.24.0 releases: https://bitbucket.org/pybtex-devs/pybtex/issues/169/
-  "setuptools",
-  "sphinx>=8.1",
+  "scanpydoc",
+  "sphinx>=4",
   "sphinx-autodoc-typehints",
   "sphinx-book-theme>=1",
   "sphinx-copybutton",
@@ -47,10 +56,27 @@ optional-dependencies.doc = [
   "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
 ]
+optional-dependencies.ehrapy = [
+  "ehrapy",
+]
+optional-dependencies.lamin = [
+  "lamindb",
+  #"omop", # Not needed and causing an issue in the readthedocs build https://github.com/laminlabs/lamindb/issues/3081
+  "rich",
+]
 optional-dependencies.test = [
-  "coverage>=7.10",
+  "coverage",
+  "ehrdata[lamin,torch,vitessce]",
   "pytest",
-  "pytest-cov",     # For VS Code’s coverage functionality
+  "pytest-cov",
+]
+optional-dependencies.torch = [
+  "torch",
+]
+
+optional-dependencies.vitessce = [
+  "vitessce[all]>=3.4", # the actual dependency
+  "zarr>=2.18.7,<3",    # vitessce does not support zarr>=3
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://ehrdata.readthedocs.io/"
@@ -63,29 +89,12 @@ features = [ "dev" ]
 
 [tool.hatch.envs.docs]
 features = [ "doc" ]
-scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
+scripts.build = "sphinx-build -M html docs docs/_build {args}"
 scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 scripts.clean = "git clean -fdX -- {args:docs}"
 
-# Test the lowest and highest supported Python versions with normal deps
-[[tool.hatch.envs.hatch-test.matrix]]
-deps = [ "stable" ]
-python = [ "3.10", "3.13" ]
-
-# Test the newest supported Python version also with pre-release deps
-[[tool.hatch.envs.hatch-test.matrix]]
-deps = [ "pre" ]
-python = [ "3.13" ]
-
 [tool.hatch.envs.hatch-test]
-features = [ "dev", "test" ]
-
-[tool.hatch.envs.hatch-test.overrides]
-# If the matrix variable `deps` is set to "pre",
-# set the environment variable `UV_PRERELEASE` to "allow".
-matrix.deps.env-vars = [
-  { key = "UV_PRERELEASE", value = "allow", if = [ "pre" ] },
-]
+features = [ "test" ]
 
 [tool.ruff]
 line-length = 120
@@ -95,16 +104,28 @@ extend-include = [ "*.ipynb" ]
 format.docstring-code-format = true
 
 lint.select = [
-  "B",      # flake8-bugbear
-  "BLE",    # flake8-blind-except
-  "C4",     # flake8-comprehensions
-  "D",      # pydocstyle
+  "B",      # Likely bugs and design issues
+  "BLE",    # Blind exception raised
+  "C4",     # Comprehensions
+  "D",      # Documentation style
   "E",      # Error detected by Pycodestyle
+  "EM",     # Traceback-friendly error messages
   "F",      # Errors detected by Pyflakes
-  "I",      # isort
-  "RUF100", # Report unused noqa directives
-  "TID",    # flake8-tidy-imports
-  "UP",     # pyupgrade
+  "FBT",    # No positional boolean parameters
+  "I",      # Import sorting
+  "ICN",    # Follow import conventions
+  "ISC",    # Implicit string concatenation
+  "PERF",   # Performance
+  "PIE",    # Syntax simplifications
+  "PL",     # Pylint
+  "PT",     # Pytest style
+  "PTH",    # Pathlib instead of os.path
+  "PYI",    # Typing
+  "RUF",    # Miscellaneous Ruff-only lints
+  "SIM",    # Simplify control flow
+  "TC",     # Manage type checking blocks
+  "TID251", # Banned imports
+  "UP",     # Update legacy syntax
   "W",      # Warning detected by Pycodestyle
 ]
 lint.ignore = [
@@ -114,18 +135,27 @@ lint.ignore = [
   "D105", # __magic__ methods are often self-explanatory, allow missing docstrings
   "D107", # Missing docstring in __init__
   # Disable one in each pair of mutually incompatible rules
-  "D203", # We don’t want a blank line before a class docstring
-  "D213", # <> We want docstrings to start immediately after the opening triple quote
-  "D400", # first line should end with a period [Bug: doesn’t work with single-line docstrings]
-  "D401", # First line should be in imperative mood; try rephrasing
-  "E501", # line too long -> we accept long comment lines; formatter gets rid of long code lines
-  "E731", # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
-  "E741", # allow I, O, l as variable names -> I is the identity matrix
+  "D203",    # We don’t want a blank line before a class docstring
+  "D213",    # <> We want docstrings to start immediately after the opening triple quote
+  "D400",    # first line should end with a period [Bug: doesn’t work with single-line docstrings]
+  "D401",    # First line should be in imperative mood; try rephrasing
+  "E501",    # line too long -> we accept long comment lines; formatter gets rid of long code lines
+  "E731",    # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
+  "E741",    # allow I, O, l as variable names -> I is the identity matrix
+  "PLC0415", # `import` should be at the top-level of a file
+  "PLR0912", # Too many branches
+  "PLR0913", # Too many arguments in function def
+  "PLR0915", # Too many statements
+  "PLR2004", # magic value used in comparison
+  "PLW2901", # overwritten by target
+  "PT011",   # too broad pytest raises
+  "RUF001",  # docstring contains ambiguous sign
+  "RUF002",  # ambiguous multiplcation sign
 ]
 lint.per-file-ignores."*/__init__.py" = [ "F401" ]
 lint.per-file-ignores."docs/*" = [ "I" ]
 lint.per-file-ignores."tests/*" = [ "D" ]
-lint.pydocstyle.convention = "numpy"
+lint.pydocstyle.convention = "google"
 
 [tool.pytest.ini_options]
 testpaths = [ "tests" ]

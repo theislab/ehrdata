@@ -1,38 +1,21 @@
 # API
 
-## Preprocessing
+Import the ehrdata API as follows:
 
-```{eval-rst}
-.. module:: ehrdata.pp
-.. currentmodule:: ehrdata
-
-.. autosummary::
-    :toctree: generated
-
-    pp.basic_preproc
+```python
+import ehrdata as ed
 ```
 
-## Tools
+```{toctree}
+:maxdepth: 1
 
-```{eval-rst}
-.. module:: ehrdata.tl
-.. currentmodule:: ehrdata
-
-.. autosummary::
-    :toctree: generated
-
-    tl.basic_tool
+api/ehrdata_index
+api/datasets_index
+api/io_index
+api/tools_index
+api/plot_index
 ```
 
-## Plotting
-
 ```{eval-rst}
-.. module:: ehrdata.pl
 .. currentmodule:: ehrdata
-
-.. autosummary::
-    :toctree: generated
-
-    pl.basic_plot
-    pl.BasicClass
 ```
