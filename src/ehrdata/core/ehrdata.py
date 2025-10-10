@@ -6,9 +6,8 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 from anndata._core.views import DataFrameView, _resolve_idx
-from sparse import COO
 
-from ehrdata._types import DaskArray, RDataType, XDataType
+from ehrdata._types import RDataType, XDataType
 from ehrdata.core.constants import R_LAYER_KEY
 
 if TYPE_CHECKING:
@@ -87,8 +86,8 @@ class EHRData(AnnData):
         R = R if R is not None else R_existing
 
         # Type checking for r
-        if R is not None and not isinstance(R, (np.ndarray, COO, DaskArray)):  # type: ignore
-            msg = f"`R` must be numpy.ndarray, sparse.COO, or dask.array.Array, got {type(R)}"
+        if R is not None and not isinstance(R, RDataType):  # type: ignore
+            msg = f"`R` must be numpy.ndarray, scipy.sparse.COO, dask.array.Array, or cupy.ndarray got {type(R)}"
             raise TypeError(msg)
 
         # Shape handling
@@ -160,7 +159,7 @@ class EHRData(AnnData):
         cls,
         adata: AnnData,
         *,
-        R: np.ndarray | None = None,
+        R: RDataType | None = None,
         tem: pd.DataFrame | None = None,
         tidx: slice | None = None,
     ) -> EHRData:
@@ -218,7 +217,7 @@ class EHRData(AnnData):
         return instance
 
     @property
-    def R(self) -> np.ndarray | None:
+    def R(self) -> RDataType | None:
         """3-Dimensional tensor, aligned with obs along first axis, var along second axis, with a third time axis."""
         if self.is_view:
             if self._adata_ref.layers.get(R_LAYER_KEY) is None:

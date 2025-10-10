@@ -32,7 +32,8 @@ XDataType: TypeAlias = (
     | CupySparseMatrix
 )
 
-RDataType: TypeAlias = np.ndarray | COO | DaskArray
+# cannot yet support `CupySparseMatrix` because it doesn't support n-D
+RDataType: TypeAlias = np.ndarray | COO | DaskArray | CupyArray
 
 EHRDataElem = Literal[
     "obs",
