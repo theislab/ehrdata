@@ -95,6 +95,7 @@ scripts.clean = "git clean -fdX -- {args:docs}"
 
 [tool.hatch.envs.hatch-test]
 features = [ "test" ]
+python = [ "3.11", "3.13" ]
 
 [tool.ruff]
 line-length = 120
