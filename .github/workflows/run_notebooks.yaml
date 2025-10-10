@@ -36,7 +36,7 @@ jobs:
               run: pip install uv
 
             - name: Install ehrdata and additional dependencies
-              run: uv pip install --system . nbconvert ipykernel graphviz torch
+              run: uv pip install --system . nbconvert ipykernel graphviz torch ehrapy vitessce bottleneck
 
             - name: Run ${{ matrix.notebook }} Notebook
               run: jupyter nbconvert --to notebook --execute ${{ matrix.notebook }}
