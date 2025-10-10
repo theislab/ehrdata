@@ -1,0 +1,39 @@
+name: Run Notebooks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+    run:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                notebook: [
+                        "docs/tutorials/getting_started.ipynb",
+                        "docs/tutorials/omop_ml.ipynb",
+                        "docs/tutorials/omop_tables_tutorial.ipynb",
+                        "docs/tutorials/physionet2012.ipynb",
+                        "docs/tutorials/tutorial_time_series_with_pypots.ipynb",
+                    ]
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  submodules: "true"
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.13"
+
+            - name: Install UV
+              run: pip install uv
+
+            - name: Run ${{ matrix.notebook }} Notebook
+              run: jupyter nbconvert --to notebook --execute ${{ matrix.notebook }}
