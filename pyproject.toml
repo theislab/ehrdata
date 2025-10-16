@@ -46,8 +46,6 @@ optional-dependencies.doc = [
   "myst-nb>=1.1",
   "pandas",
   "scanpydoc",
-  # Until pybtex >0.24.0 releases: https://bitbucket.org/pybtex-devs/pybtex/issues/169/
-  "setuptools",
   "sphinx>=4",
   "sphinx-autodoc-typehints",
   "sphinx-book-theme>=1",
@@ -95,6 +93,9 @@ scripts.clean = "git clean -fdX -- {args:docs}"
 
 [tool.hatch.envs.hatch-test]
 features = [ "test" ]
+
+[[tool.hatch.envs.hatch-test.matrix]]
+python = [ "3.11", "3.13" ]
 
 [tool.ruff]
 line-length = 120
@@ -166,18 +167,10 @@ addopts = [
 
 [tool.coverage.run]
 source = [ "ehrdata" ]
+patch = [ "subprocess" ]
 omit = [
   "**/test_*.py",
 ]
-
-[tool.mypy]
-strict = false
-pretty = true
-show_column_numbers = true
-show_error_codes = true
-show_error_context = true
-ignore_missing_imports = true
-no_strict_optional = true
 
 [tool.cruft]
 skip = [
