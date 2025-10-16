@@ -6,7 +6,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 import pytest
-import sparse as sp
+from scipy import sparse
 
 from ehrdata import EHRData
 from ehrdata.core.constants import R_LAYER_KEY
@@ -88,7 +88,13 @@ def R_numpy_322():
 
 @pytest.fixture
 def R_sparse_322():
-    return sp.COO(np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]))
+    return sparse.coo_array(
+        (
+            np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]).ravel(),
+            np.indices((3, 2, 2)).reshape(3, -1),
+        ),
+        shape=(3, 2, 2),
+    )
 
 
 @pytest.fixture

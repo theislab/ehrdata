@@ -7,7 +7,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
-from lamin_utils import logger
+from ehrdata._logger import logger
 
 
 def _cast_variables_to_float(edata: EHRData) -> None:
