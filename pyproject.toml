@@ -29,7 +29,6 @@ dependencies = [
   # for debug logging (referenced from the issue template)
   "requests",
   "rich",
-  "session-info2",
   "xarray",
   "zarr<3",
 ]
@@ -59,7 +58,6 @@ optional-dependencies.ehrapy = [
 optional-dependencies.lamin = [
   "lamindb",
   #"omop", # Not needed and causing an issue in the readthedocs build https://github.com/laminlabs/lamindb/issues/3081
-  "rich",
 ]
 optional-dependencies.test = [
   "coverage",
