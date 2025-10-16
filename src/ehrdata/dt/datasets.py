@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-from lamin_utils import logger
 
+from ehrdata._logger import logger
 from ehrdata.core.constants import DEFAULT_DATA_PATH
 from ehrdata.dt._dataloader import _download
 from ehrdata.io import read_csv, read_h5ad
@@ -22,8 +22,7 @@ if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
-from scipy.sparse import csr_matrix
-from sparse import COO
+from scipy.sparse import coo_array, csr_matrix
 
 
 def ehrdata_blobs(
@@ -218,7 +217,7 @@ def ehrdata_blobs(
         coords = np.where(R_copy != 0)
         values = R_copy[coords]
 
-        R = COO(coords, values, shape=R.shape)
+        R = coo_array((values, coords), shape=R.shape)
 
     from ehrdata import EHRData
 

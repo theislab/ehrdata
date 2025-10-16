@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import pandas as pd
 from anndata import AnnData
 from anndata._core.views import DataFrameView, _resolve_idx
-from sparse import COO
 
-from ehrdata._types import DaskArray, RDataType, XDataType
+from ehrdata._types import RDataType, XDataType
 from ehrdata.core.constants import R_LAYER_KEY
 
 if TYPE_CHECKING:
@@ -18,7 +17,7 @@ if TYPE_CHECKING:
     from anndata._core.index import Index as ADIndex
     from anndata._core.index import Index1D
 
-    Index: TypeAlias = ADIndex | tuple[Index1D, Index1D, Index1D]
+    type Index = ADIndex | tuple[Index1D, Index1D, Index1D]
 
 
 class EHRData(AnnData):
@@ -87,7 +86,7 @@ class EHRData(AnnData):
         R = R if R is not None else R_existing
 
         # Type checking for r
-        if R is not None and not isinstance(R, (np.ndarray, COO, DaskArray)):  # type: ignore
+        if R is not None and not isinstance(R, RDataType):  # type: ignore
             msg = f"`R` must be numpy.ndarray, sparse.COO, or dask.array.Array, got {type(R)}"
             raise TypeError(msg)
 

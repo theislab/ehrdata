@@ -92,7 +92,6 @@ intersphinx_mapping = {
     "zarr": ("https://zarr.readthedocs.io/en/stable", None),
     "vitessce": ("https://python-docs.vitessce.io", None),
     "lamin": ("https://docs.lamin.ai", None),
-    "sparse": ("https://sparse.pydata.org/en/stable", None),
 }
 
 # List of patterns, relative to source directory, that match files and

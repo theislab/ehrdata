@@ -1,4 +1,4 @@
-from typing import Literal, TypeAlias
+from typing import Literal
 
 import numpy as np
 import scipy
@@ -6,18 +6,17 @@ import scipy
 # from anndata.abc import CSCDataset, CSRDataset
 from anndata.compat import CupyArray, CupySparseMatrix, DaskArray, H5Array, H5Group, ZarrArray, ZarrGroup
 from numpy import ma
-from sparse import COO
 
 from ehrdata._compat import ZappyArray
 
-ArrayStorageType: TypeAlias = ZarrArray | H5Array
-GroupStorageType: TypeAlias = ZarrGroup | H5Group
-StorageType: TypeAlias = ArrayStorageType | GroupStorageType
+type ArrayStorageType = ZarrArray | H5Array
+type GroupStorageType = ZarrGroup | H5Group
+type StorageType = ArrayStorageType | GroupStorageType
 
 CSMatrix = scipy.sparse.csr_matrix | scipy.sparse.csc_matrix
 CSArray = scipy.sparse.csr_array | scipy.sparse.csc_array
 
-XDataType: TypeAlias = (
+type XDataType = (
     np.ndarray
     | ma.MaskedArray
     | CSMatrix
@@ -32,7 +31,7 @@ XDataType: TypeAlias = (
     | CupySparseMatrix
 )
 
-RDataType: TypeAlias = np.ndarray | COO | DaskArray
+type RDataType = np.ndarray | scipy.sparse.coo_array | DaskArray
 
 EHRDataElem = Literal[
     "obs",
