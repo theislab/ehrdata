@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning][].
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 ## [0.0.9]
+
 ### Maintenance
 - Use custom logger & remove pydata sparse ([#176](https://github.com/theislab/ehrdata/pull/176)) @Zethson
 - Replace figshare with scverse S3 ([#177](https://github.com/theislab/ehrdata/pull/177)) @Zethson

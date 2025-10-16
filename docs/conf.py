@@ -84,7 +84,6 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
     "h5py": ("https://docs.h5py.org/en/latest", None),
-    "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "torch": ("https://pytorch.org/docs/main/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy", None),
@@ -141,8 +140,6 @@ nitpick_ignore = [
     ("py:class", "dask.array.core.Array"),
     ("py:class", "anndata.compat.CupyArray"),
     ("py:class", "anndata.compat.CupySparseMatrix"),
-    ("py:class", "sparse.numba_backend._coo.core.COO"),
-    ("py:class", "sparse._coo.core.COO"),
 ]
 
 # Redirect broken parameter annotation classes
