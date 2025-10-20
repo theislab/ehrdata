@@ -294,6 +294,17 @@ def test_setup_variables(
         ),
         (
             ["drug_exposure"],
+            ["days_supply"],
+            "interval",
+            [
+                [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
+                [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
+                [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
+            ],
+            DRUG_EXPOSURE_VAR,
+        ),
+        (
+            ["drug_exposure"],
             ["is_present"],
             "start",
             VANILLA_IS_PRESENT_START,
