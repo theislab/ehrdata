@@ -273,6 +273,8 @@ def setup_variables(
     """Extracts selected tables of a data-point character from the OMOP CDM.
 
     The distinct `concept_id` is encountered in the selected tables form the variables in the EHRData object.
+    The variables are sorted by the `concept_id` for each `data_table` in ascending order, and stacked together in the order that the `data_tables` are specified.
+
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
     It will fail if there is more than one `unit_concept_id` per variable.
@@ -388,6 +390,8 @@ def setup_variables(
             f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_table}"
         ).df()
 
+        var = var.sort_values("data_table_concept_id").reset_index(drop=True)
+
         if enrich_var_with_feature_info or enrich_var_with_unit_info:
             concepts = backend_handle.sql("SELECT * FROM concept").df()
             concepts.columns = concepts.columns.str.lower()
@@ -423,6 +427,8 @@ def setup_variables(
                 .set_index(["person_id", "data_table_concept_id", "interval_step"])
                 .to_xarray()
             )
+            # order the values in ds according to the order in var
+            ds = ds.sel(data_table_concept_id=var["data_table_concept_id"].values)
             r_collector[data_table] = ds[data_field_to_keep[data_table][0]].values
 
         else:
@@ -492,6 +498,7 @@ def setup_interval_variables(
     """Extracts selected tables of a time-span character from the OMOP CDM.
 
     The distinct `concept_id` s encountered in the selected tables form the variables in the EHRData object.
+    The variables are sorted by the `concept_id` for each `data_table` in ascending order, and stacked together in the order that the `data_tables` are specified.
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
     In contrast to `setup_variables`, tables without unit unformation can be present here. Hence, this function will not verify that a single unit per feature (=`concept_id`) is used. Also, it will not write a unit report. Should this be relevant for your work, please do open an issue on https://github.com/theislab/ehrdata.
@@ -595,6 +602,8 @@ def setup_interval_variables(
             f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_table}"
         ).df()
 
+        var = var.sort_values("data_table_concept_id").reset_index(drop=True)
+
         if enrich_var_with_feature_info:
             concepts = backend_handle.sql("SELECT * FROM concept").df()
             concepts.columns = concepts.columns.str.lower()
@@ -608,6 +617,8 @@ def setup_interval_variables(
                 .set_index(["person_id", "data_table_concept_id", "interval_step"])
                 .to_xarray()
             )
+            ds = ds.sel(data_table_concept_id=var["data_table_concept_id"].values)
+
             r_collector[data_table] = ds[data_field_to_keep[data_table][0]].values
 
         else:
