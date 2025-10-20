@@ -441,7 +441,7 @@ def setup_variables(
         logging.warning("No data found in any of the data tables. Returning edata without data.")
         return edata
 
-    var = pd.concat(var_collector.values(), axis=0)
+    var = pd.concat(var_collector.values(), axis=0).reset_index(drop=True)
 
     r = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
 
@@ -630,7 +630,7 @@ def setup_interval_variables(
         logging.warning("No data found in any of the data tables. Returning edata without data.")
         return edata
 
-    var = pd.concat(var_collector.values(), axis=0)
+    var = pd.concat(var_collector.values(), axis=0).reset_index(drop=True)
 
     r = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
 
