@@ -144,6 +144,7 @@ nitpick_ignore = [
     ("py:class", "anndata.compat.CupySparseMatrix"),
     ("py:class", "sparse.numba_backend._coo.core.COO"),
     ("py:class", "sparse._coo.core.COO"),
+    ("py:data", "typing.Union"),  # typing.Union fails in tutorials/tutorial_time_series_with_pypots
 ]
 
 # Redirect broken parameter annotation classes
