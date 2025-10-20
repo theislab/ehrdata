@@ -277,7 +277,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
     """
     data_url = "https://physionet.org/static/published-projects/mimic-iv-demo-omop/mimic-iv-demo-data-in-the-omop-common-data-model-0.9.zip"
     if data_path is None:
-        data_path = DEFAULT_DATA_PATH / "ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9"
+        data_path = DEFAULT_DATA_PATH / "mimic-iv-demo-data-in-the-omop-common-data-model-0.9"
 
     _setup_eunomia_datasets(
         data_url=data_url,
