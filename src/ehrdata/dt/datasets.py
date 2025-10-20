@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-from lamin_utils import logger
 
+from ehrdata._logger import logger
 from ehrdata.core.constants import DEFAULT_DATA_PATH
 from ehrdata.dt._dataloader import _download
 from ehrdata.io import read_csv, read_h5ad
@@ -22,8 +22,7 @@ if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
-from scipy.sparse import csr_matrix
-from sparse import COO
+from scipy.sparse import coo_array, csr_matrix
 
 
 def ehrdata_blobs(
@@ -218,7 +217,7 @@ def ehrdata_blobs(
         coords = np.where(R_copy != 0)
         values = R_copy[coords]
 
-        R = COO(coords, values, shape=R.shape)
+        R = coo_array((values, coords), shape=R.shape)
 
     from ehrdata import EHRData
 
@@ -566,7 +565,7 @@ def mimic_2_preprocessed() -> EHRData:
         >>> edata = ed.dt.mimic_2_preprocessed()
     """
     _download(
-        url="https://figshare.com/ndownloader/files/39727936",
+        url="https://scverse-exampledata.s3.eu-west-1.amazonaws.com/ehrapy/mimic_2_preprocessed.h5ad",
         output_path=DEFAULT_DATA_PATH,
         output_filename="mimic_2_preprocessed.h5ad",
         raw_format="h5ad",
@@ -591,7 +590,6 @@ def diabetes_130_raw(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.diabetes_130_raw()
-
     """
     import os
 
@@ -608,7 +606,7 @@ def diabetes_130_raw(
         )
 
     _download(
-        url="https://figshare.com/ndownloader/files/45110029",
+        url="https://scverse-exampledata.s3.eu-west-1.amazonaws.com/ehrapy/diabetes_130_raw.csv",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_raw.csv",
         raw_format="csv",
@@ -637,7 +635,6 @@ def diabetes_130_fairlearn(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.diabetes_130_fairlearn()
-
     """
     import os
 
@@ -654,7 +651,7 @@ def diabetes_130_fairlearn(
         )
 
     _download(
-        url="https://figshare.com/ndownloader/files/45110371",
+        url="https://scverse-exampledata.s3.eu-west-1.amazonaws.com/ehrapy/diabetes_130_fairlearn.csv",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_fairlearn.csv",
         raw_format="csv",

@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 from dateutil.parser import isoparse  # type: ignore
 from fast_array_utils.conv import to_dense
-from lamin_utils import logger
 from rich import print
 from rich.tree import Tree
 from scipy.sparse import issparse
 
+from ehrdata._logger import logger
 from ehrdata.core.constants import CATEGORICAL_TAG, DATE_TAG, FEATURE_TYPE_KEY, MISSING_VALUES, NUMERIC_TAG
 
 if TYPE_CHECKING:

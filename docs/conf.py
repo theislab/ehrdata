@@ -84,7 +84,6 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
     "h5py": ("https://docs.h5py.org/en/latest", None),
-    "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "torch": ("https://pytorch.org/docs/main/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy", None),
@@ -92,7 +91,6 @@ intersphinx_mapping = {
     "zarr": ("https://zarr.readthedocs.io/en/stable", None),
     "vitessce": ("https://python-docs.vitessce.io", None),
     "lamin": ("https://docs.lamin.ai", None),
-    "sparse": ("https://sparse.pydata.org/en/stable", None),
 }
 
 # List of patterns, relative to source directory, that match files and

@@ -10,9 +10,10 @@ from urllib.parse import urlparse
 
 import requests
 from filelock import FileLock
-from lamin_utils import logger
 from requests.exceptions import RequestException
 from rich.progress import Progress
+
+from ehrdata._logger import logger
 
 COMPRESSION_FORMATS = Literal["tar.gz", "gztar", "zip", "tar", "gz", "bz", "xz"]
 COMPRESSION_FORMATS_LIST = list(get_args(COMPRESSION_FORMATS))
