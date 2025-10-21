@@ -4,7 +4,7 @@ requires = [ "hatchling" ]
 
 [project]
 name = "ehrdata"
-version = "0.0.6"
+version = "0.0.9"
 description = "A Python package for EHR data"
 readme = "README.md"
 license = "Apache-2.0"
@@ -15,24 +15,20 @@ maintainers = [
 authors = [
   { name = "Eljas Roellin, Lukas Heumos, Xinyue Zhang" },
 ]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.12,<3.14"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
   "anndata>=0.11",
   "duckdb",
-  "fast-array-utils",
+  "fast-array-utils[sparse]",
   "filelock",
   # for debug logging (referenced from the issue template)
-  "lamin-utils",
   "requests",
   "rich",
-  "session-info2",
-  "sparse",
   "xarray",
   "zarr<3",
 ]
@@ -42,14 +38,12 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
-  "ehrdata[torch,lamin,vitessce]",
+  "ehrdata[lamin,torch,vitessce]",
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
   "pandas",
   "scanpydoc",
-  # Until pybtex >0.24.0 releases: https://bitbucket.org/pybtex-devs/pybtex/issues/169/
-  "setuptools",
   "sphinx>=4",
   "sphinx-autodoc-typehints",
   "sphinx-book-theme>=1",
@@ -62,13 +56,12 @@ optional-dependencies.ehrapy = [
   "ehrapy",
 ]
 optional-dependencies.lamin = [
-  "lamindb[bionty,jupyter]",
-  "omop",
-  "rich",
+  "lamindb",
+  #"omop", # Not needed and causing an issue in the readthedocs build https://github.com/laminlabs/lamindb/issues/3081
 ]
 optional-dependencies.test = [
   "coverage",
-  "ehrdata[torch,vitessce,lamin]",
+  "ehrdata[lamin,torch,vitessce]",
   "pytest",
   "pytest-cov",
 ]
@@ -97,6 +90,9 @@ scripts.clean = "git clean -fdX -- {args:docs}"
 
 [tool.hatch.envs.hatch-test]
 features = [ "test" ]
+
+[[tool.hatch.envs.hatch-test.matrix]]
+python = [ "3.12", "3.13" ]
 
 [tool.ruff]
 line-length = 120
@@ -168,18 +164,10 @@ addopts = [
 
 [tool.coverage.run]
 source = [ "ehrdata" ]
+patch = [ "subprocess" ]
 omit = [
   "**/test_*.py",
 ]
-
-[tool.mypy]
-strict = false
-pretty = true
-show_column_numbers = true
-show_error_codes = true
-show_error_context = true
-ignore_missing_imports = true
-no_strict_optional = true
 
 [tool.cruft]
 skip = [

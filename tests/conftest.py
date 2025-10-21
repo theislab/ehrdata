@@ -6,7 +6,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 import pytest
-import sparse as sp
+from scipy import sparse as sp
 
 from ehrdata import EHRData
 from ehrdata.io.omop import setup_connection

@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 from dateutil.parser import isoparse  # type: ignore
 from fast_array_utils.conv import to_dense
-from lamin_utils import logger
 from rich import print
 from rich.tree import Tree
 from scipy.sparse import issparse
 
+from ehrdata._logger import logger
 from ehrdata.core.constants import CATEGORICAL_TAG, DATE_TAG, FEATURE_TYPE_KEY, MISSING_VALUES, NUMERIC_TAG
 
 if TYPE_CHECKING:
@@ -31,6 +31,7 @@ def _detect_feature_type(col: pd.Series) -> tuple[Literal["date", "categorical",
     """
     n_elements = len(col)
     col = col.replace(MISSING_VALUES, np.nan)
+    col = col.infer_objects(copy=False)
     col = col.dropna()
     if len(col) == 0:
         err_msg = f"Feature '{col.name}' contains only NaN values. Please drop this feature to infer the feature type."
@@ -321,6 +322,7 @@ def harmonize_missing_values(
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
     df.replace(missing_values, np.nan, inplace=True)
+    df.infer_objects(copy=False)
 
     if layer is None:
         edata.X = df.values.reshape(X.shape)

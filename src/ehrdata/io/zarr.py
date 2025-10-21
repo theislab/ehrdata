@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import anndata as ad
 import zarr
-from lamin_utils import logger
 
+from ehrdata._logger import logger
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
 
 if TYPE_CHECKING:
@@ -75,7 +75,7 @@ def write_zarr(
     If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
 
     Args:
-        edata: Data object.
+        edata: Central data object.
         filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
         chunks: Chunk shape, passed to :meth:`zarr.Group.create_dataset` for `Zarr` version 2, or to :meth:`zarr.Group.create_array` for `Zarr` version 3.
         convert_strings_to_categoricals: Convert columns of `str` dtype in `.obs` and `.var` to `categorical` dtype.

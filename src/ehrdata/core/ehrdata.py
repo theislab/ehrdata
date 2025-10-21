@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -17,6 +17,8 @@ from anndata._core.aligned_mapping import (
     Value,
     convert_to_dict,
 )
+from anndata._core.index import Index as ADIndex
+from anndata._core.index import Index1D
 
 # from anndata._core.index import _subset
 from anndata._core.views import (
@@ -30,12 +32,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from os import PathLike
 
-    from anndata._core.index import Index as ADIndex
-    from anndata._core.index import Index1D
-
     from ehrdata._types import XDataType
 
-    Index: TypeAlias = ADIndex | tuple[Index1D, Index1D, Index1D]
+Index = ADIndex | tuple[Index1D, Index1D, Index1D]
 
 T = TypeVar("T", bound=AlignedMapping)
 

@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-from lamin_utils import logger
 
+from ehrdata._logger import logger
 from ehrdata.core.constants import DEFAULT_DATA_PATH
 from ehrdata.dt._dataloader import _download
 from ehrdata.io import read_csv, read_h5ad
@@ -17,13 +17,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
 
-    from duckdb.duckdb import DuckDBPyConnection
+    from duckdb import DuckDBPyConnection
 
     from ehrdata import EHRData
 
-
-from scipy.sparse import csr_matrix
-from sparse import COO
+from scipy.sparse import COO, csr_matrix
 
 
 def ehrdata_blobs(
@@ -224,7 +222,7 @@ def ehrdata_blobs(
 
     return EHRData(
         X=X,
-        obs=pd.DataFrame({"cluster": y.astype(str)}, index=pd.Index([str(i) for i in range(n_observations)])),
+        obs=pd.DataFrame({"cluster": pd.Categorical(y)}, index=pd.Index([str(i) for i in range(n_observations)])),
         var=pd.DataFrame(index=pd.Index([f"feature_{i}" for i in range(n_variables)])),
         layers={"tem_layer": tem_layer},
         tem=t_df,
@@ -278,7 +276,7 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
     """
     data_url = "https://physionet.org/static/published-projects/mimic-iv-demo-omop/mimic-iv-demo-data-in-the-omop-common-data-model-0.9.zip"
     if data_path is None:
-        data_path = DEFAULT_DATA_PATH / "ehrapy_data/mimic-iv-demo-data-in-the-omop-common-data-model-0.9"
+        data_path = DEFAULT_DATA_PATH / "mimic-iv-demo-data-in-the-omop-common-data-model-0.9"
 
     _setup_eunomia_datasets(
         data_url=data_url,
@@ -568,7 +566,7 @@ def mimic_2_preprocessed() -> EHRData:
         >>> edata = ed.dt.mimic_2_preprocessed()
     """
     _download(
-        url="https://figshare.com/ndownloader/files/39727936",
+        url="https://scverse-exampledata.s3.eu-west-1.amazonaws.com/ehrapy/mimic_2_preprocessed.h5ad",
         output_path=DEFAULT_DATA_PATH,
         output_filename="mimic_2_preprocessed.h5ad",
         raw_format="h5ad",
@@ -593,13 +591,27 @@ def diabetes_130_raw(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.diabetes_130_raw()
-
     """
+    import os
+
+    # Use more aggressive retry settings in CI environments
+    is_ci = os.getenv("CI", "false").lower() == "true"
+    download_kwargs = {}
+    if is_ci:
+        download_kwargs.update(
+            {
+                "timeout": 120,
+                "max_retries": 8,
+                "retry_delay": 15,
+            }
+        )
+
     _download(
-        url="https://figshare.com/ndownloader/files/45110029",
+        url="https://scverse-exampledata.s3.eu-west-1.amazonaws.com/ehrapy/diabetes_130_raw.csv",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_raw.csv",
         raw_format="csv",
+        **download_kwargs,
     )
     adata = read_csv(
         filename=f"{DEFAULT_DATA_PATH}/diabetes_130_raw.csv",
@@ -624,13 +636,27 @@ def diabetes_130_fairlearn(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.diabetes_130_fairlearn()
-
     """
+    import os
+
+    # Use more aggressive retry settings in CI environments
+    is_ci = os.getenv("CI", "false").lower() == "true"
+    download_kwargs = {}
+    if is_ci:
+        download_kwargs.update(
+            {
+                "timeout": 120,
+                "max_retries": 8,
+                "retry_delay": 15,
+            }
+        )
+
     _download(
-        url="https://figshare.com/ndownloader/files/45110371",
+        url="https://scverse-exampledata.s3.eu-west-1.amazonaws.com/ehrapy/diabetes_130_fairlearn.csv",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_fairlearn.csv",
         raw_format="csv",
+        **download_kwargs,
     )
     edata = read_csv(
         filename=f"{DEFAULT_DATA_PATH}/diabetes_130_fairlearn.csv",

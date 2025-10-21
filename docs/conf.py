@@ -84,7 +84,6 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
     "h5py": ("https://docs.h5py.org/en/latest", None),
-    "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "torch": ("https://pytorch.org/docs/main/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy", None),
@@ -92,7 +91,6 @@ intersphinx_mapping = {
     "zarr": ("https://zarr.readthedocs.io/en/stable", None),
     "vitessce": ("https://python-docs.vitessce.io", None),
     "lamin": ("https://docs.lamin.ai", None),
-    "sparse": ("https://sparse.pydata.org/en/stable", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -131,6 +129,7 @@ nitpick_ignore = [
     ("py:class", "types.EllipsisType"),
     # https://github.com/duckdb/duckdb-web/issues/3806
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
+    ("py:class", "_duckdb.DuckDBPyConnection"),
     # Is documented as a py:attribute instead
     ("py:class", "numpy.int64"),
     # For now not in public facing API
@@ -143,6 +142,7 @@ nitpick_ignore = [
     ("py:class", "anndata.compat.CupySparseMatrix"),
     ("py:class", "sparse.numba_backend._coo.core.COO"),
     ("py:class", "sparse._coo.core.COO"),
+    ("py:data", "typing.Union"),  # typing.Union fails in tutorials/tutorial_time_series_with_pypots
 ]
 
 # Redirect broken parameter annotation classes

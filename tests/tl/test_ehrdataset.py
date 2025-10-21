@@ -1,3 +1,7 @@
+import pytest
+
+pytest.importorskip("torch")
+
 import torch
 
 import ehrdata as ed

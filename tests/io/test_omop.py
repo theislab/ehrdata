@@ -1,6 +1,7 @@
 import re
 
 import numpy as np
+import pandas as pd
 import pytest
 
 import ehrdata as ed
@@ -42,6 +43,18 @@ VANILLA_IS_PRESENT_INTERVAL = [
     [[1, 1, 1, 1], [1, 1, 1, 1]],
     [[1, 1, 1, 1], [1, 1, 1, 1]],
 ]
+
+MEASUREMENT_VAR = pd.DataFrame({"data_table_concept_id": [3022318, 3031147]}, index=["0", "1"])
+OBSERVATION_VAR = pd.DataFrame({"data_table_concept_id": [3001062, 3034263]}, index=["0", "1"])
+SPECIMEN_VAR = pd.DataFrame({"data_table_concept_id": [4001225, 4121345]}, index=["0", "1"])
+DRUG_EXPOSURE_VAR = pd.DataFrame({"data_table_concept_id": [19019979, 19073183]}, index=["0", "1"])
+CONDITION_OCCURRENCE_VAR = pd.DataFrame({"data_table_concept_id": [4112343, 43530622]}, index=["0", "1"])
+PROCEDURE_OCCURRENCE_VAR = pd.DataFrame({"data_table_concept_id": [4107731, 4326177]}, index=["0", "1"])
+DEVICE_EXPOSURE_VAR = pd.DataFrame({"data_table_concept_id": [4217646, 45768171]}, index=["0", "1"])
+DRUG_ERA_VAR = pd.DataFrame({"data_table_concept_id": [1124957, 1368671]}, index=["0", "1"])
+DOSE_ERA_VAR = pd.DataFrame({"data_table_concept_id": [714785, 902427]}, index=["0", "1"])
+CONDITION_ERA_VAR = pd.DataFrame({"data_table_concept_id": [434610, 4140598]}, index=["0", "1"])
+EPISODE_VAR = pd.DataFrame({"data_table_concept_id": [32531, 32941]}, index=["0", "1"])
 
 # constants for setup_variables
 # only data_table_concept_id
@@ -117,7 +130,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
 )
 # test 1 field from table, and is_present encoding
 @pytest.mark.parametrize(
-    ("data_tables", "data_field_to_keep", "target_r"),
+    ("data_tables", "data_field_to_keep", "target_R", "target_var"),
     [
         (
             ["measurement"],
@@ -127,11 +140,13 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
                 [[np.nan, np.nan, np.nan, np.nan], [20.0, np.nan, np.nan, np.nan]],
                 [[np.nan, np.nan, np.nan, np.nan], [22.0, np.nan, np.nan, np.nan]],
             ],
+            MEASUREMENT_VAR,
         ),
         (
             ["measurement"],
             ["is_present"],
             VANILLA_IS_PRESENT_START,
+            MEASUREMENT_VAR,
         ),
         (
             ["observation"],
@@ -141,11 +156,13 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
                 [[np.nan, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
                 [[np.nan, np.nan, np.nan, np.nan], [5, np.nan, np.nan, np.nan]],
             ],
+            OBSERVATION_VAR,
         ),
         (
             ["observation"],
             ["is_present"],
             VANILLA_IS_PRESENT_START,
+            OBSERVATION_VAR,
         ),
         (
             ["specimen"],
@@ -155,11 +172,13 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
                 [[0.5, np.nan, np.nan, np.nan], [1.5, np.nan, np.nan, np.nan]],
                 [[0.5, np.nan, np.nan, np.nan], [1.5, np.nan, np.nan, np.nan]],
             ],
+            SPECIMEN_VAR,
         ),
         (
             ["specimen"],
             ["is_present"],
             VANILLA_IS_PRESENT_START,
+            SPECIMEN_VAR,
         ),
         (
             ["measurement", "observation", "specimen"],
@@ -194,6 +213,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
                     [1.5, np.nan, np.nan, np.nan],
                 ],
             ],
+            pd.concat([MEASUREMENT_VAR, OBSERVATION_VAR, SPECIMEN_VAR]).set_index(pd.Index(map(str, range(6)))),
         ),
     ],
 )
@@ -212,7 +232,8 @@ def test_setup_variables(
     data_field_to_keep,
     enrich_var_with_feature_info,
     enrich_var_with_unit_info,
-    target_r,
+    target_R,
+    target_var,
 ):
     num_intervals = 4
     con = omop_connection_vanilla
@@ -236,8 +257,9 @@ def test_setup_variables(
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0) + (
         VAR_DIM_UNIT_INFO if enrich_var_with_unit_info else 0
     )
+    pd.testing.assert_frame_equal(edata.var[["data_table_concept_id"]], target_var)
 
-    assert np.allclose(edata.layers["tem_layer"], np.array(target_r), equal_nan=True)
+    assert np.allclose(edata.layers["tem_layer"], np.array(target_R), equal_nan=True)
 
 
 @pytest.mark.parametrize(
@@ -246,7 +268,7 @@ def test_setup_variables(
 )
 # test 1 field from table, and is_present encoding, with start, end, and interval
 @pytest.mark.parametrize(
-    ("data_tables", "data_field_to_keep", "keep_date", "target_r"),
+    ("data_tables", "data_field_to_keep", "keep_date", "target_R", "target_var"),
     [
         (
             ["drug_exposure"],
@@ -257,6 +279,7 @@ def test_setup_variables(
                 [[31.0, np.nan, np.nan, np.nan], [31.0, np.nan, np.nan, np.nan]],
                 [[31.0, np.nan, np.nan, np.nan], [31.0, np.nan, np.nan, np.nan]],
             ],
+            DRUG_EXPOSURE_VAR,
         ),
         (
             ["drug_exposure"],
@@ -267,6 +290,7 @@ def test_setup_variables(
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
             ],
+            DRUG_EXPOSURE_VAR,
         ),
         (
             ["drug_exposure"],
@@ -277,24 +301,28 @@ def test_setup_variables(
                 [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
                 [[31.0, 31.0, 31.0, 31.0], [31.0, 31.0, 31.0, 31.0]],
             ],
+            DRUG_EXPOSURE_VAR,
         ),
         (
             ["drug_exposure"],
             ["is_present"],
             "start",
             VANILLA_IS_PRESENT_START,
+            DRUG_EXPOSURE_VAR,
         ),
         (
             ["drug_exposure"],
             ["is_present"],
             "end",
             VANILLA_IS_PRESENT_END,
+            DRUG_EXPOSURE_VAR,
         ),
         (
             ["drug_exposure"],
             ["is_present"],
             "interval",
             VANILLA_IS_PRESENT_INTERVAL,
+            DRUG_EXPOSURE_VAR,
         ),
         (
             ["condition_occurrence"],
@@ -305,6 +333,7 @@ def test_setup_variables(
                 [[15, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
                 [[15, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
             ],
+            CONDITION_OCCURRENCE_VAR,
         ),
         (
             ["condition_occurrence"],
@@ -315,6 +344,7 @@ def test_setup_variables(
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
             ],
+            CONDITION_OCCURRENCE_VAR,
         ),
         (
             ["condition_occurrence"],
@@ -325,24 +355,28 @@ def test_setup_variables(
                 [[15, 15, 15, 15], [10, 10, 10, 10]],
                 [[15, 15, 15, 15], [10, 10, 10, 10]],
             ],
+            CONDITION_OCCURRENCE_VAR,
         ),
         (
             ["condition_occurrence"],
             ["is_present"],
             "start",
             VANILLA_IS_PRESENT_START,
+            CONDITION_OCCURRENCE_VAR,
         ),
         (
             ["condition_occurrence"],
             ["is_present"],
             "end",
             VANILLA_IS_PRESENT_END,
+            CONDITION_OCCURRENCE_VAR,
         ),
         (
             ["condition_occurrence"],
             ["is_present"],
             "interval",
             VANILLA_IS_PRESENT_INTERVAL,
+            CONDITION_OCCURRENCE_VAR,
         ),
         (
             ["procedure_occurrence"],
@@ -353,6 +387,7 @@ def test_setup_variables(
                 [[180256009, np.nan, np.nan, np.nan], [430193006, np.nan, np.nan, np.nan]],
                 [[180256009, np.nan, np.nan, np.nan], [430193006, np.nan, np.nan, np.nan]],
             ],
+            PROCEDURE_OCCURRENCE_VAR,
         ),
         (
             ["procedure_occurrence"],
@@ -363,6 +398,7 @@ def test_setup_variables(
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
             ],
+            PROCEDURE_OCCURRENCE_VAR,
         ),
         (
             ["procedure_occurrence"],
@@ -373,24 +409,28 @@ def test_setup_variables(
                 [[180256009, 180256009, 180256009, 180256009], [430193006, 430193006, 430193006, 430193006]],
                 [[180256009, 180256009, 180256009, 180256009], [430193006, 430193006, 430193006, 430193006]],
             ],
+            PROCEDURE_OCCURRENCE_VAR,
         ),
         (
             ["procedure_occurrence"],
             ["is_present"],
             "start",
             VANILLA_IS_PRESENT_START,
+            PROCEDURE_OCCURRENCE_VAR,
         ),
         (
             ["procedure_occurrence"],
             ["is_present"],
             "end",
             VANILLA_IS_PRESENT_END,
+            PROCEDURE_OCCURRENCE_VAR,
         ),
         (
             ["procedure_occurrence"],
             ["is_present"],
             "interval",
             VANILLA_IS_PRESENT_INTERVAL,
+            PROCEDURE_OCCURRENCE_VAR,
         ),
         (
             ["device_exposure"],
@@ -401,6 +441,7 @@ def test_setup_variables(
                 [[72506001, np.nan, np.nan, np.nan], [224087, np.nan, np.nan, np.nan]],
                 [[72506001, np.nan, np.nan, np.nan], [224087, np.nan, np.nan, np.nan]],
             ],
+            DEVICE_EXPOSURE_VAR,
         ),
         (
             ["device_exposure"],
@@ -411,6 +452,7 @@ def test_setup_variables(
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
             ],
+            DEVICE_EXPOSURE_VAR,
         ),
         (
             ["device_exposure"],
@@ -421,24 +463,28 @@ def test_setup_variables(
                 [[72506001, 72506001, 72506001, 72506001], [224087, 224087, 224087, 224087]],
                 [[72506001, 72506001, 72506001, 72506001], [224087, 224087, 224087, 224087]],
             ],
+            DEVICE_EXPOSURE_VAR,
         ),
         (
             ["device_exposure"],
             ["is_present"],
             "start",
             VANILLA_IS_PRESENT_START,
+            DEVICE_EXPOSURE_VAR,
         ),
         (
             ["device_exposure"],
             ["is_present"],
             "end",
             VANILLA_IS_PRESENT_END,
+            DEVICE_EXPOSURE_VAR,
         ),
         (
             ["device_exposure"],
             ["is_present"],
             "interval",
             VANILLA_IS_PRESENT_INTERVAL,
+            DEVICE_EXPOSURE_VAR,
         ),
         (
             ["drug_era"],
@@ -449,6 +495,7 @@ def test_setup_variables(
                 [[2, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
                 [[2, np.nan, np.nan, np.nan], [4, np.nan, np.nan, np.nan]],
             ],
+            DRUG_ERA_VAR,
         ),
         (
             ["drug_era"],
@@ -459,6 +506,7 @@ def test_setup_variables(
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
             ],
+            DRUG_ERA_VAR,
         ),
         (
             ["drug_era"],
@@ -469,24 +517,28 @@ def test_setup_variables(
                 [[2, 2, 2, 2], [4, 4, 4, 4]],
                 [[2, 2, 2, 2], [4, 4, 4, 4]],
             ],
+            DRUG_ERA_VAR,
         ),
         (
             ["drug_era"],
             ["is_present"],
             "start",
             VANILLA_IS_PRESENT_START,
+            DRUG_ERA_VAR,
         ),
         (
             ["drug_era"],
             ["is_present"],
             "end",
             VANILLA_IS_PRESENT_END,
+            DRUG_ERA_VAR,
         ),
         (
             ["drug_era"],
             ["is_present"],
             "interval",
             VANILLA_IS_PRESENT_INTERVAL,
+            DRUG_ERA_VAR,
         ),
         (
             ["dose_era"],
@@ -497,6 +549,7 @@ def test_setup_variables(
                 [[2.5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
                 [[2.5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
             ],
+            DOSE_ERA_VAR,
         ),
         (
             ["dose_era"],
@@ -507,6 +560,7 @@ def test_setup_variables(
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
             ],
+            DOSE_ERA_VAR,
         ),
         (
             ["dose_era"],
@@ -517,24 +571,28 @@ def test_setup_variables(
                 [[2.5, 2.5, 2.5, 2.5], [10, 10, 10, 10]],
                 [[2.5, 2.5, 2.5, 2.5], [10, 10, 10, 10]],
             ],
+            DOSE_ERA_VAR,
         ),
         (
             ["dose_era"],
             ["is_present"],
             "start",
             VANILLA_IS_PRESENT_START,
+            DOSE_ERA_VAR,
         ),
         (
             ["dose_era"],
             ["is_present"],
             "end",
             VANILLA_IS_PRESENT_END,
+            DOSE_ERA_VAR,
         ),
         (
             ["dose_era"],
             ["is_present"],
             "interval",
             VANILLA_IS_PRESENT_INTERVAL,
+            DOSE_ERA_VAR,
         ),
         (
             ["condition_era"],
@@ -545,6 +603,7 @@ def test_setup_variables(
                 [[1, np.nan, np.nan, np.nan], [256, np.nan, np.nan, np.nan]],
                 [[1, np.nan, np.nan, np.nan], [256, np.nan, np.nan, np.nan]],
             ],
+            CONDITION_ERA_VAR,
         ),
         (
             ["condition_era"],
@@ -555,6 +614,7 @@ def test_setup_variables(
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
             ],
+            CONDITION_ERA_VAR,
         ),
         (
             ["condition_era"],
@@ -565,24 +625,28 @@ def test_setup_variables(
                 [[1, 1, 1, 1], [256, 256, 256, 256]],
                 [[1, 1, 1, 1], [256, 256, 256, 256]],
             ],
+            CONDITION_ERA_VAR,
         ),
         (
             ["condition_era"],
             ["is_present"],
             "start",
             VANILLA_IS_PRESENT_START,
+            CONDITION_ERA_VAR,
         ),
         (
             ["condition_era"],
             ["is_present"],
             "end",
             VANILLA_IS_PRESENT_END,
+            CONDITION_ERA_VAR,
         ),
         (
             ["condition_era"],
             ["is_present"],
             "interval",
             VANILLA_IS_PRESENT_INTERVAL,
+            CONDITION_ERA_VAR,
         ),
         (
             ["episode"],
@@ -593,6 +657,7 @@ def test_setup_variables(
                 [[5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
                 [[5, np.nan, np.nan, np.nan], [10, np.nan, np.nan, np.nan]],
             ],
+            EPISODE_VAR,
         ),
         (
             ["episode"],
@@ -603,6 +668,7 @@ def test_setup_variables(
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
                 [[np.nan, np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan, np.nan]],
             ],
+            EPISODE_VAR,
         ),
         (
             ["episode"],
@@ -613,24 +679,28 @@ def test_setup_variables(
                 [[5, 5, 5, 5], [10, 10, 10, 10]],
                 [[5, 5, 5, 5], [10, 10, 10, 10]],
             ],
+            EPISODE_VAR,
         ),
         (
             ["episode"],
             ["is_present"],
             "start",
             VANILLA_IS_PRESENT_START,
+            EPISODE_VAR,
         ),
         (
             ["episode"],
             ["is_present"],
             "end",
             VANILLA_IS_PRESENT_END,
+            EPISODE_VAR,
         ),
         (
             ["episode"],
             ["is_present"],
             "interval",
             VANILLA_IS_PRESENT_INTERVAL,
+            EPISODE_VAR,
         ),
         (
             ["condition_era", "episode"],
@@ -641,6 +711,7 @@ def test_setup_variables(
                 [[1, 1, 1, 1], [1, 1, 1, 1], [5, 5, 5, 5], [10, 10, 10, 10]],
                 [[1, 1, 1, 1], [1, 1, 1, 1], [5, 5, 5, 5], [10, 10, 10, 10]],
             ],
+            pd.concat([CONDITION_ERA_VAR, EPISODE_VAR]).set_index(pd.Index(map(str, range(4)))),
         ),
     ],
 )
@@ -653,9 +724,10 @@ def test_setup_interval_type_variables(
     observation_table,
     data_tables,
     data_field_to_keep,
-    target_r,
+    target_R,
     enrich_var_with_feature_info,
     keep_date,
+    target_var,
 ):
     num_intervals = 4
     con = omop_connection_vanilla
@@ -678,7 +750,7 @@ def test_setup_interval_type_variables(
     assert edata.layers["tem_layer"].shape[2] == num_intervals
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0)
 
-    assert np.allclose(edata.layers["tem_layer"], np.array(target_r), equal_nan=True)
+    assert np.allclose(edata.layers["tem_layer"], np.array(target_R), equal_nan=True)
 
 
 @pytest.mark.parametrize(

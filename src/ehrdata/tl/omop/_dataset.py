@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
-from duckdb.duckdb import DuckDBPyConnection
+from duckdb import DuckDBPyConnection
 
 from ehrdata import EHRData
 from ehrdata._compat import lazy_import_torch
@@ -35,7 +35,7 @@ class EHRDataset(torch.utils.data.Dataset):
 
         Args:
             con: The connection to the database.
-            edata: Data object.
+            edata: Central data object.
             data_tables: The OMOP data tables to extract.
             target: The target variable to be used.
             datetime: If True, use datetime, if False, use date.
