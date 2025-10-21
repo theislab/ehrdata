@@ -13,8 +13,6 @@ api/ehrdata_index
 api/datasets_index
 api/io_index
 api/integrations_index
-api/tools_index
-api/plot_index
 ```
 
 ```{eval-rst}
