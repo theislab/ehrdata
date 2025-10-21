@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ._dataset import OMOPEHRDataset
 
-__all__ = ["OMOPDataLoader", "OMOPEHRDataset"]
+__all__ = ["OMOPEHRDataset"]
 
 
 def __getattr__(name: str):
