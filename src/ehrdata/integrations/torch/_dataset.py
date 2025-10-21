@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Literal
 
 from duckdb import DuckDBPyConnection
 
-from ehrdata import EHRData
 from ehrdata._compat import lazy_import_torch
+from ehrdata.core import EHRData
 from ehrdata.io.omop._queries import DATA_TABLE_DATE_KEYS
 
 if TYPE_CHECKING:
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 torch = lazy_import_torch()
 
 
-class EHRDataset(torch.utils.data.Dataset):
+class OMOPEHRDataset(torch.utils.data.Dataset):
     # TODO: data tables should also accept interval-style tables
     # TODO: implement for multiple data tables
     # TODO: test for multiple data tables
