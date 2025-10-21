@@ -27,7 +27,7 @@ def test_ehrdataset_vanilla(omop_connection_vanilla):
         instantiate_tensor=False,
     )
 
-    ehr_dataset = ed.integrations.torch.omop.OMOPEHRDataset(
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(
         con, edata, data_tables=["measurement"], datetime=False, idxs=None
     )
     assert isinstance(ehr_dataset, torch.utils.data.Dataset)
