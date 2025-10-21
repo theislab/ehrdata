@@ -10,7 +10,7 @@ Many are also designed to work seamlessly in Binder, a free cloud computing plat
 ## Quick start
 
 ```{toctree}
-:maxdepth: 3
+:maxdepth: 2
 
 getting_started
 omop_tables_tutorial
