@@ -17,8 +17,6 @@ from anndata._core.aligned_mapping import (
     Value,
     convert_to_dict,
 )
-from anndata._core.index import Index as ADIndex
-from anndata._core.index import Index1D
 
 # from anndata._core.index import _subset
 from anndata._core.views import (
@@ -27,6 +25,8 @@ from anndata._core.views import (
     _resolve_idx,
     as_view,
 )
+from anndata.compat import Index as ADIndex
+from anndata.compat import Index1D
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence

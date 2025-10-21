@@ -528,7 +528,7 @@ def test_inplace_subset_obs(edata_333):
     _assert_shape_matches(edata_333, (2, 3, 3))
 
     assert np.allclose(edata_333_copy.X[[0, 2], :], edata_333.X)
-    assert np.allclose(edata_333_copy.R[[0, 2], :, :], edata_333.R)
+    assert np.allclose(edata_333_copy.layers["tem_layer"][[0, 2], :, :], edata_333.layers["tem_layer"])
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
 
     # repeated subset
@@ -536,14 +536,14 @@ def test_inplace_subset_obs(edata_333):
 
     _assert_shape_matches(edata_333, (1, 3, 3))
     assert np.allclose(edata_333_copy.X[[2], :], edata_333.X)
-    assert np.allclose(edata_333_copy.R[[2], :, :], edata_333.R)
+    assert np.allclose(edata_333_copy.layers["tem_layer"][[2], :, :], edata_333.layers["tem_layer"])
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
 
     # mixed subset
     edata_333._inplace_subset_var([0, 2])
     _assert_shape_matches(edata_333, (1, 2, 3))
     assert np.allclose(edata_333_copy.X[[2], [0, 2]], edata_333.X)
-    assert np.allclose(edata_333_copy.R[[2], [0, 2], :], edata_333.R)
+    assert np.allclose(edata_333_copy.layers["tem_layer"][[2], [0, 2], :], edata_333.layers["tem_layer"])
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
 
 
@@ -555,7 +555,7 @@ def test_inplace_subset_var(edata_333):
     _assert_shape_matches(edata_333, (3, 2, 3))
 
     assert np.allclose(edata_333_copy.X[:, [0, 2]], edata_333.X)
-    assert np.allclose(edata_333_copy.R[:, [0, 2], :], edata_333.R)
+    assert np.allclose(edata_333_copy.layers["tem_layer"][:, [0, 2], :], edata_333.layers["tem_layer"])
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
 
     # repeated subset
@@ -563,12 +563,14 @@ def test_inplace_subset_var(edata_333):
 
     _assert_shape_matches(edata_333, (3, 1, 3))
     assert np.allclose(edata_333_copy.X[:, [2]], edata_333.X)
-    assert np.allclose(edata_333_copy.R[:, [2], :], edata_333.R)
+    assert np.allclose(edata_333_copy.layers["tem_layer"][:, [2], :], edata_333.layers["tem_layer"])
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
 
     # mixed subset
     edata_333._inplace_subset_obs([0, 2])
     _assert_shape_matches(edata_333, (2, 1, 3))
     assert np.allclose(edata_333_copy.X[[0, 2], [2]].reshape(-1, 1), edata_333.X)
-    assert np.allclose(edata_333_copy.R[[0, 2], [2], :].reshape(-1, 1, 3), edata_333.R)
+    assert np.allclose(
+        edata_333_copy.layers["tem_layer"][[0, 2], [2], :].reshape(-1, 1, 3), edata_333.layers["tem_layer"]
+    )
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
