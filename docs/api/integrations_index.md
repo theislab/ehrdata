@@ -1,31 +1,28 @@
-# EHRData
+# Integrations
 
 ```{eval-rst}
 .. module:: ehrdata
     :no-index:
 ```
 
-## Core Data Structure
+## ML Frameworks
 
 ```{eval-rst}
 .. autosummary::
     :toctree:
     :nosignatures:
 
-    EHRData
+    integrations.torch.OMOPEHRDataset
 
 ```
 
-## Data Type Management
+## Vitessce
 
 ```{eval-rst}
 .. autosummary::
     :toctree:
     :nosignatures:
 
-    infer_feature_types
-    feature_type_overview
-    replace_feature_types
-    harmonize_missing_values
+    integrations.vitessce.gen_config
 
 ```

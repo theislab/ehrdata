@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning][].
 - Replace figshare with scverse S3 ([#177](https://github.com/theislab/ehrdata/pull/177)) @Zethson
 - Update template to v0.6.0 ([#166](https://github.com/theislab/ehrdata/pull/166)) @Zethson
 
+### Fixed
+- Fix order of `var` created in `ed.io.omop.setup_variables` and `ed.io.omop.setup_interval_variables` ([#179](https://github.com/theislab/ehrdata/pull/179)) @eroell
+
+### Modified
+- Rename `ed.pl.vitessce.gen_config` to `ed.integrations.vitessce.gen_config` ([#181](https://github.com/theislab/ehrdata/pull/181)) @eroell
+- Rename `ed.tl.omop.EHRDataset` to `ed.integrations.torch.OMOPEHRDataset` ([#181](https://github.com/theislab/ehrdata/pull/181)) @eroell
+
+
 ## [0.0.8]
 
 ### Fixed
