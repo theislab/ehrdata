@@ -4,7 +4,7 @@ from anndata import AnnData
 
 pytest.importorskip("vitessce")
 
-from ehrdata.pl.vitessce import gen_config
+from ehrdata.integrations.vitessce import gen_config
 
 
 @pytest.fixture
