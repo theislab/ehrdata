@@ -17,7 +17,7 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
     """A :class:`~torch.utils.data.Dataset` built from an OMOP CDM database.
 
     This class is a :class:`~torch.utils.data.Dataset` from an OMOP CDM database.
-    It is a Dataset structure for the tensor in ehrdata.R, in a suitable format for :class:`~pytorch.utils.data.DataLoader`.
+    It is a Dataset structure for the tensor in ehrdata.R, in a suitable format for :class:`~torch.utils.data.DataLoader`.
     This allows to stream the data in batches from the RDBMS, not requiring to load the entire dataset in memory.
 
     Args:
