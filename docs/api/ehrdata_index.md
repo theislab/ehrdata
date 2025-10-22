@@ -9,7 +9,7 @@
 
 ```{eval-rst}
 .. autosummary::
-    :toctree: io
+    :toctree:
     :nosignatures:
 
     EHRData
@@ -20,7 +20,7 @@
 
 ```{eval-rst}
 .. autosummary::
-    :toctree: io
+    :toctree:
     :nosignatures:
 
     infer_feature_types

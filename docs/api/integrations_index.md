@@ -9,7 +9,7 @@
 
 ```{eval-rst}
 .. autosummary::
-    :toctree: io
+    :toctree:
     :nosignatures:
 
     integrations.torch.OMOPEHRDataset
@@ -20,7 +20,7 @@
 
 ```{eval-rst}
 .. autosummary::
-    :toctree: io
+    :toctree:
     :nosignatures:
 
     integrations.vitessce.gen_config

@@ -14,6 +14,22 @@ torch = lazy_import_torch()
 
 
 class OMOPEHRDataset(torch.utils.data.Dataset):
+    """A :class:`~torch.utils.data.Dataset` built from an OMOP CDM database.
+
+    This class is a :class:`~torch.utils.data.Dataset` from an OMOP CDM database.
+    It is a Dataset structure for the tensor in ehrdata.R, in a suitable format for :class:`~pytorch.utils.data.DataLoader`.
+    This allows to stream the data in batches from the RDBMS, not requiring to load the entire dataset in memory.
+
+    Args:
+        con: The connection to the database.
+        edata: Central data object.
+        data_tables: The OMOP data tables to extract.
+        target: The target variable to be used.
+        datetime: If True, use datetime, if False, use date.
+        idxs: The indices of the patients to be used, can be used to include only a
+            subset of the data, for e.g. train-test splits.
+    """
+
     # TODO: data tables should also accept interval-style tables
     # TODO: implement for multiple data tables
     # TODO: test for multiple data tables
@@ -27,24 +43,6 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         datetime: bool = True,
         idxs: Sequence[int] | None = None,
     ) -> None:
-        """:class:`~torch.utils.data.Dataset` from an OMOP CDM database.
-
-        This function builds a :class:`~torch.utils.data.Dataset` from an OMOP CDM database.
-        It is a Dataset structure for the tensor in ehrdata.R, in a suitable format for :class:`~pytorch.utils.data.DataLoader`.
-        This allows to stream the data in batches from the RDBMS, not requiring to load the entire dataset in memory.
-
-        Args:
-            con: The connection to the database.
-            edata: Central data object.
-            data_tables: The OMOP data tables to extract.
-            target: The target variable to be used.
-            datetime: If True, use datetime, if False, use date.
-            idxs: The indices of the patients to be used, can be used to include only a
-                subset of the data, for e.g. train-test splits.
-
-        Returns:
-            A :class:`torch.utils.data.Dataset` object of the data in the OMOP CDM database.
-        """
         super().__init__()
         self.con = con
         self.edata = edata
