@@ -21,3 +21,7 @@ def __getattr__(name: str):
 
     msg = f"module '{__name__}' has no attribute '{name}'"
     raise AttributeError(msg)
+
+
+def __dir__():
+    return sorted([*list(globals().keys()), "torch", "vitessce"])

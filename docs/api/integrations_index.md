@@ -5,7 +5,7 @@
     :no-index:
 ```
 
-## PyTorch
+## ML Frameworks
 
 ```{eval-rst}
 .. autosummary::

@@ -27,9 +27,9 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         datetime: bool = True,
         idxs: Sequence[int] | None = None,
     ) -> None:
-        """:class:`~torch.utils.data.Dataset` for a :class:`~ehrdata.EHRData` object.
+        """:class:`~torch.utils.data.Dataset` from an OMOP CDM database.
 
-        This function builds a :class:`~torch.utils.data.Dataset` for a :class:`~ehrdata.EHRData` object. The :class:`~ehrdata.EHRData` object is assumed to be in the OMOP CDM format.
+        This function builds a :class:`~torch.utils.data.Dataset` from an OMOP CDM database.
         It is a Dataset structure for the tensor in ehrdata.R, in a suitable format for :class:`~pytorch.utils.data.DataLoader`.
         This allows to stream the data in batches from the RDBMS, not requiring to load the entire dataset in memory.
 
@@ -43,7 +43,7 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
                 subset of the data, for e.g. train-test splits.
 
         Returns:
-            A :class:`torch.utils.data.Dataset` object of the :class:`~ehrdata.EHRData` object.
+            A :class:`torch.utils.data.Dataset` object of the data in the OMOP CDM database.
         """
         super().__init__()
         self.con = con
