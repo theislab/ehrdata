@@ -451,7 +451,11 @@ def setup_variables(
 
     var.index = var.index.astype(str)
 
-    edata = EHRData(layers={layer_name: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+    # AnnData does not allow to set a layer with value None
+    if instantiate_tensor:
+        edata = EHRData(layers={layer_name: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+    else:
+        edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
     for data_table in data_tables:
         edata.uns[f"unit_report_{data_table}"] = unit_report_collector[data_table]
@@ -642,7 +646,11 @@ def setup_interval_variables(
 
     var.index = var.index.astype(str)
 
-    edata = EHRData(layers={layer_name: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+    # AnnData does not allow to set a layer with value None
+    if instantiate_tensor:
+        edata = EHRData(layers={layer_name: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+    else:
+        edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
     return edata
 

@@ -210,7 +210,7 @@ def edata_basic_with_tem_full():
         "obsp": {"obs_level_connectivities": np.ones((5, 5))},
         "varp": {"var_level_connectivities": np.random.randn(4, 4)},
         "uns": {"information": ["info1"]},
-        "tem": pd.DataFrame({"timestep": ["t1", "t2"]}),
+        "tem": pd.DataFrame({"timestep": ["t1"]}),
     }
     return EHRData(**edata_basic_with_tem_dict)
 

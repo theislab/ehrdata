@@ -19,22 +19,22 @@ def _assert_fields_are_view(edata: EHRData):
 def test_ehrdata_init_vanilla_empty():
     edata = EHRData()
 
-    _assert_shape_matches(edata, (0, 0), check_X_None=True)
+    _assert_shape_matches(edata, (0, 0, 1), check_X_None=True)
     assert edata.X is None
     assert edata.obs.shape == (0, 0)
     assert edata.var.shape == (0, 0)
-    assert edata.tem.shape == (0, 0)
+    assert edata.tem.shape == (1, 0)
 
 
 def test_ehrdata_init_vanilla_X(X_numpy_32):
     edata = EHRData(X=X_numpy_32)
-    _assert_shape_matches(edata, (3, 2))
+    _assert_shape_matches(edata, (3, 2, 1))
 
     assert edata.obs.shape == (3, 0)
 
     assert edata.var.shape == (2, 0)
 
-    assert edata.tem.shape == (0, 0)
+    assert edata.tem.shape == (1, 0)
 
 
 def test_ehrdata_init_vanilla_3dlayer(X_numpy_322):
@@ -95,11 +95,11 @@ def test_ehrdata_init_vanilla_X_and_3dlayer_and_t(X_numpy_32, X_numpy_322, tem_2
 def test_ehrdata_init_vanilla_X_and_layers(X_numpy_32):
     edata = EHRData(X=X_numpy_32, layers={"some_layer": X_numpy_32})
 
-    _assert_shape_matches(edata, (3, 2))
+    _assert_shape_matches(edata, (3, 2, 1))
 
     assert edata.obs.shape == (3, 0)
     assert edata.var.shape == (2, 0)
-    assert edata.tem.shape == (0, 0)
+    assert edata.tem.shape == (1, 0)
 
 
 #################################################################
@@ -107,12 +107,12 @@ def test_ehrdata_init_vanilla_X_and_layers(X_numpy_32):
 #################################################################
 def test_ehrdata_init_vanilla_obs(obs_31):
     edata = EHRData(obs=obs_31)
-    _assert_shape_matches(edata, (3, 0), check_X_None=True)
+    _assert_shape_matches(edata, (3, 0, 1), check_X_None=True)
 
 
 def test_ehrdata_init_vanilla_var(var_31):
     edata = EHRData(var=var_31)
-    _assert_shape_matches(edata, (0, 3), check_X_None=True)
+    _assert_shape_matches(edata, (0, 3, 1), check_X_None=True)
 
 
 def test_ehrdata_init_vanilla_tem(tem_31):
@@ -150,7 +150,7 @@ def test_ehrdata_init_3dlayer_assign_X_tem(X_numpy_32, X_numpy_322, tem_21):
 
 def test_ehrdata_init_X_assign_3dlayer_t(X_numpy_32, X_numpy_322, tem_21):
     edata = EHRData(X=X_numpy_32)
-    _assert_shape_matches(edata, (3, 2))
+    _assert_shape_matches(edata, (3, 2, 1))
     # TODO: overwrite the constructor to check and update n_t
     edata.layers["tem_layer"] = X_numpy_322
     _assert_shape_matches(edata, (3, 2, 2))
@@ -183,7 +183,7 @@ def test_ehrdata_init_X_t_assign_3dlayer(X_numpy_32, X_numpy_322, tem_21):
 
     edata.layers["tem_layer"] = X_numpy_322
     _assert_shape_matches(edata, (3, 2, 2))
-    assert edata.tem.shape == (2, 0)
+    assert edata.tem.shape == (2, 1)
 
 
 def test_ehrdata_init_3dlayer_t_assign_X(X_numpy_32, X_numpy_322, tem_21):
@@ -267,32 +267,25 @@ def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
     edata_view.X[0, 0] = 100
 
     edata_view = edata[:2, :1, :1]
-    # TODO: does not trigger creation of actual
     edata_view.obs["new_obs_col"] = [1, 2]
+    edata_view.obs["0", "new_obs_col"] = "obs_entry"
 
     edata_view = edata[:2, :1, :1]
     edata_view.var["new_var_col"] = ["a"]
+    edata_view.var["0", "new_var_col"] = "var_entry"
 
     edata_view = edata[:2, :1, :1]
     edata_view.tem["new_tem_col"] = [1]
+    edata_view.tem["0", "new_tem_col"] = "tem_entry"
 
     edata_view = edata[:2, :1, :1]
-    edata_view.obs["new_obs_col"].iloc[0] = "obs_entry"
-
-    edata_view = edata[:2, :1, :1]
-    edata_view.var["new_var_col"].iloc[0] = "var_entry"
-
-    edata_view = edata[:2, :1, :1]
-    edata_view.tem["new_tem_col"].iloc[0] = "tem_entry"
-
-    edata_view = edata[:2, :1, :1]
-    edata_view.varm["varm_entry"] = np.array([[1], [3]])
+    edata_view.varm["varm_entry"] = np.array([[1]])
 
     edata_view = edata[:2, :1, :1]
     edata_view.obsm["obsm_entry"] = np.array([[1, 2], [5, 6]])
 
     edata_view = edata[:2, :1, :1]
-    edata_view.varp["varp_entry"] = np.array([[1], [4]])
+    edata_view.varp["varp_entry"] = np.array([[1]])
 
     edata_view = edata[:2, :1, :1]
     edata_view.obsp["obsp_entry"] = np.array([[1, 2], [3, 4]])

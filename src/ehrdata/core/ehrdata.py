@@ -40,13 +40,13 @@ T = TypeVar("T", bound=AlignedMapping)
 
 
 def _validate_layers_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
-    if obj.n_t is not None and obj.n_t > 1 and _get_layers_3d_dim(value) != obj.n_t:
+    if obj.n_t > 1 and _get_layers_3d_dim(value) != obj.n_t:
         msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
         raise ValueError(msg)
 
 
 def _validate_array_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
-    if obj.n_t is not None and obj.n_t > 1 and _get_array_3d_dim(value) != obj.n_t:
+    if obj.n_t > 1 and _get_array_3d_dim(value) > 1 and _get_array_3d_dim(value) != obj.n_t:
         msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
         raise ValueError(msg)
 
@@ -76,8 +76,10 @@ class AlignedActual3D(AlignedActual):
     def __setitem__(self, key: str, value: Value) -> None:
         _validate_array_3d(self.parent, value)
         # todo: is this a good behavior?
-        self.parent._n_t = _get_array_3d_dim(value)
-        self.parent.tem = pd.DataFrame(index=pd.RangeIndex(self.parent._n_t).astype(str))
+        self.parent._n_t = max(self.parent._n_t, _get_array_3d_dim(value))
+        # only if the new aligned object is not 1 anymore and the original object was, create a new minimal tem
+        if len(self.parent.tem) == 1 and _get_array_3d_dim(value) > 1:
+            self.parent.tem = pd.DataFrame(index=pd.RangeIndex(self.parent._n_t).astype(str))
         super().__setitem__(key, value)
 
 
@@ -141,23 +143,23 @@ class AlignedMappingProperty3D(AlignedMappingProperty):
         setattr(obj, f"_{self.name}", value)
 
 
-def _get_array_3d_dim(X: XDataType | None) -> int | None:
+def _get_array_3d_dim(X: XDataType | None) -> int:
     """Get the 3rd dimension of an array."""
-    if X is not None and len(X.shape) == 3 and X.shape[2] > 1:
+    if X is not None and len(X.shape) == 3:
         return X.shape[2]
 
     else:
-        return None
+        return 1
 
 
-def _get_layers_3d_dim(layers: Mapping[str, Any] | None) -> int | None:
+def _get_layers_3d_dim(layers: Mapping[str, Any] | None) -> int:
     """Get the 3rd dimension consensus of all arrays in the layers.
 
     All arrays in layers need to match on the first two axes, which is checked in AnnData.
-    Further, all arrays in layers need to have the same 3rd axis dimension, unless they are 2D.
+    Further, all arrays in layers need to have the same 3rd axis dimension, unless they are 2D or the 3rd axis dimension is 1.
     """
     if layers is None or len(layers) == 0:
-        return None
+        return 1
 
     else:
         shape_3d = {}
@@ -165,10 +167,7 @@ def _get_layers_3d_dim(layers: Mapping[str, Any] | None) -> int | None:
         for key, value in layers.items():
             shape_3d[key] = _get_array_3d_dim(value)
 
-        shape_3d_values = set(shape_3d.values()).difference({None})
-
-        if len(shape_3d_values) == 0:
-            return None
+        shape_3d_values = set(shape_3d.values())
 
         if len(shape_3d_values) == 1:
             return shape_3d_values.pop()
@@ -264,9 +263,7 @@ class EHRData(AnnData):
         self._tidx = tidx
 
         if tem is None:
-            self.tem = (
-                pd.DataFrame(index=pd.RangeIndex(self.n_t).astype(str)) if self.n_t is not None else pd.DataFrame([])
-            )
+            self.tem = pd.DataFrame(index=pd.RangeIndex(self.n_t).astype(str))
         else:
             self.tem = tem
 
@@ -336,17 +333,17 @@ class EHRData(AnnData):
         if not isinstance(input, pd.DataFrame):
             msg = "Can only assign pd.DataFrame to tem."
             raise ValueError(msg)
-        if self.n_t is not None and (self.n_t != len(input)):
+        if (self.n_t != len(input)) and (self.n_t != 1):
             msg = f"Length of passed value for tem is {len(input)}, but this EHRData has shape: {self.shape}"
             raise ValueError(msg)
 
         self._tem = input
-        self._n_t = len(input) if input.shape[0] > 0 else None
+        self._n_t = len(input)
 
     @property
     def n_t(self) -> int:
         """Number of time points."""
-        return self._n_t if hasattr(self, "_n_t") else None
+        return self._n_t if hasattr(self, "_n_t") else 1
 
     @property
     def _tidx(self) -> slice | None:
@@ -374,6 +371,8 @@ class EHRData(AnnData):
     @property
     def shape(self) -> tuple[int, int] | tuple[int, int, int]:
         """Shape of data (`n_obs`, `n_vars`, `n_t`)."""
+        # this is a bit hacky: self._n_t is supposed to never be None. For a flat EHRData, it is 1.
+        # it is only temporarily set to None when setting X
         return (self.n_obs, self.n_vars) if self._n_t is None else (self.n_obs, self.n_vars, self.n_t)
 
     def __repr__(self) -> str:
