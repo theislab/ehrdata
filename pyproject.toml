@@ -30,7 +30,7 @@ dependencies = [
   "requests",
   "rich",
   "xarray",
-  "zarr<3",
+  "zarr",
 ]
 optional-dependencies.dev = [
   "pre-commit",
