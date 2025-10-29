@@ -160,14 +160,16 @@ def test_ehrdata_init_X_assign_3dlayer_t(X_numpy_32, X_numpy_322, tem_21):
     _assert_shape_matches(edata, (3, 2, 2))
 
 
-# def test_ehrdata_init_t_assign_X_3dlayer(X_numpy_32, X_numpy_322, tem_21):
-#     edata = EHRData(tem=tem_21)
-#     with pytest.raises(ValueError):
-#         edata.X = X_numpy_32
+def test_ehrdata_init_t_assign_X_3dlayer(X_numpy_32, X_numpy_322, tem_21):
+    # It would be OK if this was allowed, but for now we don't enable until there's need for this.
+    edata = EHRData(tem=tem_21)
+    with pytest.raises(ValueError):
+        edata.X = X_numpy_32
 
-#     edata = EHRData(tem=tem_21)
-#     with pytest.raises(ValueError):
-#         edata.layers["tem_layer"] = X_numpy_322
+    # It would be OK if this was allowed, but for now we don't enable until there's need for this.
+    edata = EHRData(tem=tem_21)
+    with pytest.raises(ValueError):
+        edata.layers["tem_layer"] = X_numpy_322
 
 
 def test_ehrdata_init_X_3dlayer_assign_t(X_numpy_32, X_numpy_322, tem_21):
@@ -206,9 +208,31 @@ def test_ehrdata_init_fail_X_and_3dlayer_mismatch(X_numpy_32, obs_31, var_21):
 
 def test_ehrdata_init_fail_3dlayer_and_t_mismatch(X_numpy_32, X_numpy_322, obs_31, var_21):
     tem = pd.DataFrame({"tem1": [1]})
-
     with pytest.raises(ValueError):
         EHRData(X=X_numpy_32, obs=obs_31, layers={"tem_layer": X_numpy_322}, tem=tem, var=var_21)
+
+    edata = EHRData(X=X_numpy_32, obs=obs_31, layers={"tem_layer": X_numpy_322}, var=var_21)
+    with pytest.raises(ValueError):
+        edata.tem = tem
+
+
+def test_ehrdata_init_fail_different_3dlayer_3rd_dimension_mismatch(X_numpy_32, X_numpy_322, obs_31, var_21):
+    with pytest.raises(ValueError):
+        EHRData(
+            X=X_numpy_32,
+            obs=obs_31,
+            layers={"tem_layer": X_numpy_322, "tem_layer2": np.ones((3, 2, 3))},
+            var=var_21,
+        )
+
+    edata = EHRData(
+        X=X_numpy_32,
+        obs=obs_31,
+        layers={"tem_layer": X_numpy_322},
+        var=var_21,
+    )
+    with pytest.raises(ValueError):
+        edata.layers["tem_layer2"] = np.ones((3, 2, 3))
 
 
 #################################################################

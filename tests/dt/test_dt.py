@@ -147,7 +147,7 @@ def test_ehrdata_blobs(sparse_param):
     #     assert sparse.issparse(ehr_data.X)
     #     assert ehr_data.X.shape == (100, 5)
 
-    # Test R data
+    # Test 3D data
     if not sparse_param:
         assert isinstance(edata.layers["tem_layer"], np.ndarray)
         assert edata.layers["tem_layer"].shape == (100, 5, 10)
@@ -213,7 +213,7 @@ def test_ehrdata_blobs_distribution():
     # Verify increasing variation trend
     assert time_variations[-1] > time_variations[0]
 
-    # Test that R at t=0 is close to X
+    # Test that 3D data at t=0 is close to X
     first_timepoint = edata.layers["tem_layer"][:, :, 0]
     correlation = np.corrcoef(first_timepoint.flatten(), edata.X.flatten())[0, 1]
     assert correlation > 0.5
@@ -249,7 +249,7 @@ def test_ehrdata_ts_blobs_irregular():
     # Time differences should have meaningful variation with irregular sampling
     assert np.std(time_diffs) > 0.001
 
-    # Test for missing values in R
+    # Test for missing values in 3D data
     nan_count = np.isnan(edata.layers["tem_layer"]).sum()
     total_elements = np.prod(edata.layers["tem_layer"].shape)
     missing_ratio = nan_count / total_elements
