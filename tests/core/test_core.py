@@ -199,6 +199,14 @@ def test_ehrdata_init_3dlayer_t_assign_X(X_numpy_32, X_numpy_322, tem_21):
 #################################################################
 ### Test illegal initializations
 #################################################################
+
+
+def test_ehrdata_illegal_tem(X_numpy_322):
+    tem = np.array([1, 2, 3])
+    with pytest.raises(ValueError):
+        EHRData(layers={"tem_layer": X_numpy_322}, tem=tem)
+
+
 def test_ehrdata_init_fail_X_and_3dlayer_mismatch(X_numpy_32, obs_31, var_21):
     tem_layer = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
 
@@ -289,6 +297,9 @@ def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
     edata_view = edata[:2, :1, :1]
 
     edata_view.X[0, 0] = 100
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.layers["tem_layer"] = np.ones((2, 1, 1))
 
     edata_view = edata[:2, :1, :1]
     edata_view.obs["new_obs_col"] = [1, 2]

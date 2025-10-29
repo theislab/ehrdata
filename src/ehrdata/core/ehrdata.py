@@ -115,18 +115,12 @@ class AlignedMappingProperty3D(AlignedMappingProperty):
     and overridethe axes of the AlignedMapping in __get__.
     """
 
-    # def construct(self, obj: AnnData, *, store: MutableMapping[str, Value]) -> T:
-    #     if self.axis is None:
-    #         return self.cls(obj, store=store)
-    #     return self.cls(obj, axis=self.axis, store=store)
-
     def __get__(self, obj: None | AnnData, objtype: type | None = None) -> T:
         if obj is None:
             # When accessed from the class, e.g. via `AnnData.obs`,
             # this needs to return a `property` instance, e.g. for Sphinx
             return self  # type: ignore
         if not obj.is_view:
-            # _validate_3d(obj, value)
             return self.construct(obj, store=getattr(obj, f"_{self.name}"))
         parent_anndata = obj._adata_ref
         idxs = (obj._oidx, obj._vidx, obj._tidx)
@@ -434,8 +428,6 @@ class EHRData(AnnData):
         if self._tidx is not None:
             tidx = _resolve_idx(self._tidx, tidx, self._adata_ref.n_t)
 
-        # tidx = _get_iterable_index(tidx)
-
         # if tidx is an integer, numpy's automatic dimension reduction by drops an axis
         if isinstance(tidx, (int | np.integer)):
             tidx = slice(tidx, tidx + 1)
@@ -462,12 +454,3 @@ class EHRData(AnnData):
             tem=None if self.tem is None else self.tem.copy(),
             tidx=self._tidx,
         )
-
-
-def _get_iterable_index(index: int | slice | Iterable[int]) -> Iterable[int]:
-    if isinstance(index, int | np.integer):
-        return [index]
-    elif isinstance(index, slice):
-        return range(index.start, index.stop, index.step)
-    else:
-        return index
