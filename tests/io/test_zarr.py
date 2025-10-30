@@ -70,8 +70,12 @@ def test_write_zarr_basic(edata_name, request, tmp_path):
     write_zarr(edata, store_path)
 
     zarr_file = zarr.open(store_path, mode="r")
-    # Note that R is not included in the list because it is just a value of the .layers field
     assert set(dict(zarr_file).keys()) == {
+        "anndata",
+        "tem",
+    }
+
+    assert set(dict(zarr_file["anndata"]).keys()) == {
         "X",
         "obs",
         "var",
@@ -82,28 +86,27 @@ def test_write_zarr_basic(edata_name, request, tmp_path):
         "varp",
         "raw",
         "uns",
-        "tem",
     }
 
-    assert np.array_equal(ad.io.read_elem(zarr_file["X"]).astype(str), edata.X.astype(str))
+    assert np.array_equal(ad.io.read_elem(zarr_file["anndata"]["X"]).astype(str), edata.X.astype(str))
 
-    pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["obs"]), edata.obs)
-    pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["var"]), edata.var)
+    pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["anndata"]["obs"]), edata.obs)
+    pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["anndata"]["var"]), edata.var)
     pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["tem"]), edata.tem)
     for key in edata.obsm:
-        assert key in ad.io.read_elem(zarr_file["obsm"])
-        assert np.array_equal(ad.io.read_elem(zarr_file["obsm"][key]), edata.obsm[key])
+        assert key in ad.io.read_elem(zarr_file["anndata"]["obsm"])
+        assert np.array_equal(ad.io.read_elem(zarr_file["anndata"]["obsm"][key]), edata.obsm[key])
     for key in edata.varm:
-        assert key in ad.io.read_elem(zarr_file["varm"])
-        assert np.array_equal(ad.io.read_elem(zarr_file["varm"][key]), edata.varm[key])
+        assert key in ad.io.read_elem(zarr_file["anndata"]["varm"])
+        assert np.array_equal(ad.io.read_elem(zarr_file["anndata"]["varm"][key]), edata.varm[key])
     for key in edata.obsp:
-        assert key in ad.io.read_elem(zarr_file["obsp"])
-        assert np.array_equal(ad.io.read_elem(zarr_file["obsp"][key]), edata.obsp[key])
+        assert key in ad.io.read_elem(zarr_file["anndata"]["obsp"])
+        assert np.array_equal(ad.io.read_elem(zarr_file["anndata"]["obsp"][key]), edata.obsp[key])
     for key in edata.varp:
-        assert key in ad.io.read_elem(zarr_file["varp"])
-        assert np.array_equal(ad.io.read_elem(zarr_file["varp"][key]), edata.varp[key])
+        assert key in ad.io.read_elem(zarr_file["anndata"]["varp"])
+        assert np.array_equal(ad.io.read_elem(zarr_file["anndata"]["varp"][key]), edata.varp[key])
     for key in edata.uns:
-        assert key in ad.io.read_elem(zarr_file["uns"])
+        assert key in ad.io.read_elem(zarr_file["anndata"]["uns"])
 
 
 @pytest.mark.parametrize("edata_name", ["edata_333", "edata_basic_with_tem_full", "edata_nonnumeric_missing_330"])
