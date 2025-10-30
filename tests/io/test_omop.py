@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 import ehrdata as ed
+from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 
 # constants for toy_omop/vanilla
 VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY = {
@@ -253,13 +254,13 @@ def test_setup_variables(
     assert isinstance(edata, ed.EHRData)
     assert edata.n_obs == VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY[observation_table]
     assert edata.n_vars == sum(VANILLA_NUM_CONCEPTS[data_table] for data_table in data_tables)
-    assert edata.layers["tem_layer"].shape[2] == num_intervals
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape[2] == num_intervals
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0) + (
         VAR_DIM_UNIT_INFO if enrich_var_with_unit_info else 0
     )
     pd.testing.assert_frame_equal(edata.var[["data_table_concept_id"]], target_var)
 
-    assert np.allclose(edata.layers["tem_layer"], np.array(target_R), equal_nan=True)
+    assert np.allclose(edata.layers[DEFAULT_TEM_LAYER_NAME], np.array(target_R), equal_nan=True)
 
 
 @pytest.mark.parametrize(
@@ -747,10 +748,10 @@ def test_setup_interval_type_variables(
     assert isinstance(edata, ed.EHRData)
     assert edata.n_obs == VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY[observation_table]
     assert edata.n_vars == sum(VANILLA_NUM_CONCEPTS[data_table] for data_table in data_tables)
-    assert edata.layers["tem_layer"].shape[2] == num_intervals
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape[2] == num_intervals
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0)
 
-    assert np.allclose(edata.layers["tem_layer"], np.array(target_R), equal_nan=True)
+    assert np.allclose(edata.layers[DEFAULT_TEM_LAYER_NAME], np.array(target_R), equal_nan=True)
 
 
 @pytest.mark.parametrize(
@@ -1229,7 +1230,7 @@ def test_capital_letters(omop_connection_capital_letters):
         enrich_var_with_unit_info=False,
     )
 
-    assert edata.layers["tem_layer"][0, 0, 0] == 18
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME][0, 0, 0] == 18
 
     tables = con.execute("SHOW TABLES").df()["name"].values
     assert "measurement" in tables

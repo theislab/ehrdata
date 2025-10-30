@@ -184,7 +184,7 @@ class EHRData(AnnData):
        :align: right
        :class: dark-light
 
-    Extends :class:`~anndata.AnnData` to further support regular and irregular time-series data.
+    Extends :class:`~anndata.AnnData` to further support time-series data.
 
     Args:
         X: A #observations × #variables data array. A view of the data is used if the
@@ -198,7 +198,7 @@ class EHRData(AnnData):
         varm: Key-indexed multi-dimensional variables annotation of length #variables.
             If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
         layers: Key-indexed multi-dimensional #observations × #variables × #timesteps data arrays, aligned to dimensions of `X`.
-        shape: Shape tuple (#observations, #variables). Can only be provided if `X` is None.
+        shape: Shape tuple (#observations, #variables, #timesteps). Can only be provided if `X` is None.
         filename: Name of backing file. See :class:`h5py.File`.
         filemode: Open mode of backing file. See :class:`h5py.File`.
     """

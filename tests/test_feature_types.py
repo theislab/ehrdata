@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from ehrdata import EHRData, feature_type_overview, harmonize_missing_values, infer_feature_types, replace_feature_types
-from ehrdata.core.constants import MISSING_VALUES
+from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME, MISSING_VALUES
 
 
 @pytest.mark.parametrize(
@@ -50,10 +50,10 @@ def test_harmonize_missing_values_3D(sample_dataset, request):
     data, _ = request.getfixturevalue(sample_dataset)
     data = pd.DataFrame(data)
     tem_layer = data.values.reshape(2, -1, 2)
-    edata = EHRData(layers={"tem_layer": tem_layer})
-    harmonize_missing_values(edata, layer="tem_layer")
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: tem_layer})
+    harmonize_missing_values(edata, layer=DEFAULT_TEM_LAYER_NAME)
     for missing_value_string in MISSING_VALUES:
-        assert missing_value_string not in edata.layers["tem_layer"].flatten()
+        assert missing_value_string not in edata.layers[DEFAULT_TEM_LAYER_NAME].flatten()
 
 
 @pytest.mark.parametrize(
@@ -101,8 +101,8 @@ def test_feature_type_inference_3D(sample_dataset, request):
     data, target_types = request.getfixturevalue(sample_dataset)
     data = pd.DataFrame(data)
     tem_layer = data.values.reshape(2, -1, 2)
-    edata = EHRData(layers={"tem_layer": tem_layer})
-    infer_feature_types(edata, layer="tem_layer")
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: tem_layer})
+    infer_feature_types(edata, layer=DEFAULT_TEM_LAYER_NAME)
 
     assert "feature_type" in edata.var.columns
     assert all(edata.var["feature_type"] == list(target_types.values()))

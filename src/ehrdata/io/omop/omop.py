@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 
+from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 from ehrdata.io._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._check_arguments import (
     VALID_OBSERVATION_TABLES_JOIN,
@@ -269,7 +270,7 @@ def setup_variables(
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
     instantiate_tensor: bool = True,
-    layer_name: str = "tem_layer",
+    layer_name: str = DEFAULT_TEM_LAYER_NAME,
 ):
     """Extracts selected tables of a data-point character from the OMOP CDM.
 
@@ -500,7 +501,7 @@ def setup_interval_variables(
     enrich_var_with_feature_info: bool = False,
     keep_date: Literal["start", "end", "interval"] = "start",
     instantiate_tensor: bool = True,
-    layer_name: str = "tem_layer",
+    layer_name: str = DEFAULT_TEM_LAYER_NAME,
 ):
     """Extracts selected tables of a time-span character from the OMOP CDM.
 

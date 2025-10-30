@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from ehrdata._logger import logger
-from ehrdata.core.constants import DEFAULT_DATA_PATH
+from ehrdata.core.constants import DEFAULT_DATA_PATH, DEFAULT_TEM_LAYER_NAME
 from ehrdata.dt._dataloader import _download
 from ehrdata.io import read_csv, read_h5ad
 from ehrdata.io.omop import setup_connection
@@ -26,6 +26,7 @@ from scipy.sparse import coo_array, csr_matrix
 
 def ehrdata_blobs(
     *,
+    layer_name: str = DEFAULT_TEM_LAYER_NAME,
     n_variables: int = 11,
     n_centers: int = 5,
     cluster_std: float = 1.0,
@@ -43,6 +44,7 @@ def ehrdata_blobs(
     """Generates time series example dataset suited for alignment tasks.
 
     Args:
+        layer_name: The name of the layer to store the data in.
         n_variables: Dimension of feature space.
         n_centers: Number of cluster centers.
         cluster_std: Standard deviation of clusters.
@@ -224,7 +226,7 @@ def ehrdata_blobs(
         X=X,
         obs=pd.DataFrame({"cluster": pd.Categorical(y)}, index=pd.Index([str(i) for i in range(n_observations)])),
         var=pd.DataFrame(index=pd.Index([f"feature_{i}" for i in range(n_variables)])),
-        layers={"tem_layer": tem_layer},
+        layers={layer_name: tem_layer},
         tem=t_df,
     )
 
@@ -373,7 +375,7 @@ def physionet2012(
         "150649",
         "142998",
     ],
-    layer_name: str = "tem_layer",
+    layer_name: str = DEFAULT_TEM_LAYER_NAME,
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>`_.
 

@@ -9,6 +9,7 @@ import pytest
 from scipy import sparse
 
 from ehrdata import EHRData
+from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 from ehrdata.io.omop import setup_connection
 
 
@@ -131,7 +132,7 @@ def tem_31():
 
 @pytest.fixture
 def edata_333(X_numpy_33, X_numpy_333, obs_31, var_31, tem_31):
-    return EHRData(X=X_numpy_33, layers={"tem_layer": X_numpy_333}, obs=obs_31, var=var_31, tem=tem_31)
+    return EHRData(X=X_numpy_33, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_333}, obs=obs_31, var=var_31, tem=tem_31)
 
 
 @pytest.fixture
@@ -206,7 +207,7 @@ def edata_basic_with_tem_full():
         "var": pd.DataFrame({"variables": ["var_1", "var_2", "var_3", "var_4"]}),
         "obsm": {"obs_level_representation": np.ones((5, 2))},
         "varm": {"var_level_representation": np.ones((4, 2))},
-        "layers": {"tem_layer": np.ones((5, 4)), "other_layer": np.ones((5, 4))},
+        "layers": {DEFAULT_TEM_LAYER_NAME: np.ones((5, 4)), "other_layer": np.ones((5, 4))},
         "obsp": {"obs_level_connectivities": np.ones((5, 5))},
         "varp": {"var_level_connectivities": np.random.randn(4, 4)},
         "uns": {"information": ["info1"]},
