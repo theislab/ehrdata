@@ -11,6 +11,7 @@ from tests.conftest import (
     _assert_shape_matches,
 )
 
+from ehrdata.core.constants import EHRDATA_ZARR_ENCODING_VERSION
 from ehrdata.io import read_zarr, write_zarr
 
 TEST_PATH_ZARR = TEST_DATA_PATH / "toy_zarr"
@@ -18,12 +19,17 @@ TEST_PATH_ZARR = TEST_DATA_PATH / "toy_zarr"
 
 @pytest.mark.parametrize("harmonize_missing_values", [False, True])
 @pytest.mark.parametrize("cast_variables_to_float", [False, True])
-def test_read_zarr_basic(harmonize_missing_values, cast_variables_to_float):
+def test_read_anndata_zarr_basic(harmonize_missing_values, cast_variables_to_float):
     edata = read_zarr(
         filename=TEST_PATH_ZARR / "adata_basic.zarr",
         harmonize_missing_values=harmonize_missing_values,
         cast_variables_to_float=cast_variables_to_float,
     )
+
+    store = zarr.open(TEST_PATH_ZARR / "adata_basic.zarr")
+
+    # verify the test file is an anndata zarr store
+    assert store.attrs["encoding-type"] == "anndata"
 
     _assert_shape_matches(edata, (5, 4, 1))
     _assert_io_read(edata)
@@ -43,6 +49,11 @@ def test_read_zarr_basic_with_tem(harmonize_missing_values, cast_variables_to_fl
     assert "timestep" in edata.tem.columns
     assert all(edata.tem["timestep"].values == ["t1", "t2"])
 
+    # verify the test file is an anndata zarr store
+    store = zarr.open(TEST_PATH_ZARR / "edata_basic_with_tem.zarr")
+    assert store.attrs["encoding-type"] == "ehrdata"
+    assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
+
 
 @pytest.mark.parametrize("harmonize_missing_values", [False, True])
 @pytest.mark.parametrize("cast_variables_to_float", [False, True])
@@ -61,6 +72,11 @@ def test_read_zarr_sparse_with_tem(harmonize_missing_values, cast_variables_to_f
     assert issparse(edata.X)
     assert issparse(edata.layers["other_layer"])
 
+    # verify the test file is an anndata zarr store
+    store = zarr.open(TEST_PATH_ZARR / "edata_sparse_with_tem.zarr")
+    assert store.attrs["encoding-type"] == "ehrdata"
+    assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
+
 
 @pytest.mark.parametrize("edata_name", ["edata_333", "edata_basic_with_tem_full", "edata_nonnumeric_missing_330"])
 def test_write_zarr_basic(edata_name, request, tmp_path):
@@ -69,13 +85,13 @@ def test_write_zarr_basic(edata_name, request, tmp_path):
 
     write_zarr(edata, store_path)
 
-    zarr_file = zarr.open(store_path, mode="r")
-    assert set(dict(zarr_file).keys()) == {
+    created_group = zarr.open(store_path, mode="r")
+    assert set(dict(created_group).keys()) == {
         "anndata",
         "tem",
     }
 
-    assert set(dict(zarr_file["anndata"]).keys()) == {
+    assert set(dict(created_group["anndata"]).keys()) == {
         "X",
         "obs",
         "var",
@@ -88,25 +104,29 @@ def test_write_zarr_basic(edata_name, request, tmp_path):
         "uns",
     }
 
-    assert np.array_equal(ad.io.read_elem(zarr_file["anndata"]["X"]).astype(str), edata.X.astype(str))
+    assert np.array_equal(ad.io.read_elem(created_group["anndata"]["X"]).astype(str), edata.X.astype(str))
 
-    pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["anndata"]["obs"]), edata.obs)
-    pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["anndata"]["var"]), edata.var)
-    pd.testing.assert_frame_equal(ad.io.read_elem(zarr_file["tem"]), edata.tem)
+    pd.testing.assert_frame_equal(ad.io.read_elem(created_group["anndata"]["obs"]), edata.obs)
+    pd.testing.assert_frame_equal(ad.io.read_elem(created_group["anndata"]["var"]), edata.var)
+    pd.testing.assert_frame_equal(ad.io.read_elem(created_group["tem"]), edata.tem)
     for key in edata.obsm:
-        assert key in ad.io.read_elem(zarr_file["anndata"]["obsm"])
-        assert np.array_equal(ad.io.read_elem(zarr_file["anndata"]["obsm"][key]), edata.obsm[key])
+        assert key in ad.io.read_elem(created_group["anndata"]["obsm"])
+        assert np.array_equal(ad.io.read_elem(created_group["anndata"]["obsm"][key]), edata.obsm[key])
     for key in edata.varm:
-        assert key in ad.io.read_elem(zarr_file["anndata"]["varm"])
-        assert np.array_equal(ad.io.read_elem(zarr_file["anndata"]["varm"][key]), edata.varm[key])
+        assert key in ad.io.read_elem(created_group["anndata"]["varm"])
+        assert np.array_equal(ad.io.read_elem(created_group["anndata"]["varm"][key]), edata.varm[key])
     for key in edata.obsp:
-        assert key in ad.io.read_elem(zarr_file["anndata"]["obsp"])
-        assert np.array_equal(ad.io.read_elem(zarr_file["anndata"]["obsp"][key]), edata.obsp[key])
+        assert key in ad.io.read_elem(created_group["anndata"]["obsp"])
+        assert np.array_equal(ad.io.read_elem(created_group["anndata"]["obsp"][key]), edata.obsp[key])
     for key in edata.varp:
-        assert key in ad.io.read_elem(zarr_file["anndata"]["varp"])
-        assert np.array_equal(ad.io.read_elem(zarr_file["anndata"]["varp"][key]), edata.varp[key])
+        assert key in ad.io.read_elem(created_group["anndata"]["varp"])
+        assert np.array_equal(ad.io.read_elem(created_group["anndata"]["varp"][key]), edata.varp[key])
     for key in edata.uns:
-        assert key in ad.io.read_elem(zarr_file["anndata"]["uns"])
+        assert key in ad.io.read_elem(created_group["anndata"]["uns"])
+
+    store = zarr.open(TEST_PATH_ZARR / "edata_sparse_with_tem.zarr")
+    assert store.attrs["encoding-type"] == "ehrdata"
+    assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
 
 
 @pytest.mark.parametrize("edata_name", ["edata_333", "edata_basic_with_tem_full", "edata_nonnumeric_missing_330"])

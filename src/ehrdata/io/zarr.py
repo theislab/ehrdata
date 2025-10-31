@@ -9,6 +9,7 @@ import zarr
 
 import ehrdata as ed
 from ehrdata._logger import logger
+from ehrdata.core.constants import EHRDATA_ZARR_ENCODING_VERSION
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
 
 if TYPE_CHECKING:
@@ -24,6 +25,8 @@ def read_zarr(
     cast_variables_to_float: bool = True,
 ) -> EHRData:
     """Read a zarr store into an :class:`~ehrdata.EHRData` object.
+
+    Can also read :class:`~anndata.AnnData` Zarr stores. In this case, a default `.tem` field is created in the `ehrdata object`.
 
     Args:
         filename: The filename, or a Zarr storage class.
@@ -49,7 +52,11 @@ def read_zarr(
 
     f = filename if isinstance(filename, zarr.Group) else zarr.open(filename, mode="r")
 
-    if "ehrdata" in f.attrs:
+    if "encoding-type" not in f.attrs:
+        err = "The zarr store does not contain an encoding-type attribute."
+        raise ValueError(err)
+
+    if f.attrs["encoding-type"] == "ehrdata":
         if "anndata" in f:
             dictionary_for_init = {
                 k: ad.io.read_elem(f["anndata"][k]) for k, v in dict(f["anndata"]).items() if not k.startswith("raw.")
@@ -61,33 +68,28 @@ def read_zarr(
             dictionary_for_init["tem"] = ad.io.read_elem(f["tem"])
         else:
             warnings.warn("The zarr store does not contain the 'tem' group.", stacklevel=2)
-    else:
-        warnings.warn(
-            "The zarr store does not contain an ehrdata attribute. This is might not be a valid ehrdata Zarr store, and the store might not be readable or be wrongly interpeted.",
-            stacklevel=2,
-        )
-        if "anndata" in f.attrs:
-            warnings.warn(
-                "The zarr store is an AnnData store, which can be read but might not support all ehrdata features.",
-                stacklevel=2,
-            )
 
+    elif f.attrs["encoding-type"] == "anndata":
         dictionary_for_init = {k: ad.io.read_elem(f[k]) for k, v in dict(f).items() if not k.startswith("raw.")}
 
-        edata = EHRData(**dictionary_for_init)
+    else:
+        err = f"Unkown encoding-type '{f.attrs['encoding-type']}'."
+        raise ValueError(err)
 
-        if harmonize_missing_values:
-            ed.harmonize_missing_values(edata)
-            logger.info("Harmonizing missing values of X")
+    edata = EHRData(**dictionary_for_init)
 
-            for key in edata.layers:
-                ed.harmonize_missing_values(edata, layer=key)
-                logger.info(f"Harmonizing missing values of layer {key}")
+    if harmonize_missing_values:
+        ed.harmonize_missing_values(edata)
+        logger.info("Harmonizing missing values of X")
 
-        if cast_variables_to_float:
-            _cast_variables_to_float(edata)
+        for key in edata.layers:
+            ed.harmonize_missing_values(edata, layer=key)
+            logger.info(f"Harmonizing missing values of layer {key}")
 
-        return edata
+    if cast_variables_to_float:
+        _cast_variables_to_float(edata)
+
+    return edata
 
 
 def write_zarr(
@@ -119,8 +121,8 @@ def write_zarr(
     # TODO: add test that checks these fields
     # TODO: ensure this is "canonical" and what anndata is doing
     store = zarr.open(filename, mode="w")
-    store.attrs["ehrdata_version"] = ed.__version__
-    store.attrs["ehrdata_type"] = "ehrdata"
+    store.attrs["encoding-version"] = EHRDATA_ZARR_ENCODING_VERSION
+    store.attrs["encoding-type"] = "ehrdata"
 
     # while adata.write_zarr supports convert_strings_to_categoricals, ad.io.write_elem does not
     # so we need to convert the strings to categoricals ourselves

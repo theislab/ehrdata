@@ -1,4 +1,4 @@
 {
-    "encoding-type": "array",
+    "encoding-type": "string-array",
     "encoding-version": "0.2.0"
 }

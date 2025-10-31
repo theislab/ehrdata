@@ -11,6 +11,8 @@ DATE_TAG = "date"
 
 DEFAULT_TEM_LAYER_NAME = "tem_data"
 
+EHRDATA_ZARR_ENCODING_VERSION = "0.0.1"
+
 # Missing values
 # --------------
 # These values if encountered as strings are considered to represent missing values in the data
