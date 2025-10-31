@@ -17,8 +17,6 @@ from anndata._core.aligned_mapping import (
     Value,
     convert_to_dict,
 )
-
-# from anndata._core.index import _subset
 from anndata._core.views import (
     DataFrameView,
     ElementRef,
@@ -54,20 +52,15 @@ def _validate_array_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None
 def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
     # Select as combination of indexes, not coordinates
     # Correcting for indexing behaviour of np.ndarray
-    # TODO: how to generalize this really? this is not working yet.
-    # also should not just keep like that, since dispatch in anndata of this function available
     if (len(subset_idx) == 2 and all(isinstance(x, Iterable) for x in subset_idx)) or (
         len(subset_idx) == 3 and all(isinstance(x, Iterable) for x in subset_idx)
     ):
         subset_idx = np.ix_(*subset_idx)
-        return a[subset_idx]  # if len(subset_idx) == 2 else a[subset_idx[:2]][subset_idx[2]]
+        return a[subset_idx]
     elif len(subset_idx) == 3 and all(isinstance(x, Iterable) for x in subset_idx[:2]):
         return a[np.ix_(*subset_idx[:2])][subset_idx[2]]
     else:
         return a[subset_idx]
-        # subset_idx = np.ix_(*subset_idx[:2])
-    # if all(isinstance(x, Iterable) for x in subset_idx[:2]):
-    #     subset_idx = np.ix_(*subset_idx[:2])
 
 
 class AlignedActual3D(AlignedActual):
@@ -75,7 +68,6 @@ class AlignedActual3D(AlignedActual):
 
     def __setitem__(self, key: str, value: Value) -> None:
         _validate_array_3d(self.parent, value)
-        # todo: is this a good behavior?
         self.parent._n_t = max(self.parent._n_t, _get_array_3d_dim(value))
         # only if the new aligned object is not 1 anymore and the original object was, create a new minimal tem
         if len(self.parent.tem) == 1 and _get_array_3d_dim(value) > 1:
