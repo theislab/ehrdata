@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 
-from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 from ehrdata.io._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._check_arguments import (
     VALID_OBSERVATION_TABLES_JOIN,
@@ -184,7 +183,7 @@ def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefi
         prefix: The prefix to be removed from the CSV filenames.
 
     Returns:
-        An EHRData object with populated .uns["omop_table_capitalization"] field.
+        An EHRData object with populated fields.
 
     """
     _set_up_duckdb(Path(path), backend_handle, prefix)
@@ -257,6 +256,7 @@ def setup_variables(
     edata,
     *,
     backend_handle: duckdb.DuckDBPyConnection,
+    layer: str | None = None,
     data_tables: Sequence[Literal["measurement", "observation", "specimen"]]
     | Literal["measurement", "observation", "specimen"],
     data_field_to_keep: str | Sequence[str] | dict[str, str | Sequence[str]],
@@ -270,7 +270,6 @@ def setup_variables(
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
     instantiate_tensor: bool = True,
-    layer_name: str = DEFAULT_TEM_LAYER_NAME,
 ):
     """Extracts selected tables of a data-point character from the OMOP CDM.
 
@@ -288,8 +287,9 @@ def setup_variables(
     otherwise, the table is only stored in the RDBMS for later use.
 
     Args:
-        backend_handle: The backend handle to the database.
         edata: Data object to which the variables should be added.
+        backend_handle: The backend handle to the database.
+        layer: The layer to store the data in. If not specified, uses `X`.
         data_tables: The tables to be used.
         data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
             'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
@@ -311,7 +311,6 @@ def setup_variables(
             data points with missing unit information (NULL in either 'unit_concept_id'
             or 'unit_source_value'), the value NULL/NaN is considered a single unit.
         instantiate_tensor: Whether to instantiate the tensor into the .r field of the EHRData object.
-        layer_name: The name of the layer to be used for the tensor.
 
     Returns:
         An :class:`~ehrdata.EHRData` object with populated `.r` and `.var` field.
@@ -330,6 +329,7 @@ def setup_variables(
         >>> edata_gi = ed.io.omop.setup_variables(
         >>>     edata=edata_gi,
         >>>     backend_handle=con_gi,
+        >>>     layer="tem_data",
         >>>     data_tables=["observation", "measurement"],
         >>>     data_field_to_keep={"observation": "observation_source_value", "measurement": "is_present"},
         >>>     interval_length_number=20,
@@ -454,7 +454,11 @@ def setup_variables(
 
     # AnnData does not allow to set a layer with value None
     if instantiate_tensor:
-        edata = EHRData(layers={layer_name: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+        edata = (
+            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+            if layer is not None
+            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+        )
     else:
         edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
@@ -468,6 +472,7 @@ def setup_interval_variables(
     edata,
     *,
     backend_handle: duckdb.DuckDBPyConnection,
+    layer: str | None = None,
     data_tables: Sequence[
         Literal[
             "drug_exposure",
@@ -501,7 +506,6 @@ def setup_interval_variables(
     enrich_var_with_feature_info: bool = False,
     keep_date: Literal["start", "end", "interval"] = "start",
     instantiate_tensor: bool = True,
-    layer_name: str = DEFAULT_TEM_LAYER_NAME,
 ):
     """Extracts selected tables of a time-span character from the OMOP CDM.
 
@@ -516,8 +520,9 @@ def setup_interval_variables(
     otherwise, the table is only stored in the RDBMS for later use.
 
     Args:
-       backend_handle: The backend handle to the database.
        edata: Data object to which the variables should be added.
+       backend_handle: The backend handle to the database.
+       layer: The layer to store the data in. If not specified, it uses `X`.
        data_tables: The tables to be used.
        data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
            'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
@@ -535,10 +540,9 @@ def setup_interval_variables(
            information. If a concept_id is not found in the concept table, the feature information will be NaN.
        keep_date: Whether to keep the start or end date, or the interval span.
        instantiate_tensor: Whether to instantiate the tensor into the .r field of the EHRData object.
-       layer_name: The name of the layer to be used for the tensor.
 
     Returns:
-        An EHRData object with populated `.r` and `.var` field.
+        An EHRData object with fields.
 
     Examples:
         >>> import ehrdata as ed
@@ -554,6 +558,7 @@ def setup_interval_variables(
         >>> edata_gi = ed.io.omop.setup_interval_variables(
         >>>     edata=edata_gi,
         >>>     backend_handle=con_gi,
+        >>>     layer="tem_data",
         >>>     data_tables=["drug_exposure", "condition_occurrence"],
         >>>     data_field_to_keep={"drug_exposure": "is_present", "condition_occurrence": "is_present"},
         >>>     interval_length_number=20,
@@ -649,7 +654,11 @@ def setup_interval_variables(
 
     # AnnData does not allow to set a layer with value None
     if instantiate_tensor:
-        edata = EHRData(layers={layer_name: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+        edata = (
+            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+            if layer is not None
+            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+        )
     else:
         edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 

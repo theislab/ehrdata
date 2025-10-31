@@ -79,7 +79,7 @@ def test_synthea27nj_omop():
 
 
 def test_physionet2012():
-    edata = ed.dt.physionet2012()
+    edata = ed.dt.physionet2012(layer=DEFAULT_TEM_LAYER_NAME)
     assert edata.shape == (11988, 37, 48)
     assert edata.tem.shape == (48, 1)
     assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (11988, 37, 48)
@@ -115,6 +115,7 @@ def test_physionet2012():
 
 def test_physionet2012_arguments():
     edata = ed.dt.physionet2012(
+        layer=DEFAULT_TEM_LAYER_NAME,
         interval_length_number=2,
         interval_length_unit="min",
         num_intervals=24,
@@ -131,7 +132,9 @@ def test_physionet2012_arguments():
 @pytest.mark.parametrize("sparse_param", [False])  # [False, True]
 def test_ehrdata_blobs(sparse_param):
     """Test the ehrdata_blobs function."""
-    edata = ed.dt.ehrdata_blobs(n_observations=100, n_variables=5, base_timepoints=10, sparse=sparse_param)
+    edata = ed.dt.ehrdata_blobs(
+        layer=DEFAULT_TEM_LAYER_NAME, n_observations=100, n_variables=5, base_timepoints=10, sparse=sparse_param
+    )
 
     assert isinstance(edata, ed.EHRData)
 

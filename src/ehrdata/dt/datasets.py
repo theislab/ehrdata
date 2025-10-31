@@ -26,7 +26,6 @@ from scipy.sparse import coo_array, csr_matrix
 
 def ehrdata_blobs(
     *,
-    layer_name: str = DEFAULT_TEM_LAYER_NAME,
     n_variables: int = 11,
     n_centers: int = 5,
     cluster_std: float = 1.0,
@@ -40,11 +39,12 @@ def ehrdata_blobs(
     seasonality: bool = False,
     irregular_sampling: bool = False,
     missing_values: float = 0.0,
+    layer: str = DEFAULT_TEM_LAYER_NAME,
 ) -> EHRData:
     """Generates time series example dataset suited for alignment tasks.
 
     Args:
-        layer_name: The name of the layer to store the data in.
+        layer: The name of the layer to store the data in. If not specified, uses `X`.
         n_variables: Dimension of feature space.
         n_centers: Number of cluster centers.
         cluster_std: Standard deviation of clusters.
@@ -58,6 +58,7 @@ def ehrdata_blobs(
         seasonality: Whether to add seasonal patterns to time series.
         irregular_sampling: Whether sampling intervals vary between observations.
         missing_values: Fraction of random missing values in time series.
+        layer: The name of the layer to store the time series data in.
 
     Examples:
         >>> import ehrdata as ed
@@ -226,7 +227,7 @@ def ehrdata_blobs(
         X=X,
         obs=pd.DataFrame({"cluster": pd.Categorical(y)}, index=pd.Index([str(i) for i in range(n_observations)])),
         var=pd.DataFrame(index=pd.Index([f"feature_{i}" for i in range(n_variables)])),
-        layers={layer_name: tem_layer},
+        layers={layer: tem_layer},
         tem=t_df,
     )
 
@@ -375,7 +376,7 @@ def physionet2012(
         "150649",
         "142998",
     ],
-    layer_name: str = DEFAULT_TEM_LAYER_NAME,
+    layer: str | None = None,
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>`_.
 
@@ -398,7 +399,7 @@ def physionet2012(
            measurements for a person's parameter within a time interval is available.
            Available are `'first'` and `'last'`, as used in :meth:`~pandas.DataFrame.drop_duplicates`.
        drop_samples: Samples to drop from the dataset (indicate their RecordID).
-       layer_name: Name of the layer in the EHRData object that will store the time series data.
+       layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
 
     Returns:
         The processed physionet2012 dataset.
@@ -513,7 +514,11 @@ def physionet2012(
     obs.index = obs.index.astype(str)
     var.index = var.index.astype(str)
 
-    edata = EHRData(layers={layer_name: tem_layer}, obs=obs, var=var, tem=tem)
+    edata = (
+        EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=tem)
+        if layer is not None
+        else EHRData(X=tem_layer, obs=obs, var=var, tem=tem)
+    )
 
     return edata[~edata.obs.index.isin(drop_samples or [])]
 

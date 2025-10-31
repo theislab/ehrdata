@@ -242,6 +242,7 @@ def test_setup_variables(
     edata = ed.io.omop.setup_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=data_tables,
         data_field_to_keep=data_field_to_keep,
         interval_length_number=1,
@@ -736,6 +737,7 @@ def test_setup_interval_type_variables(
     edata = ed.io.omop.setup_interval_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=data_tables,
         data_field_to_keep=data_field_to_keep,
         interval_length_number=1,
@@ -920,6 +922,7 @@ def test_setup_variables_illegal_argument_types(
         ed.io.omop.setup_variables(
             edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
             backend_handle=backend_handle or con,
+            layer=DEFAULT_TEM_LAYER_NAME,
             data_tables=data_tables,
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
@@ -1072,6 +1075,7 @@ def test_setup_interval_variables_illegal_argument_types(
         ed.io.omop.setup_interval_variables(
             edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
             backend_handle=backend_handle or con,
+            layer=DEFAULT_TEM_LAYER_NAME,
             data_tables=data_tables,
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
@@ -1139,6 +1143,7 @@ def test_setup_variables_illegal_argument_values(
         ed.io.omop.setup_variables(
             edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
             backend_handle=backend_handle or con,
+            layer=DEFAULT_TEM_LAYER_NAME,
             data_tables=data_tables,
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
@@ -1205,6 +1210,7 @@ def test_setup_interval_variables_illegal_argument_values(
         ed.io.omop.setup_interval_variables(
             edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
             backend_handle=backend_handle or con,
+            layer=DEFAULT_TEM_LAYER_NAME,
             data_tables=data_tables,
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
@@ -1221,6 +1227,7 @@ def test_capital_letters(omop_connection_capital_letters):
     edata = ed.io.omop.setup_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=["measurement"],
         data_field_to_keep=["value_as_number"],
         interval_length_number=1,
@@ -1247,6 +1254,7 @@ def test_setup_variables_empty_observation(omop_connection_empty_observation, ca
     edata = ed.io.omop.setup_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=["observation"],
         data_field_to_keep=["value_as_number"],
         interval_length_number=1,
@@ -1266,6 +1274,7 @@ def test_setup_interval_variables_empty_observation(omop_connection_empty_observ
     edata = ed.io.omop.setup_interval_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=["drug_exposure"],
         data_field_to_keep=["is_present"],
         interval_length_number=1,
@@ -1284,6 +1293,7 @@ def test_multiple_units(omop_connection_multiple_units, caplog):
     edata = ed.io.omop.setup_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=["observation"],
         data_field_to_keep=["value_as_number"],
         interval_length_number=1,
