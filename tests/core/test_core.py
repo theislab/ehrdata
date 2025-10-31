@@ -152,7 +152,6 @@ def test_ehrdata_init_3dlayer_assign_X_tem(X_numpy_32, X_numpy_322, tem_21):
 def test_ehrdata_init_X_assign_3dlayer_t(X_numpy_32, X_numpy_322, tem_21):
     edata = EHRData(X=X_numpy_32)
     _assert_shape_matches(edata, (3, 2, 1))
-    # TODO: overwrite the constructor to check and update n_t
     edata.layers[DEFAULT_TEM_LAYER_NAME] = X_numpy_322
     _assert_shape_matches(edata, (3, 2, 2))
 
@@ -247,16 +246,16 @@ def test_ehrdata_init_fail_different_3dlayer_3rd_dimension_mismatch(X_numpy_32, 
 #################################################################
 ### Test t is protected alike obs, var
 #################################################################
-def test_ehrdata_set_aligneddataframes(X_numpy_32, X_numpy_322):
-    edata_Xonly = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
+def test_ehrdata_set_aligneddataframes(X_numpy_322):
+    edata_layers_only = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
 
     # show that setting df behavior for t alike obs, var
     with pytest.raises(ValueError):
-        edata_Xonly.obs = pd.DataFrame([0, 1, 2, 3, 4])
+        edata_layers_only.obs = pd.DataFrame([0, 1, 2, 3, 4])
     with pytest.raises(ValueError):
-        edata_Xonly.var = pd.DataFrame([0, 1, 2, 3, 4])
+        edata_layers_only.var = pd.DataFrame([0, 1, 2, 3, 4])
     with pytest.raises(ValueError):
-        edata_Xonly.tem = pd.DataFrame([0, 1, 2, 3, 4])
+        edata_layers_only.tem = pd.DataFrame([0, 1, 2, 3, 4])
 
 
 #################################################################
@@ -293,7 +292,6 @@ def test_ehrdata_assignments(X_numpy_32, X_numpy_322, obs_31, var_21):
 
 
 def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
-    # TODO: fix tests this checks ehrdata is robust for view behvaior
     edata = EHRData(X=X_numpy_32, obs=obs_31, var=var_21, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
     edata_view = edata[:2, :1, :1]
 
@@ -330,14 +328,6 @@ def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
 #################################################################
 ### Test slicing
 #################################################################
-# test sliceing:
-# 1D each axis, 2D each combination, 3D
-# crossproduct
-# slice index, boolean index, number index
-
-# @pytest.mark.parametrize("subset_idx", [
-#     [False, True, True],
-# ])
 
 
 def test_ehrdata_subset_slice_2D_vanilla(X_numpy_32, X_numpy_322, obs_31, var_21):

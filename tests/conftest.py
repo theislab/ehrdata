@@ -13,7 +13,12 @@ from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 from ehrdata.io.omop import setup_connection
 
 
-def _assert_shape_matches(edata: EHRData, shape: tuple[int, int, int], *, check_X_None: bool = False):
+def _assert_shape_matches(
+    edata: EHRData,
+    shape: tuple[int, int, int],
+    *,
+    check_X_None: bool = False,
+):
     assert edata.shape == shape
 
     if check_X_None:

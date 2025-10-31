@@ -8,6 +8,8 @@ import pandas as pd
 import scipy as sp
 import zarr
 
+from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
+
 #########################
 # adata_basic.zarr/h5ad:  basic AnnData object
 
@@ -35,20 +37,20 @@ edata_basic_with_tem_dict = {
     "var": pd.DataFrame({"variables": ["var_1", "var_2", "var_3", "var_4"]}),
     "obsm": {"obs_level_representation": np.ones((5, 2))},
     "varm": {"var_level_representation": np.ones((4, 2))},
-    "layers": {"tem_layer": np.ones((5, 4, 2)), "other_layer": np.ones((5, 4))},
+    "layers": {DEFAULT_TEM_LAYER_NAME: np.ones((5, 4, 2)), "other_layer": np.ones((5, 4))},
     "obsp": {"obs_level_connectivities": np.ones((5, 5))},
     "varp": {"var_level_connectivities": np.random.randn(4, 4)},
     "uns": {"information": ["info1"]},
     "tem": pd.DataFrame({"timestep": ["t1", "t2"]}),
 }
-# with zarr.open("toy_zarr/edata_basic_with_tem.zarr", "w") as zarr_file:
-#     for k, v in edata_basic_with_tem_dict.items():
-#         ad.io.write_elem(zarr_file, k, v)
+with zarr.open("toy_zarr/edata_basic_with_tem.zarr", "w") as zarr_file:
+    for k, v in edata_basic_with_tem_dict.items():
+        ad.io.write_elem(zarr_file, k, v)
 
 
-# with h5py.File("toy_h5ad/edata_basic_with_tem.h5ad", "w") as h5ad_file:
-#     for k, v in edata_basic_with_tem_dict.items():
-#         ad.io.write_elem(h5ad_file, k, v)
+with h5py.File("toy_h5ad/edata_basic_with_tem.h5ad", "w") as h5ad_file:
+    for k, v in edata_basic_with_tem_dict.items():
+        ad.io.write_elem(h5ad_file, k, v)
 
 
 #########################

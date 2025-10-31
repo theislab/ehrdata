@@ -183,7 +183,7 @@ def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefi
         prefix: The prefix to be removed from the CSV filenames.
 
     Returns:
-        An EHRData object with populated fields.
+       An EHRData object with populated .uns["omop_table_capitalization"] field.
 
     """
     _set_up_duckdb(Path(path), backend_handle, prefix)

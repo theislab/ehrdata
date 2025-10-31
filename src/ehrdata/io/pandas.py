@@ -288,7 +288,7 @@ def to_pandas(
 
     Args:
         edata: Central data object.
-        layer: The layer name to access the values of. If not specified, it uses the `X` matrix.
+        layer: The layer to access the values of. If not specified, uses `X`.
         obs_cols: The columns of `obs` to add to the dataframe.
         var_col: The column of `var` to create the column names from in the created dataframe.
             If not specified, the `var_names` will be used.
