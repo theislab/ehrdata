@@ -4,11 +4,12 @@ import pandas as pd
 import pytest
 
 import ehrdata as ed
+from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 
 
 def test_mimic_2():
     edata = ed.dt.mimic_2()
-    assert edata.shape == (1776, 46, 0)
+    assert edata.shape == (1776, 46, 1)
     expected_first_two_vars = ["aline_flg", "icu_los_day"]
     assert list(edata.var.index.values[:2]) == expected_first_two_vars
     expected_first_four_X = np.array([[1, 7.63], [0, 1.14]])
@@ -17,7 +18,7 @@ def test_mimic_2():
 
 def test_mimic_2_preprocessed():
     edata = ed.dt.mimic_2_preprocessed()
-    assert edata.shape == (1776, 46, 0)
+    assert edata.shape == (1776, 46, 1)
     expected_first_two_vars = ["ehrapycat_service_unit", "ehrapycat_day_icu_intime"]
     assert list(edata.var.index.values[:2]) == expected_first_two_vars
     expected_first_four_X = np.array([[2.0, 0.0], [1.0, 2.0]])
@@ -26,7 +27,7 @@ def test_mimic_2_preprocessed():
 
 def test_diabetes_130_raw():
     edata = ed.dt.diabetes_130_raw()
-    assert edata.shape == (101766, 50, 0)
+    assert edata.shape == (101766, 50, 1)
     expected_first_two_vars = ["encounter_id", "patient_nbr"]
     assert list(edata.var.index.values[:2]) == expected_first_two_vars
     expected_first_four_X = np.array([[2278392, 8222157], [149190, 55629189]])
@@ -35,7 +36,7 @@ def test_diabetes_130_raw():
 
 def test_diabetes_130_fairlearn():
     edata = ed.dt.diabetes_130_fairlearn()
-    assert edata.shape == (101766, 24, 0)
+    assert edata.shape == (101766, 24, 1)
     expected_first_two_vars = ["race", "gender"]
     assert list(edata.var.index.values[:2]) == expected_first_two_vars
     expected_first_four_X = np.array([["Caucasian", "Female"], ["Caucasian", "Female"]])
@@ -78,10 +79,10 @@ def test_synthea27nj_omop():
 
 
 def test_physionet2012():
-    edata = ed.dt.physionet2012()
+    edata = ed.dt.physionet2012(layer=DEFAULT_TEM_LAYER_NAME)
     assert edata.shape == (11988, 37, 48)
     assert edata.tem.shape == (48, 1)
-    assert edata.R.shape == (11988, 37, 48)
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (11988, 37, 48)
     assert edata.obs.shape == (11988, 10)
     assert edata.var.shape == (37, 1)
 
@@ -108,12 +109,13 @@ def test_physionet2012():
     )
 
     # first entry c two different HR value
-    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 0].R.item(), 65)
-    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 28].R.item(), 68)
+    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 0].layers[DEFAULT_TEM_LAYER_NAME].item(), 65)
+    assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 28].layers[DEFAULT_TEM_LAYER_NAME].item(), 68)
 
 
 def test_physionet2012_arguments():
     edata = ed.dt.physionet2012(
+        layer=DEFAULT_TEM_LAYER_NAME,
         interval_length_number=2,
         interval_length_unit="min",
         num_intervals=24,
@@ -122,7 +124,7 @@ def test_physionet2012_arguments():
     )
     assert edata.shape == (12000, 37, 24)
     assert edata.tem.shape == (24, 1)
-    assert edata.R.shape == (12000, 37, 24)
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (12000, 37, 24)
     assert edata.obs.shape == (12000, 10)
     assert edata.var.shape == (37, 1)
 
@@ -130,7 +132,9 @@ def test_physionet2012_arguments():
 @pytest.mark.parametrize("sparse_param", [False])  # [False, True]
 def test_ehrdata_blobs(sparse_param):
     """Test the ehrdata_blobs function."""
-    edata = ed.dt.ehrdata_blobs(n_observations=100, n_variables=5, base_timepoints=10, sparse=sparse_param)
+    edata = ed.dt.ehrdata_blobs(
+        layer=DEFAULT_TEM_LAYER_NAME, n_observations=100, n_variables=5, base_timepoints=10, sparse=sparse_param
+    )
 
     assert isinstance(edata, ed.EHRData)
 
@@ -147,10 +151,10 @@ def test_ehrdata_blobs(sparse_param):
     #     assert sparse.issparse(ehr_data.X)
     #     assert ehr_data.X.shape == (100, 5)
 
-    # Test R data
+    # Test 3D data
     if not sparse_param:
-        assert isinstance(edata.R, np.ndarray)
-        assert edata.R.shape == (100, 5, 10)
+        assert isinstance(edata.layers[DEFAULT_TEM_LAYER_NAME], np.ndarray)
+        assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (100, 5, 10)
     # else:
     #     from sparse import COO
     #     assert isinstance(ehr_data.R, COO)
@@ -206,15 +210,15 @@ def test_ehrdata_blobs_distribution():
     # Check that variation increases with time
     time_variations = []
     for t in range(edata.n_t):
-        time_slice = edata.R[:, :, t]
+        time_slice = edata.layers[DEFAULT_TEM_LAYER_NAME][:, :, t]
         variation = np.std(time_slice)
         time_variations.append(variation)
 
     # Verify increasing variation trend
     assert time_variations[-1] > time_variations[0]
 
-    # Test that R at t=0 is close to X
-    first_timepoint = edata.R[:, :, 0]
+    # Test that 3D data at t=0 is close to X
+    first_timepoint = edata.layers[DEFAULT_TEM_LAYER_NAME][:, :, 0]
     correlation = np.corrcoef(first_timepoint.flatten(), edata.X.flatten())[0, 1]
     assert correlation > 0.5
 
@@ -249,16 +253,16 @@ def test_ehrdata_ts_blobs_irregular():
     # Time differences should have meaningful variation with irregular sampling
     assert np.std(time_diffs) > 0.001
 
-    # Test for missing values in R
-    nan_count = np.isnan(edata.R).sum()
-    total_elements = np.prod(edata.R.shape)
+    # Test for missing values in 3D data
+    nan_count = np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME]).sum()
+    total_elements = np.prod(edata.layers[DEFAULT_TEM_LAYER_NAME].shape)
     missing_ratio = nan_count / total_elements
     assert missing_ratio > 0.05
 
     # Test for variable length time series
     valid_counts = []
     for i in range(edata.n_obs):
-        valid_count = np.sum(~np.isnan(edata.R[i, 0, :]))
+        valid_count = np.sum(~np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][i, 0, :]))
         valid_counts.append(valid_count)
 
     valid_counts = np.array(valid_counts)
@@ -278,8 +282,8 @@ def test_ehrdata_ts_blobs_irregular():
             obs1 = obs_indices[0]
             obs2 = obs_indices[1]
 
-            valid_times1 = np.where(~np.isnan(edata.R[obs1, 0, :]))[0]
-            valid_times2 = np.where(~np.isnan(edata.R[obs2, 0, :]))[0]
+            valid_times1 = np.where(~np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][obs1, 0, :]))[0]
+            valid_times2 = np.where(~np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][obs2, 0, :]))[0]
 
             if len(valid_times1) > 0 and len(valid_times2) > 0:
                 first_time1 = valid_times1[0]
@@ -295,7 +299,7 @@ def test_ehrdata_ts_blobs_irregular():
     seasonal_pattern_found = False
     for i in range(min(10, edata.n_obs)):  # Check first 10 observations max
         for v in range(edata.n_vars):
-            values = edata.R[i, v, :]
+            values = edata.layers[DEFAULT_TEM_LAYER_NAME][i, v, :]
             valid_mask = ~np.isnan(values)
 
             if np.sum(valid_mask) >= 10:  # Need at least 10 valid points

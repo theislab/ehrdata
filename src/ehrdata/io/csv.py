@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 def read_csv(
     filename: Path | str,
     *,
+    layer: str | None = None,
     sep: str = ",",
     index_column: str | None = None,
     columns_obs_only: Iterable[str] | None = None,
@@ -30,6 +31,7 @@ def read_csv(
 
     Args:
         filename: Path to the file or directory to read. Delegates to :func:`pandas.read_csv`.
+        layer: The layer to store the data in. If not specified, it uses the `X`. Delegates to :func:`~ehrdata.io.from_pandas`.
         sep: Separator in the file. Delegates to :func:`pandas.read_csv`.
         index_column: If specified, this column of the csv file will be used for the `.obs` dataframe.
             Delegates to :func:`~ehrdata.io.from_pandas`.
@@ -62,6 +64,7 @@ def read_csv(
     df = pd.read_csv(filename, sep=sep, index_col=index_column, **kwargs)
     edata = from_pandas(
         df,
+        layer=layer,
         columns_obs_only=columns_obs_only,
         format=format,
         wide_format_time_suffix=wide_format_time_suffix,

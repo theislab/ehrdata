@@ -19,6 +19,7 @@ from ehrdata.core.constants import PANDAS_FORMATS
 def from_pandas(
     df: pd.DataFrame,
     *,
+    layer: str | None = None,
     columns_obs_only: Iterable[str] | None = None,
     index_column: str | int | None = None,
     format: Literal["flat", "wide", "long"] = "flat",
@@ -34,6 +35,7 @@ def from_pandas(
 
     Args:
         df: The dataframe to be transformed.
+        layer: The layer to store the data in. If not specified, it uses `X`.
         columns_obs_only: Column names that should belong to `obs` only and not `X`.
         index_column: The index column of `obs`.
             This can be either a column name (or its numerical index in the DataFrame) or the index of the dataframe.
@@ -62,11 +64,12 @@ def from_pandas(
         ...         "sex": ["M", "F", "F", "M", "F"],
         ...     }
         ... )
-        >>> edata = ed.io.from_pandas(df, index_column="patient_id")
+        >>> edata = ed.io.from_pandas(df, layer="tem_data", index_column="patient_id")
         >>> edata
 
-        >>> EHRData object with n_obs × n_vars = 5 × 2
-        >>> shape of .X: (5, 2)
+        >>> EHRData object with n_obs × n_vars × n_t = 5 × 2 × 1
+        >>>     layers: 'tem_data'
+        >>>     shape of .tem_data: (5, 2, 1)
 
         >>> df_wide = pd.DataFrame(
         ...     {
@@ -77,13 +80,13 @@ def from_pandas(
         ...         "systolic_blood_pressure_t_1": [np.nan, 135],
         ...     }
         ... )
-        >>> edata = ed.io.from_pandas(df_wide, format="wide", columns_obs_only=["patient_id", "sex"])
+        >>> edata = ed.io.from_pandas(df_wide, layer="tem_data", format="wide", columns_obs_only=["patient_id", "sex"])
         >>> edata
 
         >>> EHRData object with n_obs × n_vars × n_t = 2 × 1 × 3
-        >>> obs: 'patient_id', 'sex'
-        >>> shape of .X: (2, 1)
-        >>> shape of .R: (2, 1, 3)
+        >>>     obs: 'patient_id', 'sex'
+        >>>     layers: 'tem_data'
+        >>>     shape of .tem_data: (2, 1, 3)
 
 
         >>> df_long = pd.DataFrame(
@@ -101,13 +104,13 @@ def from_pandas(
         ...         "value": ["F", 120, 125, "M", 130, 135],
         ...     }
         ... )
-        >>> edata = ed.io.from_pandas(df_long, format="long", columns_obs_only=["sex"])
+        >>> edata = ed.io.from_pandas(df_long, layer="tem_data", format="long", columns_obs_only=["sex"])
         >>> edata
 
         >>> EHRData object with n_obs × n_vars × n_t = 2 × 1 × 3
-        >>> obs: "sex"
-        >>> shape of .X: (2, 1)
-        >>> shape of .R: (2, 1, 3)
+        >>>     obs: "sex"
+        >>>     layers: 'tem_data'
+        >>>     shape of .tem_data: (2, 1, 3)
 
     """
     from ehrdata import EHRData
@@ -187,7 +190,7 @@ def from_pandas(
         all_numeric = df.select_dtypes(include=[np.number]).shape[1] == df.shape[1]
         X = X.astype(np.float64 if all_numeric else object)
 
-        edata = EHRData(X=X, obs=obs, var=var)
+        edata = EHRData(layers={layer: X}, obs=obs, var=var) if layer is not None else EHRData(X=X, obs=obs, var=var)
 
     elif format == "wide":
         # Define the variable name without suffix for each column.
@@ -202,11 +205,13 @@ def from_pandas(
         variables = np.array(variables)
         timepoints = np.array(timepoints)
 
-        R = np.full((len(df), len(unique_variables), len(unique_timepoints)), np.nan)
+        tem_layer = np.full((len(df), len(unique_variables), len(unique_timepoints)), np.nan)
         for i, timepoint in enumerate(unique_timepoints):
             for j, variable in enumerate(unique_variables):
                 if variable + wide_format_time_suffix + timepoint in df.columns:
-                    R[:, j, i] = df.loc[:, (variables == variable) & (timepoints == timepoint)].to_numpy().flatten()
+                    tem_layer[:, j, i] = (
+                        df.loc[:, (variables == variable) & (timepoints == timepoint)].to_numpy().flatten()
+                    )
 
         obs.index = obs.index.astype(str)
         var = pd.DataFrame(index=unique_variables)
@@ -214,7 +219,11 @@ def from_pandas(
         tem = pd.DataFrame(index=unique_timepoints)
         tem.index = tem.index.astype(str)
 
-        edata = EHRData(R=R, obs=obs, var=var, tem=tem)
+        edata = (
+            EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=tem)
+            if layer is not None
+            else EHRData(X=tem_layer, obs=obs, var=var, tem=tem)
+        )
 
     elif format == "long":
         if index_column is not None:
@@ -248,14 +257,18 @@ def from_pandas(
             ]
         ).to_xarray()
 
-        R = xr_dataarray[long_format_keys["value_column"]].values
+        tem_layer = xr_dataarray[long_format_keys["value_column"]].values
 
         var = pd.DataFrame(index=xr_dataarray[long_format_keys["variable_column"]].values)
         var.index = var.index.astype(str)
         tem = pd.DataFrame(index=xr_dataarray[long_format_keys["time_column"]].values)
         tem.index = tem.index.astype(str)
 
-        edata = EHRData(R=R, obs=obs, var=var, tem=tem)
+        edata = (
+            EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=tem)
+            if layer is not None
+            else EHRData(X=tem_layer, obs=obs, var=var, tem=tem)
+        )
 
     edata.obs_names = edata.obs_names.astype(str)
     edata.var_names = edata.var_names.astype(str)
@@ -275,7 +288,7 @@ def to_pandas(
 
     Args:
         edata: Central data object.
-        layer: The layer to access the values of. If not specified, it uses the `X` matrix.
+        layer: The layer to access the values of. If not specified, uses `X`.
         obs_cols: The columns of `obs` to add to the dataframe.
         var_col: The column of `var` to create the column names from in the created dataframe.
             If not specified, the `var_names` will be used.
@@ -345,11 +358,8 @@ def to_pandas(
         err_msg = f"Variable column {var_col} not found in edata.var"
         raise ValueError(err_msg)
 
-    if layer is not None:
-        if layer == "X":
-            layer = None
-        if layer == "R":
-            layer = "R_layer"
+    if layer == "X":
+        layer = None
     X = edata.layers[layer] if layer is not None else edata.X
 
     var_names = edata.var_names if var_col is None else edata.var[var_col]

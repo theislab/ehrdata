@@ -256,6 +256,7 @@ def setup_variables(
     edata,
     *,
     backend_handle: duckdb.DuckDBPyConnection,
+    layer: str | None = None,
     data_tables: Sequence[Literal["measurement", "observation", "specimen"]]
     | Literal["measurement", "observation", "specimen"],
     data_field_to_keep: str | Sequence[str] | dict[str, str | Sequence[str]],
@@ -286,8 +287,9 @@ def setup_variables(
     otherwise, the table is only stored in the RDBMS for later use.
 
     Args:
-        backend_handle: The backend handle to the database.
         edata: Data object to which the variables should be added.
+        backend_handle: The backend handle to the database.
+        layer: The layer to store the data in. If not specified, uses `X`.
         data_tables: The tables to be used.
         data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
             'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
@@ -327,6 +329,7 @@ def setup_variables(
         >>> edata_gi = ed.io.omop.setup_variables(
         >>>     edata=edata_gi,
         >>>     backend_handle=con_gi,
+        >>>     layer="tem_data",
         >>>     data_tables=["observation", "measurement"],
         >>>     data_field_to_keep={"observation": "observation_source_value", "measurement": "is_present"},
         >>>     interval_length_number=20,
@@ -443,13 +446,21 @@ def setup_variables(
 
     var = pd.concat(var_collector.values(), axis=0).reset_index(drop=True)
 
-    r = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
+    tem_layer = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
 
     tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
     var.index = var.index.astype(str)
 
-    edata = EHRData(R=r, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+    # AnnData does not allow to set a layer with value None
+    if instantiate_tensor:
+        edata = (
+            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+            if layer is not None
+            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+        )
+    else:
+        edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
     for data_table in data_tables:
         edata.uns[f"unit_report_{data_table}"] = unit_report_collector[data_table]
@@ -461,6 +472,7 @@ def setup_interval_variables(
     edata,
     *,
     backend_handle: duckdb.DuckDBPyConnection,
+    layer: str | None = None,
     data_tables: Sequence[
         Literal[
             "drug_exposure",
@@ -508,8 +520,9 @@ def setup_interval_variables(
     otherwise, the table is only stored in the RDBMS for later use.
 
     Args:
-       backend_handle: The backend handle to the database.
        edata: Data object to which the variables should be added.
+       backend_handle: The backend handle to the database.
+       layer: The layer to store the data in. If not specified, it uses `X`.
        data_tables: The tables to be used.
        data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
            'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
@@ -529,7 +542,7 @@ def setup_interval_variables(
        instantiate_tensor: Whether to instantiate the tensor into the .r field of the EHRData object.
 
     Returns:
-        An EHRData object with populated `.r` and `.var` field.
+        An EHRData object with fields.
 
     Examples:
         >>> import ehrdata as ed
@@ -545,6 +558,7 @@ def setup_interval_variables(
         >>> edata_gi = ed.io.omop.setup_interval_variables(
         >>>     edata=edata_gi,
         >>>     backend_handle=con_gi,
+        >>>     layer="tem_data",
         >>>     data_tables=["drug_exposure", "condition_occurrence"],
         >>>     data_field_to_keep={"drug_exposure": "is_present", "condition_occurrence": "is_present"},
         >>>     interval_length_number=20,
@@ -632,13 +646,21 @@ def setup_interval_variables(
 
     var = pd.concat(var_collector.values(), axis=0).reset_index(drop=True)
 
-    r = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
+    tem_layer = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
 
     tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
     var.index = var.index.astype(str)
 
-    edata = EHRData(R=r, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+    # AnnData does not allow to set a layer with value None
+    if instantiate_tensor:
+        edata = (
+            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+            if layer is not None
+            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+        )
+    else:
+        edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
     return edata
 

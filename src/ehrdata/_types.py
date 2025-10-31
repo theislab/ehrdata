@@ -31,20 +31,16 @@ type XDataType = (
     | CupySparseMatrix
 )
 
-type RDataType = np.ndarray | scipy.sparse.coo_array | DaskArray
-R_TYPES = (np.ndarray, scipy.sparse.coo_array, DaskArray)
-
 EHRDataElem = Literal[
     "obs",
     "var",
-    "t",
+    "tem",
     "obsm",
     "varm",
     "obsp",
     "varp",
     "layers",
     "X",
-    "R",
     "raw",
     "uns",
 ]

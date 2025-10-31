@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 import ehrdata as ed
+from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 
 # constants for toy_omop/vanilla
 VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY = {
@@ -241,6 +242,7 @@ def test_setup_variables(
     edata = ed.io.omop.setup_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=data_tables,
         data_field_to_keep=data_field_to_keep,
         interval_length_number=1,
@@ -253,13 +255,13 @@ def test_setup_variables(
     assert isinstance(edata, ed.EHRData)
     assert edata.n_obs == VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY[observation_table]
     assert edata.n_vars == sum(VANILLA_NUM_CONCEPTS[data_table] for data_table in data_tables)
-    assert edata.R.shape[2] == num_intervals
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape[2] == num_intervals
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0) + (
         VAR_DIM_UNIT_INFO if enrich_var_with_unit_info else 0
     )
     pd.testing.assert_frame_equal(edata.var[["data_table_concept_id"]], target_var)
 
-    assert np.allclose(edata.R, np.array(target_R), equal_nan=True)
+    assert np.allclose(edata.layers[DEFAULT_TEM_LAYER_NAME], np.array(target_R), equal_nan=True)
 
 
 @pytest.mark.parametrize(
@@ -735,6 +737,7 @@ def test_setup_interval_type_variables(
     edata = ed.io.omop.setup_interval_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=data_tables,
         data_field_to_keep=data_field_to_keep,
         interval_length_number=1,
@@ -747,10 +750,10 @@ def test_setup_interval_type_variables(
     assert isinstance(edata, ed.EHRData)
     assert edata.n_obs == VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY[observation_table]
     assert edata.n_vars == sum(VANILLA_NUM_CONCEPTS[data_table] for data_table in data_tables)
-    assert edata.R.shape[2] == num_intervals
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape[2] == num_intervals
     assert edata.var.shape[1] == VAR_DIM_BASE + (VAR_DIM_FEATURE_INFO if enrich_var_with_feature_info else 0)
-    pd.testing.assert_frame_equal(edata.var[["data_table_concept_id"]], target_var)
-    assert np.allclose(edata.R, np.array(target_R), equal_nan=True)
+
+    assert np.allclose(edata.layers[DEFAULT_TEM_LAYER_NAME], np.array(target_R), equal_nan=True)
 
 
 @pytest.mark.parametrize(
@@ -919,6 +922,7 @@ def test_setup_variables_illegal_argument_types(
         ed.io.omop.setup_variables(
             edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
             backend_handle=backend_handle or con,
+            layer=DEFAULT_TEM_LAYER_NAME,
             data_tables=data_tables,
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
@@ -1071,6 +1075,7 @@ def test_setup_interval_variables_illegal_argument_types(
         ed.io.omop.setup_interval_variables(
             edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
             backend_handle=backend_handle or con,
+            layer=DEFAULT_TEM_LAYER_NAME,
             data_tables=data_tables,
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
@@ -1138,6 +1143,7 @@ def test_setup_variables_illegal_argument_values(
         ed.io.omop.setup_variables(
             edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
             backend_handle=backend_handle or con,
+            layer=DEFAULT_TEM_LAYER_NAME,
             data_tables=data_tables,
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
@@ -1204,6 +1210,7 @@ def test_setup_interval_variables_illegal_argument_values(
         ed.io.omop.setup_interval_variables(
             edata or ed.io.omop.setup_obs(backend_handle=omop_connection_vanilla, observation_table="person_cohort"),
             backend_handle=backend_handle or con,
+            layer=DEFAULT_TEM_LAYER_NAME,
             data_tables=data_tables,
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
@@ -1220,6 +1227,7 @@ def test_capital_letters(omop_connection_capital_letters):
     edata = ed.io.omop.setup_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=["measurement"],
         data_field_to_keep=["value_as_number"],
         interval_length_number=1,
@@ -1229,7 +1237,7 @@ def test_capital_letters(omop_connection_capital_letters):
         enrich_var_with_unit_info=False,
     )
 
-    assert edata.R[0, 0, 0] == 18
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME][0, 0, 0] == 18
 
     tables = con.execute("SHOW TABLES").df()["name"].values
     assert "measurement" in tables
@@ -1246,6 +1254,7 @@ def test_setup_variables_empty_observation(omop_connection_empty_observation, ca
     edata = ed.io.omop.setup_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=["observation"],
         data_field_to_keep=["value_as_number"],
         interval_length_number=1,
@@ -1254,7 +1263,7 @@ def test_setup_variables_empty_observation(omop_connection_empty_observation, ca
         enrich_var_with_feature_info=False,
         enrich_var_with_unit_info=False,
     )
-    assert edata.shape == (1, 0, 0)
+    assert edata.shape == (1, 0, 1)
     assert "No data found in observation. Returning edata without data of observation." in caplog.text
     assert "No data found in any of the data tables. Returning edata without data." in caplog.text
 
@@ -1265,6 +1274,7 @@ def test_setup_interval_variables_empty_observation(omop_connection_empty_observ
     edata = ed.io.omop.setup_interval_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=["drug_exposure"],
         data_field_to_keep=["is_present"],
         interval_length_number=1,
@@ -1272,7 +1282,7 @@ def test_setup_interval_variables_empty_observation(omop_connection_empty_observ
         num_intervals=1,
         enrich_var_with_feature_info=False,
     )
-    assert edata.shape == (1, 0, 0)
+    assert edata.shape == (1, 0, 1)
     assert "No data found in drug_exposure. Returning edata without data of drug_exposure." in caplog.text
     assert "No data found in any of the data tables. Returning edata without data." in caplog.text
 
@@ -1283,6 +1293,7 @@ def test_multiple_units(omop_connection_multiple_units, caplog):
     edata = ed.io.omop.setup_variables(
         edata,
         backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
         data_tables=["observation"],
         data_field_to_keep=["value_as_number"],
         interval_length_number=1,

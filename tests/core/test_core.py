@@ -5,48 +5,46 @@ import pytest
 from tests.conftest import _assert_shape_matches
 
 from ehrdata import EHRData
-from ehrdata.core.constants import R_LAYER_KEY
+from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 
 
 def _assert_fields_are_view(edata: EHRData):
     assert edata.is_view
     assert isinstance(edata.X, ad._core.views.ArrayView)
-    assert isinstance(edata.R, ad._core.views.ArrayView)
     assert isinstance(edata.tem, ad._core.views.DataFrameView)
 
 
 #################################################################
-### Test combinations of X, R, t during initialization
+### Test combinations of X, layers, t during initialization
 #################################################################
 def test_ehrdata_init_vanilla_empty():
     edata = EHRData()
 
-    _assert_shape_matches(edata, (0, 0, 0), check_X_None=True, check_R_None=True)
+    _assert_shape_matches(edata, (0, 0, 1), check_X_None=True)
     assert edata.X is None
-    assert edata.R is None
     assert edata.obs.shape == (0, 0)
     assert edata.var.shape == (0, 0)
-    assert edata.tem.shape == (0, 0)
+    assert edata.tem.shape == (1, 0)
 
 
 def test_ehrdata_init_vanilla_X(X_numpy_32):
     edata = EHRData(X=X_numpy_32)
-    _assert_shape_matches(edata, (3, 2, 0), check_R_None=True)
+    _assert_shape_matches(edata, (3, 2, 1))
 
     assert edata.obs.shape == (3, 0)
 
     assert edata.var.shape == (2, 0)
 
-    assert edata.tem.shape == (0, 0)
+    assert edata.tem.shape == (1, 0)
 
 
-def test_ehrdata_init_vanilla_r(R_numpy_322):
-    edata = EHRData(R=R_numpy_322)
-    _assert_shape_matches(edata, (3, 2, 2))
+def test_ehrdata_init_vanilla_3dlayer(X_numpy_322):
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
+    _assert_shape_matches(edata, (3, 2, 2), check_X_None=True)
 
     assert edata.layers is not None
-    assert edata.layers[R_LAYER_KEY] is not None
-    assert edata.layers[R_LAYER_KEY].shape == (3, 2, 2)
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME] is not None
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (3, 2, 2)
 
     assert edata.obs.shape == (3, 0)
 
@@ -55,54 +53,54 @@ def test_ehrdata_init_vanilla_r(R_numpy_322):
     assert edata.tem.shape == (2, 0)
 
 
-def test_ehrdata_init_vanilla_X_and_r(X_numpy_32, R_numpy_322):
-    edata = EHRData(X=X_numpy_32, R=R_numpy_322)
+def test_ehrdata_init_vanilla_X_and_3dlayer(X_numpy_32, X_numpy_322):
+    edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
     _assert_shape_matches(edata, (3, 2, 2))
 
     assert edata.layers is not None
-    assert edata.R is not None
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME] is not None
 
     assert edata.X.shape == (3, 2)
     assert edata.obs.shape == (3, 0)
     assert edata.var.shape == (2, 0)
     assert edata.tem.shape == (2, 0)
-    assert edata.R.shape == (3, 2, 2)
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (3, 2, 2)
 
 
 def test_ehrdata_init_vanilla_X_and_t(X_numpy_32, tem_21):
     edata = EHRData(X=X_numpy_32, tem=tem_21)
-    _assert_shape_matches(edata, (3, 2, 2), check_R_None=True)
-
-    assert edata.layers is not None
-
-    assert edata.X.shape == (3, 2)
-    assert edata.obs.shape == (3, 0)
-    assert edata.var.shape == (2, 0)
-    assert edata.tem.shape == (2, 1)
-
-
-def test_ehrdata_init_vanilla_X_and_r_and_t(X_numpy_32, R_numpy_322, tem_21):
-    edata = EHRData(X=X_numpy_32, R=R_numpy_322, tem=tem_21)
     _assert_shape_matches(edata, (3, 2, 2))
 
     assert edata.layers is not None
-    assert edata.R is not None
 
     assert edata.X.shape == (3, 2)
     assert edata.obs.shape == (3, 0)
     assert edata.var.shape == (2, 0)
     assert edata.tem.shape == (2, 1)
-    assert edata.R.shape == (3, 2, 2)
+
+
+def test_ehrdata_init_vanilla_X_and_3dlayer_and_t(X_numpy_32, X_numpy_322, tem_21):
+    edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322}, tem=tem_21)
+    _assert_shape_matches(edata, (3, 2, 2))
+
+    assert edata.layers is not None
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME] is not None
+
+    assert edata.X.shape == (3, 2)
+    assert edata.obs.shape == (3, 0)
+    assert edata.var.shape == (2, 0)
+    assert edata.tem.shape == (2, 1)
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (3, 2, 2)
 
 
 def test_ehrdata_init_vanilla_X_and_layers(X_numpy_32):
     edata = EHRData(X=X_numpy_32, layers={"some_layer": X_numpy_32})
 
-    _assert_shape_matches(edata, (3, 2, 0), check_R_None=True)
+    _assert_shape_matches(edata, (3, 2, 1))
 
     assert edata.obs.shape == (3, 0)
     assert edata.var.shape == (2, 0)
-    assert edata.tem.shape == (0, 0)
+    assert edata.tem.shape == (1, 0)
 
 
 #################################################################
@@ -110,85 +108,88 @@ def test_ehrdata_init_vanilla_X_and_layers(X_numpy_32):
 #################################################################
 def test_ehrdata_init_vanilla_obs(obs_31):
     edata = EHRData(obs=obs_31)
-    _assert_shape_matches(edata, (3, 0, 0), check_X_None=True, check_R_None=True)
+    _assert_shape_matches(edata, (3, 0, 1), check_X_None=True)
 
 
 def test_ehrdata_init_vanilla_var(var_31):
     edata = EHRData(var=var_31)
-    _assert_shape_matches(edata, (0, 3, 0), check_X_None=True, check_R_None=True)
+    _assert_shape_matches(edata, (0, 3, 1), check_X_None=True)
 
 
 def test_ehrdata_init_vanilla_tem(tem_31):
     edata = EHRData(tem=tem_31)
-    _assert_shape_matches(edata, (0, 0, 3), check_X_None=True, check_R_None=True)
+    _assert_shape_matches(edata, (0, 0, 3), check_X_None=True)
 
 
 #################################################################
-### Test assignment of X, R, t combinations
+### Test assignment of X, 3dlayer, t combinations
 #################################################################
-def test_ehrdata_init_r_assign_X_tem(X_numpy_32, R_numpy_322, tem_21):
-    edata = EHRData(R=R_numpy_322)
+def test_ehrdata_init_3dlayer_assign_X_tem(X_numpy_32, X_numpy_322, tem_21):
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
     edata.X = X_numpy_32
     _assert_shape_matches(edata, (3, 2, 2))
     assert edata.tem.shape == (2, 0)
 
-    edata = EHRData(R=R_numpy_322)
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
     edata.tem = tem_21
-    _assert_shape_matches(edata, (3, 2, 2))
+    _assert_shape_matches(edata, (3, 2, 2), check_X_None=True)
     assert edata.tem.shape == (2, 1)
 
     # for assignment of X and t, test both orders
-    edata = EHRData(R=R_numpy_322)
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
     edata.X = X_numpy_32
     edata.tem = tem_21
     _assert_shape_matches(edata, (3, 2, 2))
     assert edata.tem.shape == (2, 1)
 
-    edata = EHRData(R=R_numpy_322)
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
     edata.tem = tem_21
     edata.X = X_numpy_32
     _assert_shape_matches(edata, (3, 2, 2))
     assert edata.tem.shape == (2, 1)
 
 
-def test_ehrdata_init_X_assign_r_t(X_numpy_32, R_numpy_322, tem_21):
+def test_ehrdata_init_X_assign_3dlayer_t(X_numpy_32, X_numpy_322, tem_21):
     edata = EHRData(X=X_numpy_32)
-    with pytest.raises(ValueError):
-        edata.R = R_numpy_322
+    _assert_shape_matches(edata, (3, 2, 1))
+    edata.layers[DEFAULT_TEM_LAYER_NAME] = X_numpy_322
+    _assert_shape_matches(edata, (3, 2, 2))
 
     edata = EHRData(X=X_numpy_32)
-    with pytest.raises(ValueError):
-        edata.tem = tem_21
+    edata.tem = tem_21
+    _assert_shape_matches(edata, (3, 2, 2))
 
 
-def test_ehrdata_init_t_assign_X_r(X_numpy_32, R_numpy_322, tem_21):
+def test_ehrdata_init_t_assign_X_3dlayer(X_numpy_32, X_numpy_322, tem_21):
+    # It would be OK if this was allowed, but for now we don't enable until there's need for this.
     edata = EHRData(tem=tem_21)
     with pytest.raises(ValueError):
         edata.X = X_numpy_32
 
+    # It would be OK if this was allowed, but for now we don't enable until there's need for this.
     edata = EHRData(tem=tem_21)
     with pytest.raises(ValueError):
-        edata.R = R_numpy_322
+        edata.layers[DEFAULT_TEM_LAYER_NAME] = X_numpy_322
 
 
-def test_ehrdata_init_X_r_assign_t(X_numpy_32, R_numpy_322, tem_21):
-    edata = EHRData(X=X_numpy_32, R=R_numpy_322)
+def test_ehrdata_init_X_3dlayer_assign_t(X_numpy_32, X_numpy_322, tem_21):
+    edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
 
     edata.tem = tem_21
     _assert_shape_matches(edata, (3, 2, 2))
     assert edata.tem.shape == (2, 1)
 
 
-def test_ehrdata_init_X_t_assign_r(X_numpy_32, R_numpy_322, tem_21):
+def test_ehrdata_init_X_t_assign_3dlayer(X_numpy_32, X_numpy_322, tem_21):
     edata = EHRData(X=X_numpy_32, tem=tem_21)
 
-    edata.R = R_numpy_322
+    edata.layers[DEFAULT_TEM_LAYER_NAME] = X_numpy_322
     _assert_shape_matches(edata, (3, 2, 2))
     assert edata.tem.shape == (2, 1)
 
 
-def test_ehrdata_init_r_t_assign_X(X_numpy_32, R_numpy_322, tem_21):
-    edata = EHRData(R=R_numpy_322, tem=tem_21)
+def test_ehrdata_init_3dlayer_t_assign_X(X_numpy_32, X_numpy_322, tem_21):
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322}, tem=tem_21)
 
     edata.X = X_numpy_32
     _assert_shape_matches(edata, (3, 2, 2))
@@ -198,86 +199,147 @@ def test_ehrdata_init_r_t_assign_X(X_numpy_32, R_numpy_322, tem_21):
 #################################################################
 ### Test illegal initializations
 #################################################################
-def test_ehrdata_init_fail_r_2D(X_numpy_32):
+
+
+def test_ehrdata_illegal_tem(X_numpy_322):
+    tem = np.array([1, 2, 3])
     with pytest.raises(ValueError):
-        EHRData(R=X_numpy_32)
+        EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322}, tem=tem)
 
 
-def test_ehrdata_X_assign_fail_r_2D(X_numpy_32):
-    edata = EHRData(X=X_numpy_32)
-    with pytest.raises(ValueError):
-        edata.R = X_numpy_32
-
-
-def test_ehrdata_init_fail_X_and_R_mismatch(X_numpy_32, obs_31, var_21):
-    r = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+def test_ehrdata_init_fail_X_and_3dlayer_mismatch(X_numpy_32, obs_31, var_21):
+    tem_layer = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
 
     with pytest.raises(ValueError):
-        EHRData(X=X_numpy_32, obs=obs_31, R=r, var=var_21)
+        EHRData(X=X_numpy_32, obs=obs_31, layers={DEFAULT_TEM_LAYER_NAME: tem_layer}, var=var_21)
 
 
-def test_ehrdata_init_fail_R_and_t_mismatch(X_numpy_32, R_numpy_322, obs_31, var_21):
+def test_ehrdata_init_fail_3dlayer_and_t_mismatch(X_numpy_32, X_numpy_322, obs_31, var_21):
     tem = pd.DataFrame({"tem1": [1]})
-
     with pytest.raises(ValueError):
-        EHRData(X=X_numpy_32, obs=obs_31, R=R_numpy_322, tem=tem, var=var_21)
+        EHRData(X=X_numpy_32, obs=obs_31, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322}, tem=tem, var=var_21)
 
-
-def test_ehrdata_init_fail_R_and_layer_R_LAYER_KEY_exists(X_numpy_32, R_numpy_322):
-    layers = {R_LAYER_KEY: R_numpy_322}
-
+    edata = EHRData(X=X_numpy_32, obs=obs_31, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322}, var=var_21)
     with pytest.raises(ValueError):
-        EHRData(X=X_numpy_32, R=R_numpy_322, layers=layers)
+        edata.tem = tem
+
+
+def test_ehrdata_init_fail_different_3dlayer_3rd_dimension_mismatch(X_numpy_32, X_numpy_322, obs_31, var_21):
+    with pytest.raises(ValueError):
+        EHRData(
+            X=X_numpy_32,
+            obs=obs_31,
+            layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322, "tem_layer2": np.ones((3, 2, 3))},
+            var=var_21,
+        )
+
+    edata = EHRData(
+        X=X_numpy_32,
+        obs=obs_31,
+        layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322},
+        var=var_21,
+    )
+    with pytest.raises(ValueError):
+        edata.layers["tem_layer2"] = np.ones((3, 2, 3))
 
 
 #################################################################
 ### Test t is protected alike obs, var
 #################################################################
-def test_ehrdata_set_aligneddataframes(X_numpy_32):
-    edata_Xonly = EHRData(X_numpy_32)
+def test_ehrdata_set_aligneddataframes(X_numpy_322):
+    edata_layers_only = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
 
     # show that setting df behavior for t alike obs, var
     with pytest.raises(ValueError):
-        edata_Xonly.obs = pd.DataFrame([0, 1, 2, 3, 4])
+        edata_layers_only.obs = pd.DataFrame([0, 1, 2, 3, 4])
     with pytest.raises(ValueError):
-        edata_Xonly.var = pd.DataFrame([0, 1, 2, 3, 4])
+        edata_layers_only.var = pd.DataFrame([0, 1, 2, 3, 4])
     with pytest.raises(ValueError):
-        edata_Xonly.tem = pd.DataFrame([0, 1, 2, 3, 4])
-
-
-def test_ehrdata_del_r(X_numpy_32, R_numpy_322):
-    edata = EHRData(X=X_numpy_32, R=R_numpy_322)
-    del edata.R
-
-    assert edata.tem.shape == (0, 0)
-
-    _assert_shape_matches(edata, (3, 2, 0), check_R_None=True)
+        edata_layers_only.tem = pd.DataFrame([0, 1, 2, 3, 4])
 
 
 #################################################################
-### Test different types for R
+### Test different types for 3dlayer
 #################################################################
-# "R_sparse_322" currently disabled as sparse.COO support in AnnData is not yet implemented
-@pytest.mark.parametrize("R_fixture_name", ["R_numpy_322", "R_dask_322"])
-def test_ehrdata_R_data_types(R_fixture_name, request):
-    R = request.getfixturevalue(R_fixture_name)
-    edata = EHRData(R=R)
-    _assert_shape_matches(edata, (3, 2, 2))
+# "X_sparse_322" currently disabled as sparse.COO support in AnnData is not yet implemented
+@pytest.mark.parametrize("X_fixture_name", ["X_numpy_322", "X_dask_322"])
+def test_ehrdata_X_data_types(X_fixture_name, request):
+    X = request.getfixturevalue(X_fixture_name)
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X})
+    _assert_shape_matches(edata, (3, 2, 2), check_X_None=True)
 
 
 #################################################################
-### Test sliceing
+### Test assignment operations
 #################################################################
-def test_ehrdata_subset_slice_2D_vanilla(X_numpy_32, R_numpy_322, obs_31, var_21):
-    edata = EHRData(X=X_numpy_32, R=R_numpy_322, obs=obs_31, var=var_21)
+def test_ehrdata_assignments(X_numpy_32, X_numpy_322, obs_31, var_21):
+    edata = EHRData(X=X_numpy_32, obs=obs_31, var=var_21, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
+
+    edata.X[0, 0] = 100
+
+    edata.obs["new_obs_col"] = [1, 2, 3]
+    edata.var["new_var_col"] = ["a", "b"]
+    edata.tem["new_tem_col"] = [1, 2]
+
+    edata.obs["new_obs_col"].iloc[0] = "obs_entry"
+    edata.var["new_var_col"].iloc[0] = "var_entry"
+    edata.tem["new_tem_col"].iloc[0] = "tem_entry"
+
+    edata.varm["varm_entry"] = np.array([[1, 2], [3, 4]])
+    edata.obsm["obsm_entry"] = np.array([[1, 2], [3, 4], [5, 6]])
+    edata.varp["varp_entry"] = np.array([[1, 2], [3, 4]])
+    edata.obsp["obsp_entry"] = np.array([[1, 2, 3], [3, 4, 5], [5, 6, 7]])
+
+
+def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
+    edata = EHRData(X=X_numpy_32, obs=obs_31, var=var_21, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
+    edata_view = edata[:2, :1, :1]
+
+    edata_view.X[0, 0] = 100
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.layers[DEFAULT_TEM_LAYER_NAME] = np.ones((2, 1, 1))
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.obs["new_obs_col"] = [1, 2]
+    edata_view.obs["0", "new_obs_col"] = "obs_entry"
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.var["new_var_col"] = ["a"]
+    edata_view.var["0", "new_var_col"] = "var_entry"
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.tem["new_tem_col"] = [1]
+    edata_view.tem["0", "new_tem_col"] = "tem_entry"
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.varm["varm_entry"] = np.array([[1]])
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.obsm["obsm_entry"] = np.array([[1, 2], [5, 6]])
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.varp["varp_entry"] = np.array([[1]])
+
+    edata_view = edata[:2, :1, :1]
+    edata_view.obsp["obsp_entry"] = np.array([[1, 2], [3, 4]])
+
+
+#################################################################
+### Test slicing
+#################################################################
+
+
+def test_ehrdata_subset_slice_2D_vanilla(X_numpy_32, X_numpy_322, obs_31, var_21):
+    edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322}, obs=obs_31, var=var_21)
     edata_sliced = edata[:2, :1]
 
     assert edata_sliced.is_view
     _assert_shape_matches(edata_sliced, (2, 1, 2))
 
 
-def test_ehrdata_subset_slice_2D_repeated(X_numpy_32, R_numpy_322, obs_31, var_21):
-    edata = EHRData(X=X_numpy_32, R=R_numpy_322, obs=obs_31, var=var_21)
+def test_ehrdata_subset_slice_2D_repeated(X_numpy_32, X_numpy_322, obs_31, var_21):
+    edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322}, obs=obs_31, var=var_21)
     edata_sliced = edata[1:]
     edata_sliced = edata_sliced[1:]
 
@@ -285,11 +347,11 @@ def test_ehrdata_subset_slice_2D_repeated(X_numpy_32, R_numpy_322, obs_31, var_2
     _assert_shape_matches(edata_sliced, (1, 2, 2))
 
     assert np.array_equal(edata_sliced.X, X_numpy_32[2].reshape(-1, 2))
-    assert np.array_equal(edata_sliced.R, R_numpy_322[2].reshape(-1, 2, 2))
+    assert np.array_equal(edata_sliced.layers[DEFAULT_TEM_LAYER_NAME], X_numpy_322[2].reshape(-1, 2, 2))
 
 
-def test_ehrdata_subset_slice_3D_vanilla(X_numpy_32, R_numpy_322, obs_31, var_21, tem_21):
-    edata = EHRData(X=X_numpy_32, R=R_numpy_322, obs=obs_31, var=var_21, tem=tem_21)
+def test_ehrdata_subset_slice_3D_vanilla(X_numpy_32, X_numpy_322, obs_31, var_21, tem_21):
+    edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322}, obs=obs_31, var=var_21, tem=tem_21)
     edata_sliced = edata[:2, :1, :1]
 
     _assert_fields_are_view(edata_sliced)
@@ -310,11 +372,13 @@ def test_ehrdata_subset_slice_3D_repeated(edata_333):
 
     # test that the true values are conserved
     assert np.array_equal(edata_sliced.X, edata.X[2, 2].reshape(-1, 1))
-    assert np.array_equal(edata_sliced.R, edata.R[2, 2, 2].reshape(-1, 1, 1))
+    assert np.array_equal(
+        edata_sliced.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][2, 2, 2].reshape(-1, 1, 1)
+    )
     assert np.array_equal(edata.tem.iloc[2].values.reshape(-1, 1), edata_sliced.tem.values)
 
 
-def test_ehrdata_subset_obsvar_names_vanilla(edata_333, adata_33):
+def test_ehrdata_subset_obsvar_names_vanilla(edata_333):
     edata = edata_333
     edata_a = edata[["obs1"]]
     _assert_fields_are_view(edata_a)
@@ -333,9 +397,11 @@ def test_ehrdata_subset_obsvar_names_vanilla(edata_333, adata_33):
     _assert_shape_matches(edata_ab, (3, 2, 3))
 
     edata_a = edata[["obs1", "obs2"], ["var1", "var2"]]
+    edata_a.layers[DEFAULT_TEM_LAYER_NAME]
+
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (2, 2, 3))
-    assert edata_a.R.shape == (2, 2, 3)
+    assert edata_a.layers[DEFAULT_TEM_LAYER_NAME].shape == (2, 2, 3)
 
 
 def test_ehrdata_subset_obsvar_names_repeated(edata_333):
@@ -346,7 +412,9 @@ def test_ehrdata_subset_obsvar_names_repeated(edata_333):
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (1, 3, 3))
 
-    assert np.array_equal(edata_a.R, edata.R[2, :, :].reshape(-1, 3, 3))
+    assert np.array_equal(
+        edata_a.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][2, :, :].reshape(-1, 3, 3)
+    )
 
     edata = edata_333
     edata_ab = edata[:, ["var2", "var3"]]
@@ -355,7 +423,9 @@ def test_ehrdata_subset_obsvar_names_repeated(edata_333):
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (3, 1, 3))
 
-    assert np.array_equal(edata_a.R, edata.R[:, 2, :].reshape(3, -1, 3))
+    assert np.array_equal(
+        edata_a.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][:, 2, :].reshape(3, -1, 3)
+    )
 
 
 def test_ehrdata_subset_boolindex_vanilla(edata_333):
@@ -380,7 +450,9 @@ def test_ehrdata_subset_boolindex_repeated(edata_333):
 
     # test that the true values are conserved
     assert np.array_equal(edata_sliced.X, edata.X[2, 2].reshape(-1, 1))
-    assert np.array_equal(edata_sliced.R, edata.R[2, 2, 2].reshape(-1, 1, 1))
+    assert np.array_equal(
+        edata_sliced.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][2, 2, 2].reshape(-1, 1, 1)
+    )
     assert np.array_equal(edata.tem.iloc[2].values.reshape(-1, 1), edata_sliced.tem.values)
 
 
@@ -406,7 +478,9 @@ def test_ehrdata_subset_numberindex_repeated(edata_333):
 
     # test that the true values are conserved
     assert np.array_equal(edata_sliced.X, edata.X[2, 2].reshape(-1, 1))
-    assert np.array_equal(edata_sliced.R, edata.R[2, 2, 2].reshape(-1, 1, 1))
+    assert np.array_equal(
+        edata_sliced.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][2, 2, 2].reshape(-1, 1, 1)
+    )
     assert np.array_equal(edata.tem.iloc[2].values.reshape(-1, 1), edata_sliced.tem.values)
 
 
@@ -432,7 +506,7 @@ def test_copy(edata_333):
     edata_copy = edata.copy()
 
     assert isinstance(edata_copy.X, np.ndarray)
-    assert isinstance(edata_copy.R, np.ndarray)
+    assert isinstance(edata_copy.layers[DEFAULT_TEM_LAYER_NAME], np.ndarray)
     assert isinstance(edata_copy.obs, pd.DataFrame)
     assert isinstance(edata_copy.var, pd.DataFrame)
     assert isinstance(edata_copy.tem, pd.DataFrame)
@@ -447,7 +521,7 @@ def test_copy_of_slice(edata_333):
 
     _assert_shape_matches(edata_sliced_copy, (2, 2, 2))
     assert isinstance(edata_sliced_copy.X, np.ndarray)
-    assert isinstance(edata_sliced_copy.R, np.ndarray)
+    assert isinstance(edata_sliced_copy.layers[DEFAULT_TEM_LAYER_NAME], np.ndarray)
     assert isinstance(edata_sliced_copy.obs, pd.DataFrame)
     assert isinstance(edata_sliced_copy.var, pd.DataFrame)
     assert isinstance(edata_sliced_copy.tem, pd.DataFrame)
@@ -455,7 +529,7 @@ def test_copy_of_slice(edata_333):
     assert edata_sliced_copy.tem.shape == (2, 1)
 
 
-def test_copy_of_obsvar_names(edata_333, adata_33):
+def test_copy_of_obsvar_names(edata_333):
     edata = edata_333
 
     edata_obs_subset = edata[["obs1", "obs2"]]
@@ -483,7 +557,9 @@ def test_inplace_subset_obs(edata_333):
     _assert_shape_matches(edata_333, (2, 3, 3))
 
     assert np.allclose(edata_333_copy.X[[0, 2], :], edata_333.X)
-    assert np.allclose(edata_333_copy.R[[0, 2], :, :], edata_333.R)
+    assert np.allclose(
+        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][[0, 2], :, :], edata_333.layers[DEFAULT_TEM_LAYER_NAME]
+    )
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
 
     # repeated subset
@@ -491,14 +567,18 @@ def test_inplace_subset_obs(edata_333):
 
     _assert_shape_matches(edata_333, (1, 3, 3))
     assert np.allclose(edata_333_copy.X[[2], :], edata_333.X)
-    assert np.allclose(edata_333_copy.R[[2], :, :], edata_333.R)
+    assert np.allclose(
+        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][[2], :, :], edata_333.layers[DEFAULT_TEM_LAYER_NAME]
+    )
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
 
     # mixed subset
     edata_333._inplace_subset_var([0, 2])
     _assert_shape_matches(edata_333, (1, 2, 3))
     assert np.allclose(edata_333_copy.X[[2], [0, 2]], edata_333.X)
-    assert np.allclose(edata_333_copy.R[[2], [0, 2], :], edata_333.R)
+    assert np.allclose(
+        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][[2], [0, 2], :], edata_333.layers[DEFAULT_TEM_LAYER_NAME]
+    )
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
 
 
@@ -510,7 +590,9 @@ def test_inplace_subset_var(edata_333):
     _assert_shape_matches(edata_333, (3, 2, 3))
 
     assert np.allclose(edata_333_copy.X[:, [0, 2]], edata_333.X)
-    assert np.allclose(edata_333_copy.R[:, [0, 2], :], edata_333.R)
+    assert np.allclose(
+        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][:, [0, 2], :], edata_333.layers[DEFAULT_TEM_LAYER_NAME]
+    )
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
 
     # repeated subset
@@ -518,12 +600,17 @@ def test_inplace_subset_var(edata_333):
 
     _assert_shape_matches(edata_333, (3, 1, 3))
     assert np.allclose(edata_333_copy.X[:, [2]], edata_333.X)
-    assert np.allclose(edata_333_copy.R[:, [2], :], edata_333.R)
+    assert np.allclose(
+        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][:, [2], :], edata_333.layers[DEFAULT_TEM_LAYER_NAME]
+    )
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
 
     # mixed subset
     edata_333._inplace_subset_obs([0, 2])
     _assert_shape_matches(edata_333, (2, 1, 3))
     assert np.allclose(edata_333_copy.X[[0, 2], [2]].reshape(-1, 1), edata_333.X)
-    assert np.allclose(edata_333_copy.R[[0, 2], [2], :].reshape(-1, 1, 3), edata_333.R)
+    assert np.allclose(
+        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][[0, 2], [2], :].reshape(-1, 1, 3),
+        edata_333.layers[DEFAULT_TEM_LAYER_NAME],
+    )
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
