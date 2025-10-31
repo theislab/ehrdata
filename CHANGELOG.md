@@ -10,9 +10,10 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.0.10]
 
-{class}`~ehrdata.EHRData` drops the `.R` field, and now supports 3D data storage in any slot of `.layers`. See the Getting Started Tutorial for an introduction to this behaviour. In the future, `.X` will be enabled soon for 3D data storage as well.
+{class}`~ehrdata.EHRData` drops the `.R` field, and now supports 3D data storage in any slot of `.layers`. See the {doc}`tutorials/getting_started` tutorial for an introduction to this behaviour. In the future, `.X` will be enabled soon for 3D data storage as well.
 
 ### Maintenance
+- Enhanced {doc}`tutorials/getting_started.ipynb` ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
 
 ### Fixed
 
@@ -20,7 +21,7 @@ and this project adheres to [Semantic Versioning][].
 - `EHRData` drops the `.R` field in favor of using `.layers` for any 3D data arrays ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
 - `EHRData`'s shape property will always return a 3 dimensional shape. If an `EHRData` object has flat arrays only, the third dimension will be 1. ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
 - The following functions now take a `layer` argument: {func}`~ehrdata.io.read_csv`, {func}`~ehrdata.io.from_pandas`, {func}`~ehrdata.io.to_pandas`, {func}`~ehrdata.io.omop.setup_variables`, {func}`~ehrdata.io.omop.setup_interval_variables`, {func}`~ehrdata.dt.ehrdata_blobs`, {func}`~ehrdata.dt.physionet2012`. If it is let to its default, `None`, the `.X` field of `EHRData` is used. Since `.X` is 2D in this release, in cases with 3D data, the `layer` argument needs to be used. ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
-- Enhanced Getting Started Tutorial ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
+
 
 
 ## [0.0.9]
