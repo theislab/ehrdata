@@ -1,8 +1,5 @@
 from pathlib import Path
 
-R_LAYER_KEY = "R_layer"
-
-
 # Typing Column
 # -----------------------
 # The column name and used values in adata.var for column types.
@@ -12,6 +9,7 @@ NUMERIC_TAG = "numeric"
 CATEGORICAL_TAG = "categorical"
 DATE_TAG = "date"
 
+DEFAULT_TEM_LAYER_NAME = "tem_data"
 
 # Missing values
 # --------------

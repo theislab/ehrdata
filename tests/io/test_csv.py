@@ -18,11 +18,11 @@ TEST_PATH = TEST_DATA_PATH / "toy_csv"
 def test_read_csv(filename, target_shape):
     edata = read_csv(TEST_PATH / filename)
 
-    _assert_shape_matches(edata, (target_shape[0], target_shape[1], 0), check_R_None=True)
+    _assert_shape_matches(edata, (target_shape[0], target_shape[1], 1))
 
     assert edata.obs.shape == (target_shape[0], 0)
     assert edata.var.shape == (target_shape[1], 0)
-    assert edata.tem.shape == (0, 0)
+    assert edata.tem.shape == (1, 0)
 
     desired_default_index = pd.RangeIndex(start=0, stop=target_shape[0], step=1).astype(str)
     assert edata.obs.index.equals(desired_default_index)
@@ -40,10 +40,10 @@ def test_read_csv(filename, target_shape):
 def test_read_csv_index_column(filename, target_shape, index_column):
     edata = read_csv(TEST_PATH / filename, index_column=index_column)
 
-    _assert_shape_matches(edata, (target_shape[0], target_shape[1] - 1, 0), check_R_None=True)
+    _assert_shape_matches(edata, (target_shape[0], target_shape[1] - 1, 1))
     assert edata.obs.shape == (target_shape[0], 0)
     assert edata.var.shape == (target_shape[1] - 1, 0)
-    assert edata.tem.shape == (0, 0)
+    assert edata.tem.shape == (1, 0)
 
     assert edata.obs.index.name == "patient_id"
 
@@ -59,10 +59,10 @@ def test_read_csv_index_column(filename, target_shape, index_column):
 def test_read_csv_columns_obs_only(filename, target_shape):
     edata = read_csv(TEST_PATH / filename, columns_obs_only=["patient_id"])
 
-    _assert_shape_matches(edata, (target_shape[0], target_shape[1] - 1, 0), check_R_None=True)
+    _assert_shape_matches(edata, (target_shape[0], target_shape[1] - 1, 1))
     assert edata.obs.shape == (target_shape[0], 1)
     assert edata.var.shape == (target_shape[1] - 1, 0)
-    assert edata.tem.shape == (0, 0)
+    assert edata.tem.shape == (1, 0)
 
     desired_default_index = pd.RangeIndex(start=0, stop=target_shape[0], step=1).astype(str)
     assert edata.obs.index.equals(desired_default_index)
