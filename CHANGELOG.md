@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning][].
 {class}`~ehrdata.EHRData` drops the `.R` field, and now supports 3D data storage in any slot of `.layers`. See the {doc}`tutorials/getting_started` tutorial for an introduction to this behaviour. In the future, `.X` will be enabled soon for 3D data storage as well.
 
 ### Maintenance
-- Enhanced {doc}`tutorials/getting_started.ipynb` ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
+- Enhanced {doc}`tutorials/getting_started` ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
 
 ### Fixed
 
