@@ -4,12 +4,12 @@ from functools import reduce
 from operator import or_, truediv
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from lamindb import Artifact
+    # from lamindb import Artifact
     from vitessce import VitessceConfig
     from zarr.storage import Store
 
@@ -19,7 +19,7 @@ def gen_config(
     *,
     store: Path | Store | None = None,
     url: str | None = None,
-    artifact: Artifact | None = None,
+    artifact: Any | None = None,
     # arguments not about how the store goes in:
     name: str | None = None,
     obs_sets: Mapping[str, str] = MappingProxyType({"obs/gender_concept_id": "Gender Concept ID"}),
