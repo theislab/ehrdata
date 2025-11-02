@@ -74,7 +74,12 @@ jobs:
       - name: create hatch environment
         run: uvx hatch env create ${{ matrix.env.name }}
       - name: Show installed packages
-        run: uvx hatch run ${{ matrix.env.name }}:pip list
+        run: |
+          hatch run hatch-test.py3.13:python - <<'PYCODE'
+          import importlib.metadata as m
+          for dist in sorted(m.distributions(), key=lambda d: d.metadata["Name"].lower()):
+              print(f"{dist.metadata['Name']}=={dist.version}")
+          PYCODE
       - name: run tests using hatch
         env:
           MPLBACKEND: agg

@@ -32,6 +32,9 @@ dependencies = [
   "xarray",
   "zarr>=3",
 ]
+optional-dependencies.dask = [
+  "dask",
+]
 optional-dependencies.dev = [
   "pre-commit",
   "twine",
@@ -61,7 +64,7 @@ optional-dependencies.lamin = [
 ]
 optional-dependencies.test = [
   "coverage",
-  "ehrdata[lamin,torch,vitessce]",
+  "ehrdata[dask,lamin,torch,vitessce]",
   "pytest",
   "pytest-cov",
 ]

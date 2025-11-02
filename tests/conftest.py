@@ -111,6 +111,19 @@ def obs_31():
 
 
 @pytest.fixture
+def obs_32():
+    df = pd.DataFrame(
+        {
+            "obs_col_1": [1, 2, 3],
+            "obs_col_2": ["a", "a", "c"],
+        },
+        index=["obs1", "obs2", "obs3"],
+    )
+    df = df.astype({"obs_col_2": "string"})
+    return df
+
+
+@pytest.fixture
 def var_21():
     return pd.DataFrame({"var_col_1": [1, 2]}, index=["var1", "var2"])
 
@@ -118,6 +131,19 @@ def var_21():
 @pytest.fixture
 def var_31():
     return pd.DataFrame({"var_col_1": [1, 2, 3]}, index=["var1", "var2", "var3"])
+
+
+@pytest.fixture
+def var_32():
+    df = pd.DataFrame(
+        {
+            "var_col_1": [1, 2, 3],
+            "var_col_2": ["x", "x", "z"],
+        },
+        index=["var1", "var2", "var3"],
+    )
+    df = df.astype({"var_col_2": "string"})
+    return df
 
 
 @pytest.fixture
@@ -136,8 +162,26 @@ def tem_31():
 
 
 @pytest.fixture
+def tem_32():
+    df = pd.DataFrame(
+        {
+            "tem_col_1": [1, 2, 3],
+            "tem_col_2": ["l", "l", "n"],
+        },
+        index=["t1", "t2", "t3"],
+    )
+    df = df.astype({"tem_col_2": "string"})
+    return df
+
+
+@pytest.fixture
 def edata_333(X_numpy_33, X_numpy_333, obs_31, var_31, tem_31):
     return EHRData(X=X_numpy_33, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_333}, obs=obs_31, var=var_31, tem=tem_31)
+
+
+@pytest.fixture
+def edata_333_larger_obs_var_tem(X_numpy_33, X_numpy_333, obs_32, var_32, tem_32):
+    return EHRData(X=X_numpy_33, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_333}, obs=obs_32, var=var_32, tem=tem_32)
 
 
 @pytest.fixture

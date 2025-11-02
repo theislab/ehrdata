@@ -96,7 +96,7 @@ def write_zarr(
     edata: EHRData,
     filename: str | Path,
     *,
-    chunks: bool | int | tuple[int, ...] | None = None,
+    # chunks: bool | int | tuple[int, ...] | None = (1000, 1000), blocked by https://github.com/scverse/anndata/issues/2193
     convert_strings_to_categoricals: bool = True,
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
@@ -107,7 +107,6 @@ def write_zarr(
     Args:
         edata: Central data object.
         filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
-        chunks: Chunk shape, passed to :meth:`zarr.Group.create_array` for `Zarr` version 3.
         convert_strings_to_categoricals: Convert columns of `str` dtype in `.obs` and `.var` and `.tem` to `categorical` dtype.
 
     Examples:
@@ -118,39 +117,22 @@ def write_zarr(
     filename = Path(filename)
     edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
 
-    # TODO: add test that checks these fields
-    # TODO: ensure this is "canonical" and what anndata is doing
     store = zarr.open(filename, mode="w")
     store.attrs["encoding-version"] = EHRDATA_ZARR_ENCODING_VERSION
     store.attrs["encoding-type"] = "ehrdata"
 
-    # while adata.write_zarr supports convert_strings_to_categoricals, ad.io.write_elem does not
-    # so we need to convert the strings to categoricals ourselves
-    # TODO: figure out what anndata is doing
-    # map all columns of edata.obs to categorical dtype if they are of str dtype
-    # def _convert_to_categorical(df: pd.DataFrame) -> pd.DataFrame:
-    #     for column in df.columns:
-    #         if df[column].dtype == "str":
-    #             df[column] = df[column].astype("category")
-    #     return df
-
     adata = ad.AnnData(edata)
 
-    # TODO: test
     if convert_strings_to_categoricals:
-        # inplace conversion
         adata.strings_to_categoricals(adata.obs)
         adata.strings_to_categoricals(adata.var)
         adata.strings_to_categoricals(edata.tem)
-    # adata.obs = edata.obs if not convert_strings_to_categoricals else _convert_to_categorical(edata.obs)
-    # adata.var = edata.var if not convert_strings_to_categoricals else _convert_to_categorical(edata.var)
-    # adata.tem = edata.tem if not convert_strings_to_categoricals else _convert_to_categorical(edata.tem)
 
     ad.io.write_elem(
         store,
         "anndata",
         adata,  # this will store everything but the .tem field
-        dataset_kwargs={"chunks": chunks},
+        # dataset_kwargs={"chunks": chunks}, # blocked by https://github.com/scverse/anndata/issues/2193
     )
 
     ad.io.write_elem(store, "tem", edata.tem)
