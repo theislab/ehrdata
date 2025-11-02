@@ -41,7 +41,7 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
-  "ehrdata[lamin,torch]",            # if vitessce is included, rtd build fails with ImportError: cannot import name '_PosixFlavour' from 'pathlib' (/home/docs/.asdf/installs/python/3.13.3/lib/python3.13/pathlib/__init__.py)
+  "ehrdata[lamin,torch]",            # do not include vitessce[all] in doc: https://github.com/keller-mark/esbuild-py/issues/19
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
@@ -54,6 +54,7 @@ optional-dependencies.doc = [
   "sphinx-tabs",
   "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
+  # "vitessce", # await vitessce accepting zarr>=3 to use this and intersphinx links. if vitessce is included, rtd build fails with ImportError: cannot import name '_PosixFlavour' from 'pathlib' (/home/docs/.asdf/installs/python/3.13.3/lib/python3.13/pathlib/__init__.py)
 ]
 optional-dependencies.ehrapy = [
   "ehrapy",
