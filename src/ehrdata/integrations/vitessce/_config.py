@@ -9,8 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    # from lamindb import Artifact
-    from vitessce import VitessceConfig
+    from lamindb import Artifact
     from zarr.storage import Store
 
 
@@ -19,12 +18,12 @@ def gen_config(
     *,
     store: Path | Store | None = None,
     url: str | None = None,
-    artifact: Any | None = None,
+    artifact: Artifact | None = None,
     # arguments not about how the store goes in:
     name: str | None = None,
     obs_sets: Mapping[str, str] = MappingProxyType({"obs/gender_concept_id": "Gender Concept ID"}),
     obs_embeddings: Mapping[str, str] = MappingProxyType({"obsm/X_pca": "PCA"}),
-) -> VitessceConfig:
+) -> Any:
     """Generate a VitessceConfig for EHRData.
 
     Args:
@@ -39,8 +38,8 @@ def gen_config(
             {"obsm/X_pca": "PCA"}
 
     Returns:
-        A :doc:`Vitessce <vitessce:index>` configuration object.
-        Call :meth:`~vitessce.config.VitessceConfig.widget` on it to display it.
+        A `Vitessce` configuration object.
+        Call `vitessce.config.VitessceConfig.widget` on it to display it.
     """
     obs_type = "person"
     feature_type = "variable"
