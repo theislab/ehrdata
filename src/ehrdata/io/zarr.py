@@ -43,10 +43,6 @@ def read_zarr(
     """
     from ehrdata import EHRData
 
-    # TODO: check that anndata can be read
-    # TODO: check for backwards compatibility and announce clear version of when it stops
-    # TODO: check that ehrdata can be read
-
     if isinstance(filename, Path):
         filename = str(filename)
 
