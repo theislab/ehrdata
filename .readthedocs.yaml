@@ -10,5 +10,10 @@ build:
       - asdf global uv latest
     build:
       html:
+        - uvx hatch run hatch-test.py3.13:python - <<'PYCODE'
+          import importlib.metadata as m
+          for dist in sorted(m.distributions(), key=lambda d: d.metadata["Name"].lower()):
+              print(f"{dist.metadata['Name']}=={dist.version}")
+          PYCODE
         - uvx hatch run docs:build
         - mv docs/_build $READTHEDOCS_OUTPUT

@@ -54,7 +54,7 @@ optional-dependencies.doc = [
   "sphinx-tabs",
   "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
-  # "vitessce",                        # vitessce[all] imports problematic dependencies
+  "vitessce",                        # vitessce[all] imports problematic dependencies
 ]
 optional-dependencies.ehrapy = [
   "ehrapy",
