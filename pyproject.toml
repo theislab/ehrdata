@@ -41,7 +41,7 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
-  "ehrdata[lamin,torch,vitessce]",
+  "ehrdata[lamin,torch]",
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
@@ -54,6 +54,7 @@ optional-dependencies.doc = [
   "sphinx-tabs",
   "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
+  "vitessce",                        # vitessce[all] imports problematic dependencies
 ]
 optional-dependencies.ehrapy = [
   "ehrapy",
@@ -85,7 +86,9 @@ installer = "uv"
 features = [ "dev" ]
 
 [tool.hatch.envs.docs]
+
 features = [ "doc" ]
+
 scripts.build = "sphinx-build -M html docs docs/_build {args}"
 scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 scripts.clean = "git clean -fdX -- {args:docs}"
