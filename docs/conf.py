@@ -105,7 +105,7 @@ html_theme = "scanpydoc"
 html_static_path = ["_static"]
 html_css_files = ["css/custom.css"]
 html_title = project_name
-html_logo = "_static/tutorial_images/logo.png"
+html_logo = "_static/tutorial_images/ehrdata_logo.png"
 html_theme_options = {
     "repository_url": repository_url,
     "use_repository_button": True,
