@@ -8,12 +8,12 @@ build:
       - asdf plugin add uv
       - asdf install uv latest
       - asdf global uv latest
+      - uvx hatch run hatch-test.py3.13:python - <<'PYCODE'
+        import importlib.metadata as m
+        for dist in sorted(m.distributions(), key=lambda d: d.metadata["Name"].lower()):
+            print(f"{dist.metadata['Name']}=={dist.version}")
+        PYCODE
     build:
       html:
-        - uvx hatch run hatch-test.py3.13:python - <<'PYCODE'
-          import importlib.metadata as m
-          for dist in sorted(m.distributions(), key=lambda d: d.metadata["Name"].lower()):
-              print(f"{dist.metadata['Name']}=={dist.version}")
-          PYCODE
         - uvx hatch run docs:build
         - mv docs/_build $READTHEDOCS_OUTPUT
