@@ -54,13 +54,13 @@ optional-dependencies.doc = [
   "sphinx-tabs",
   "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
-  # "vitessce", # await vitessce accepting zarr>=3 to use this and intersphinx links. if vitessce is included, rtd build fails with ImportError: cannot import name '_PosixFlavour' from 'pathlib' (/home/docs/.asdf/installs/python/3.13.3/lib/python3.13/pathlib/__init__.py)
+  "vitessce",
 ]
 optional-dependencies.ehrapy = [
   "ehrapy",
 ]
 optional-dependencies.lamin = [
-  "lamindb",
+  "lamindb>=1.1",
   #"omop", # Not needed and causing an issue in the readthedocs build https://github.com/laminlabs/lamindb/issues/3081
 ]
 optional-dependencies.test = [

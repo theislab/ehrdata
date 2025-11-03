@@ -4,26 +4,27 @@ from functools import reduce
 from operator import or_, truediv
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from lamindb import Artifact
-    from zarr.storage import Store
+    from vitessce import VitessceConfig
+    from zarr.storage import StoreLike
 
 
 def gen_config(
     path: Path | None = None,
     *,
-    store: Path | Store | None = None,
+    store: Path | StoreLike | None = None,
     url: str | None = None,
     artifact: Artifact | None = None,
     # arguments not about how the store goes in:
     name: str | None = None,
     obs_sets: Mapping[str, str] = MappingProxyType({"obs/gender_concept_id": "Gender Concept ID"}),
     obs_embeddings: Mapping[str, str] = MappingProxyType({"obsm/X_pca": "PCA"}),
-) -> Any:
+) -> VitessceConfig:
     """Generate a VitessceConfig for EHRData.
 
     Args:
@@ -38,8 +39,8 @@ def gen_config(
             {"obsm/X_pca": "PCA"}
 
     Returns:
-        A `Vitessce` configuration object.
-        Call `vitessce.config.VitessceConfig.widget` on it to display it.
+        A :doc:`Vitessce <vitessce:index>` configuration object.
+        Call :meth:`~vitessce.config.VitessceConfig.widget` on it to display it.
     """
     obs_type = "person"
     feature_type = "variable"

@@ -21,12 +21,12 @@ __pycache__/
 /docs/generated/
 /docs/_build/
 /docs/generated/
-docs/api/ehrdata
-docs/api/data
-docs/api/tools
-docs/api/io
-docs/api/plot
-!docs/api/api.md
+/docs/api/ehrdata.*.rst
+/docs/api/data
+/docs/api/tools
+/docs/api/io
+/docs/api/plot
+!/docs/api/api.md
 
 ehrapy_data
 test.ipynb
