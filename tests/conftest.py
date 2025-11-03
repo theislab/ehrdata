@@ -252,15 +252,17 @@ def edata_nonnumeric_missing_330(obs_31, var_31):
 def edata_basic_with_tem_full():
     edata_basic_with_tem_dict = {
         "X": np.ones((5, 4)),
-        "obs": pd.DataFrame({"survival": [1, 2, 3, 4, 5]}),
-        "var": pd.DataFrame({"variables": ["var_1", "var_2", "var_3", "var_4"]}),
+        "obs": pd.DataFrame({"survival": [1, 2, 3, 4, 5]}, index=["obs1", "obs2", "obs3", "obs4", "obs5"]),
+        "var": pd.DataFrame(
+            {"variables": ["var_1", "var_2", "var_3", "var_4"]}, index=["var1", "var2", "var3", "var4"]
+        ),
         "obsm": {"obs_level_representation": np.ones((5, 2))},
         "varm": {"var_level_representation": np.ones((4, 2))},
         "layers": {DEFAULT_TEM_LAYER_NAME: np.ones((5, 4)), "other_layer": np.ones((5, 4))},
         "obsp": {"obs_level_connectivities": np.ones((5, 5))},
         "varp": {"var_level_connectivities": np.random.randn(4, 4)},
         "uns": {"information": ["info1"]},
-        "tem": pd.DataFrame({"timestep": ["t1"]}),
+        "tem": pd.DataFrame({"timestep": ["t1"]}, index=["t1"]),
     }
     return EHRData(**edata_basic_with_tem_dict)
 

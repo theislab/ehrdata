@@ -1,3 +1,4 @@
+import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
@@ -10,6 +11,7 @@ from tests.conftest import (
     _assert_shape_matches,
 )
 
+from ehrdata import EHRData
 from ehrdata.core.constants import EHRDATA_ZARR_ENCODING_VERSION
 from ehrdata.io import read_zarr, write_zarr
 
@@ -77,6 +79,47 @@ def test_read_zarr_sparse_with_tem(harmonize_missing_values, cast_variables_to_f
     assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
 
 
+def _check_anndata_part_equal(edata: EHRData, edata_read: EHRData | ad.AnnData):
+    pd.testing.assert_frame_equal(edata.obs.iloc[:, :1], edata_read.obs.iloc[:, :1])
+    pd.testing.assert_frame_equal(edata.var.iloc[:, :1], edata_read.var.iloc[:, :1])
+
+    for key in edata.obsm:
+        assert key in edata_read.obsm
+        assert np.array_equal(edata.obsm[key], edata_read.obsm[key])
+    for key in edata.varm:
+        assert key in edata_read.varm
+        assert np.array_equal(edata.varm[key], edata_read.varm[key])
+    for key in edata.obsp:
+        assert key in edata_read.obsp
+        assert np.array_equal(edata.obsp[key], edata_read.obsp[key])
+    for key in edata.varp:
+        assert key in edata_read.varp
+        assert np.array_equal(edata.varp[key], edata_read.varp[key])
+    for key in edata.uns:
+        assert key in edata_read.uns
+        assert np.array_equal(edata.uns[key], edata_read.uns[key])
+
+
+@pytest.mark.parametrize(
+    "edata_name",
+    [
+        "edata_330",
+        "edata_333",
+        "edata_333_larger_obs_var_tem",
+        "edata_basic_with_tem_full",
+        "edata_nonnumeric_missing_330",
+    ],
+)
+def test_write_read_zarr_anndata_part(edata_name, request, tmp_path):
+    # this test uses ad.io.read_zarr as a sanity check to ensure the anndata subgroup is written properly
+    edata = request.getfixturevalue(edata_name)
+    store_path = tmp_path / f"{edata_name}.zarr"
+
+    write_zarr(edata.copy(), store_path)
+    adata = ad.io.read_zarr(store_path / "anndata")
+    _check_anndata_part_equal(edata, adata)
+
+
 @pytest.mark.parametrize(
     "edata_name",
     [
@@ -100,24 +143,8 @@ def test_write_read_zarr_basic(edata_name, request, tmp_path):
     for key in edata.layers:
         _assert_dtype_object_array_with_missing_values_equal(edata.layers[key], edata_read.layers[key])
 
-    pd.testing.assert_frame_equal(edata.obs.iloc[:, :1], edata_read.obs.iloc[:, :1])
-    pd.testing.assert_frame_equal(edata.var.iloc[:, :1], edata_read.var.iloc[:, :1])
+    _check_anndata_part_equal(edata, edata_read)
     pd.testing.assert_frame_equal(edata.tem.iloc[:, :1], edata_read.tem.iloc[:, :1])
-    for key in edata.obsm:
-        assert key in edata_read.obsm
-        assert np.array_equal(edata.obsm[key], edata_read.obsm[key])
-    for key in edata.varm:
-        assert key in edata_read.varm
-        assert np.array_equal(edata.varm[key], edata_read.varm[key])
-    for key in edata.obsp:
-        assert key in edata_read.obsp
-        assert np.array_equal(edata.obsp[key], edata_read.obsp[key])
-    for key in edata.varp:
-        assert key in edata_read.varp
-        assert np.array_equal(edata.varp[key], edata_read.varp[key])
-    for key in edata.uns:
-        assert key in edata_read.uns
-        assert np.array_equal(edata.uns[key], edata_read.uns[key])
 
     # check the test file is an ehrdata zarr store
     store = zarr.open(store_path)

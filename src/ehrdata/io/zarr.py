@@ -3,7 +3,7 @@ from __future__ import annotations
 import warnings
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import anndata as ad
 import zarr
@@ -14,7 +14,7 @@ from ehrdata.core.constants import EHRDATA_ZARR_ENCODING_VERSION
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
     from os import PathLike
 
     from ehrdata import EHRData
@@ -104,7 +104,6 @@ def write_zarr(
     edata: EHRData,
     filename: str | Path,
     *,
-    # chunks: bool | int | tuple[int, ...] | None = (1000, 1000), blocked by https://github.com/scverse/anndata/issues/2193
     convert_strings_to_categoricals: bool = True,
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
@@ -125,9 +124,7 @@ def write_zarr(
     filename = Path(filename)
     edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
 
-    store = zarr.open(filename, mode="w")
-    store.attrs["encoding-version"] = EHRDATA_ZARR_ENCODING_VERSION
-    store.attrs["encoding-type"] = "ehrdata"
+    store = zarr.open_group(filename, mode="a", use_consolidated=False, zarr_version=3)
 
     adata = ad.AnnData(edata)
 
@@ -136,11 +133,32 @@ def write_zarr(
         adata.strings_to_categoricals(adata.var)
         adata.strings_to_categoricals(edata.tem)
 
-    ad.io.write_elem(
-        store,
-        "anndata",
-        adata,  # this will store everything but the .tem field
-        # dataset_kwargs={"chunks": chunks}, # blocked by https://github.com/scverse/anndata/issues/2193
-    )
+    anndata_group = store.create_group("anndata")
+
+    def write_sharded(group: zarr.Group, adata: ad.AnnData):
+        def callback(
+            func: ad.experimental.Write,
+            g: zarr.Group,
+            k: str,
+            elem: ad.typing.RWAble,
+            dataset_kwargs: Mapping[str, Any],
+            iospec: ad.experimental.IOSpec,
+        ):
+            if iospec.encoding_type in {"array"} and not isinstance(elem, list):
+                dataset_kwargs = {
+                    "shards": tuple(int(2 ** (16 / len(elem.shape))) for _ in elem.shape),
+                    **dataset_kwargs,
+                }
+                dataset_kwargs["chunks"] = tuple(i // 2 for i in dataset_kwargs["shards"])
+            elif iospec.encoding_type in {"csr_matrix", "csc_matrix"}:
+                dataset_kwargs = {"shards": (2**16,), "chunks": (2**8,), **dataset_kwargs}
+            func(g, k, elem, dataset_kwargs=dataset_kwargs)
+
+        return ad.experimental.write_dispatched(group, "/", adata, callback=callback)
+
+    write_sharded(anndata_group, adata)
 
     ad.io.write_elem(store, "tem", edata.tem)
+
+    store.attrs["encoding-version"] = EHRDATA_ZARR_ENCODING_VERSION
+    store.attrs["encoding-type"] = "ehrdata"
