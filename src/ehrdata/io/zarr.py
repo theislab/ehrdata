@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import warnings
+from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,7 @@ from ehrdata.core.constants import EHRDATA_ZARR_ENCODING_VERSION
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from os import PathLike
 
     from ehrdata import EHRData
@@ -88,6 +90,16 @@ def read_zarr(
     return edata
 
 
+def _allow_write_nullable_strings[T, **P](f: Callable[P, T]) -> Callable[P, T]:
+    @wraps(f)
+    def wrapped(*args: P.args, **kwargs: P.kwargs):
+        with ad.settings.override(allow_write_nullable_strings=True):
+            return f(*args, **kwargs)
+
+    return wrapped
+
+
+@_allow_write_nullable_strings
 def write_zarr(
     edata: EHRData,
     filename: str | Path,

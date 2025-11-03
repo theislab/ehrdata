@@ -16,8 +16,3 @@ __all__ = [
 ]
 
 __version__ = version("ehrdata")
-
-import anndata as ad
-
-# Opt to use this newer feature of anndata https://github.com/scverse/anndata/blob/6a6bde151eeb231eebac20b66e6002b88052e8db/src/anndata/_io/specs/methods.py#L1151
-ad.settings.allow_write_nullable_strings = True
