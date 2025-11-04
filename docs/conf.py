@@ -81,16 +81,18 @@ source_suffix = {
 }
 
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
+    "fsspec": ("https://filesystem-spec.readthedocs.io/en/stable", None),
     "h5py": ("https://docs.h5py.org/en/latest", None),
-    "numpy": ("https://numpy.org/doc/stable", None),
-    "torch": ("https://pytorch.org/docs/main/", None),
-    "scipy": ("https://docs.scipy.org/doc/scipy", None),
-    "pandas": ("https://pandas.pydata.org/docs", None),
-    "zarr": ("https://zarr.readthedocs.io/en/stable", None),
-    "vitessce": ("https://python-docs.vitessce.io", None),
     "lamin": ("https://docs.lamin.ai", None),
+    "numpy": ("https://numpy.org/doc/stable", None),
+    "pandas": ("https://pandas.pydata.org/docs", None),
+    "python": ("https://docs.python.org/3", None),
+    "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy", None),
+    "torch": ("https://docs.pytorch.org/docs/main", None),
+    "vitessce": ("https://python-docs.vitessce.io", None),
+    "zarr": ("https://zarr.readthedocs.io/en/stable", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -105,7 +107,7 @@ html_theme = "scanpydoc"
 html_static_path = ["_static"]
 html_css_files = ["css/custom.css"]
 html_title = project_name
-html_logo = "_static/tutorial_images/logo.png"
+html_logo = "_static/tutorial_images/ehrdata_logo.png"
 html_theme_options = {
     "repository_url": repository_url,
     "use_repository_button": True,
@@ -127,6 +129,10 @@ pygments_style = "default"
 nitpick_ignore = [
     ("py:class", "pathlib._local.Path"),
     ("py:class", "types.EllipsisType"),
+    # TODO: remove once https://github.com/sphinx-doc/sphinx/pull/13508 is released
+    ("py:class", "ehrdata._types.TypeAliasType"),
+    # typing.Union fails in tutorials/tutorial_time_series_with_pypots
+    ("py:data", "typing.Union"),
     # https://github.com/duckdb/duckdb-web/issues/3806
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
     ("py:class", "_duckdb.DuckDBPyConnection"),
@@ -136,18 +142,18 @@ nitpick_ignore = [
     ("py:class", "awkward.highlevel.Array"),
     ("py:class", "h5py._hl.dataset.Dataset"),
     ("py:class", "zarr.core.Array"),
+    ("py:class", "zarr.core.buffer.core.Buffer"),
     ("py:class", "ehrdata._compat.ZappyArray"),
     ("py:class", "dask.array.core.Array"),
     ("py:class", "anndata.compat.CupyArray"),
     ("py:class", "anndata.compat.CupySparseMatrix"),
     ("py:class", "sparse.numba_backend._coo.core.COO"),
     ("py:class", "sparse._coo.core.COO"),
-    ("py:data", "typing.Union"),  # typing.Union fails in tutorials/tutorial_time_series_with_pypots
 ]
 
 # Redirect broken parameter annotation classes
 qualname_overrides = {
-    "zarr._storage.store.Store": "zarr.storage.MemoryStore",
+    "zarr.storage._common.StorePath": "zarr.storage.StorePath",
     "zarr.core.group.Group": "zarr.group.Group",
     "lnschema_core.models.Artifact": "lamindb.Artifact",
 }

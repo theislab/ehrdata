@@ -171,7 +171,7 @@ def _get_layers_3d_dim(layers: Mapping[str, Any] | None) -> int:
 class EHRData(AnnData):
     """Model two and three dimensional electronic health record data.
 
-    .. figure:: ../../_static/tutorial_images/logo.png
+    .. figure:: /_static/tutorial_images/ehrdata_logo.png
        :width: 260px
        :align: right
        :class: dark-light

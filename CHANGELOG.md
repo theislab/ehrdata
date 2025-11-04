@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Maintenance
 - Enhanced {doc}`tutorials/getting_started` ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
+- Move from zarr<3 to zarr>=3 ([#185](https://github.com/theislab/ehrdata/pull/185)) @eroell
 
 ### Fixed
 
@@ -21,7 +22,8 @@ and this project adheres to [Semantic Versioning][].
 - `EHRData` drops the `.R` field in favor of using `.layers` for any 3D data arrays ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
 - `EHRData`'s shape property will always return a 3 dimensional shape. If an `EHRData` object has flat arrays only, the third dimension will be 1. ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
 - The following functions now take a `layer` argument: {func}`~ehrdata.io.read_csv`, {func}`~ehrdata.io.from_pandas`, {func}`~ehrdata.io.to_pandas`, {func}`~ehrdata.io.omop.setup_variables`, {func}`~ehrdata.io.omop.setup_interval_variables`, {func}`~ehrdata.dt.ehrdata_blobs`, {func}`~ehrdata.dt.physionet2012`. If it is let to its default, `None`, the `.X` field of `EHRData` is used. Since `.X` is 2D in this release, in cases with 3D data, the `layer` argument needs to be used. ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
-
+- {func}`~ehrdata.io.write_zarr` now writes an `EHRData` specific store encoding, with `anndata` as a substore. This change allows to use `AnnData` with its change to consolidated Zarr metadata, and better isolates `AnnData`'s io. ([#185](https://github.com/theislab/ehrdata/pull/185)) @eroell
+- {func}`~ehrdata.io.read_zarr` is adapted to read the new store encoding, and can also deal with `AnnData` stores. ([#185](https://github.com/theislab/ehrdata/pull/185)) @eroell
 
 
 ## [0.0.9]

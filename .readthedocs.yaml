@@ -10,5 +10,5 @@ build:
       - asdf global uv latest
     build:
       html:
-        - uvx hatch run docs:build
+        - uvx hatch run docs:build -W # do not remove -W, fix warnings.
         - mv docs/_build $READTHEDOCS_OUTPUT

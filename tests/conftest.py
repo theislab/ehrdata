@@ -111,6 +111,19 @@ def obs_31():
 
 
 @pytest.fixture
+def obs_32():
+    df = pd.DataFrame(
+        {
+            "obs_col_1": [1, 2, 3],
+            "obs_col_2": ["a", "a", "c"],
+        },
+        index=["obs1", "obs2", "obs3"],
+    )
+    df = df.astype({"obs_col_2": "string"})
+    return df
+
+
+@pytest.fixture
 def var_21():
     return pd.DataFrame({"var_col_1": [1, 2]}, index=["var1", "var2"])
 
@@ -118,6 +131,19 @@ def var_21():
 @pytest.fixture
 def var_31():
     return pd.DataFrame({"var_col_1": [1, 2, 3]}, index=["var1", "var2", "var3"])
+
+
+@pytest.fixture
+def var_32():
+    df = pd.DataFrame(
+        {
+            "var_col_1": [1, 2, 3],
+            "var_col_2": ["x", "x", "z"],
+        },
+        index=["var1", "var2", "var3"],
+    )
+    df = df.astype({"var_col_2": "string"})
+    return df
 
 
 @pytest.fixture
@@ -136,8 +162,26 @@ def tem_31():
 
 
 @pytest.fixture
+def tem_32():
+    df = pd.DataFrame(
+        {
+            "tem_col_1": [1, 2, 3],
+            "tem_col_2": ["l", "l", "n"],
+        },
+        index=["t1", "t2", "t3"],
+    )
+    df = df.astype({"tem_col_2": "string"})
+    return df
+
+
+@pytest.fixture
 def edata_333(X_numpy_33, X_numpy_333, obs_31, var_31, tem_31):
     return EHRData(X=X_numpy_33, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_333}, obs=obs_31, var=var_31, tem=tem_31)
+
+
+@pytest.fixture
+def edata_333_larger_obs_var_tem(X_numpy_33, X_numpy_333, obs_32, var_32, tem_32):
+    return EHRData(X=X_numpy_33, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_333}, obs=obs_32, var=var_32, tem=tem_32)
 
 
 @pytest.fixture
@@ -208,15 +252,17 @@ def edata_nonnumeric_missing_330(obs_31, var_31):
 def edata_basic_with_tem_full():
     edata_basic_with_tem_dict = {
         "X": np.ones((5, 4)),
-        "obs": pd.DataFrame({"survival": [1, 2, 3, 4, 5]}),
-        "var": pd.DataFrame({"variables": ["var_1", "var_2", "var_3", "var_4"]}),
+        "obs": pd.DataFrame({"survival": [1, 2, 3, 4, 5]}, index=["obs1", "obs2", "obs3", "obs4", "obs5"]),
+        "var": pd.DataFrame(
+            {"variables": ["var_1", "var_2", "var_3", "var_4"]}, index=["var1", "var2", "var3", "var4"]
+        ),
         "obsm": {"obs_level_representation": np.ones((5, 2))},
         "varm": {"var_level_representation": np.ones((4, 2))},
         "layers": {DEFAULT_TEM_LAYER_NAME: np.ones((5, 4)), "other_layer": np.ones((5, 4))},
         "obsp": {"obs_level_connectivities": np.ones((5, 5))},
         "varp": {"var_level_connectivities": np.random.randn(4, 4)},
         "uns": {"information": ["info1"]},
-        "tem": pd.DataFrame({"timestep": ["t1"]}),
+        "tem": pd.DataFrame({"timestep": ["t1"]}, index=["t1"]),
     }
     return EHRData(**edata_basic_with_tem_dict)
 
@@ -271,3 +317,24 @@ def _assert_io_read(edata: EHRData):
 
 
 TEST_DATA_PATH = Path(__file__).parent / "data"
+
+
+def _check_aligned_anndata_parts_equal(edata: EHRData, edata_read: EHRData | ad.AnnData):
+    pd.testing.assert_frame_equal(edata.obs.iloc[:, :1], edata_read.obs.iloc[:, :1])
+    pd.testing.assert_frame_equal(edata.var.iloc[:, :1], edata_read.var.iloc[:, :1])
+
+    for key in edata.obsm:
+        assert key in edata_read.obsm
+        assert np.array_equal(edata.obsm[key], edata_read.obsm[key])
+    for key in edata.varm:
+        assert key in edata_read.varm
+        assert np.array_equal(edata.varm[key], edata_read.varm[key])
+    for key in edata.obsp:
+        assert key in edata_read.obsp
+        assert np.array_equal(edata.obsp[key], edata_read.obsp[key])
+    for key in edata.varp:
+        assert key in edata_read.varp
+        assert np.array_equal(edata.varp[key], edata_read.varp[key])
+    for key in edata.uns:
+        assert key in edata_read.uns
+        assert np.array_equal(edata.uns[key], edata_read.uns[key])

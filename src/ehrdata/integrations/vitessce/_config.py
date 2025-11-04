@@ -11,13 +11,13 @@ if TYPE_CHECKING:
 
     from lamindb import Artifact
     from vitessce import VitessceConfig
-    from zarr.storage import Store
+    from zarr.storage import StoreLike
 
 
 def gen_config(
     path: Path | None = None,
     *,
-    store: Path | Store | None = None,
+    store: Path | StoreLike | None = None,
     url: str | None = None,
     artifact: Artifact | None = None,
     # arguments not about how the store goes in:
