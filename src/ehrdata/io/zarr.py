@@ -115,7 +115,7 @@ def write_zarr(
     Args:
         edata: Central data object.
         filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
-        chunks: Specify strategy of how data should be chunked. For simplicity, currently only 2 options are available: "auto" will write the data with :func:`~anndata.io.write_elem`'s default settings. `chunks='ehrdata_auto'` will write the data chunked (and sharded) based on a heuristic that loosely speaking writes slightly smaller chunks.
+        chunks: Specify strategy of how data should be chunked. For simplicity, currently only 2 options are available: `"auto"` will write the data with :func:`~anndata.io.write_elem`'s default settings. `"ehrdata_auto"` will write the data chunked (and sharded) based on a heuristic that loosely speaking writes slightly smaller chunks.
         convert_strings_to_categoricals: Convert columns of `str` dtype in `.obs` and `.var` and `.tem` to `categorical` dtype.
 
     Examples:
