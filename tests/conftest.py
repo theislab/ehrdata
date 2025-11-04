@@ -317,3 +317,24 @@ def _assert_io_read(edata: EHRData):
 
 
 TEST_DATA_PATH = Path(__file__).parent / "data"
+
+
+def _check_aligned_anndata_parts_equal(edata: EHRData, edata_read: EHRData | ad.AnnData):
+    pd.testing.assert_frame_equal(edata.obs.iloc[:, :1], edata_read.obs.iloc[:, :1])
+    pd.testing.assert_frame_equal(edata.var.iloc[:, :1], edata_read.var.iloc[:, :1])
+
+    for key in edata.obsm:
+        assert key in edata_read.obsm
+        assert np.array_equal(edata.obsm[key], edata_read.obsm[key])
+    for key in edata.varm:
+        assert key in edata_read.varm
+        assert np.array_equal(edata.varm[key], edata_read.varm[key])
+    for key in edata.obsp:
+        assert key in edata_read.obsp
+        assert np.array_equal(edata.obsp[key], edata_read.obsp[key])
+    for key in edata.varp:
+        assert key in edata_read.varp
+        assert np.array_equal(edata.varp[key], edata_read.varp[key])
+    for key in edata.uns:
+        assert key in edata_read.uns
+        assert np.array_equal(edata.uns[key], edata_read.uns[key])

@@ -1,5 +1,4 @@
 import anndata as ad
-import numpy as np
 import pandas as pd
 import pytest
 import zarr
@@ -9,9 +8,9 @@ from tests.conftest import (
     _assert_dtype_object_array_with_missing_values_equal,
     _assert_io_read,
     _assert_shape_matches,
+    _check_aligned_anndata_parts_equal,
 )
 
-from ehrdata import EHRData
 from ehrdata.core.constants import EHRDATA_ZARR_ENCODING_VERSION
 from ehrdata.io import read_zarr, write_zarr
 
@@ -20,7 +19,8 @@ TEST_PATH_ZARR = TEST_DATA_PATH / "toy_zarr"
 
 @pytest.mark.parametrize("harmonize_missing_values", [False, True])
 @pytest.mark.parametrize("cast_variables_to_float", [False, True])
-def test_read_anndata_zarr_basic(harmonize_missing_values, cast_variables_to_float):
+def test_read_zarr_anndata_store_as_ehrdata(harmonize_missing_values, cast_variables_to_float):
+    # ehrdata should be able to read data from a regular anndata zarr store
     edata = read_zarr(
         filename=TEST_PATH_ZARR / "adata_basic.zarr",
         harmonize_missing_values=harmonize_missing_values,
@@ -34,6 +34,28 @@ def test_read_anndata_zarr_basic(harmonize_missing_values, cast_variables_to_flo
 
     _assert_shape_matches(edata, (5, 4, 1))
     _assert_io_read(edata)
+
+
+@pytest.mark.parametrize(
+    "edata_name",
+    [
+        "edata_330",
+        "edata_333",
+        "edata_333_larger_obs_var_tem",
+        "edata_basic_with_tem_full",
+        "edata_nonnumeric_missing_330",
+    ],
+)
+@pytest.mark.parametrize("chunks", ["auto", "ehrdata_auto"])
+def test_write_zarr_anndata_subgroup_of_ehrdata_store(edata_name, chunks, request, tmp_path):
+    # ehrdata's write should create a regular anndata group
+    # this test uses ad.io.read_zarr as a sanity check to ensure the anndata subgroup is written properly
+    edata = request.getfixturevalue(edata_name)
+    store_path = tmp_path / f"{edata_name}.zarr"
+
+    write_zarr(edata.copy(), store_path, chunks=chunks)
+    adata = ad.io.read_zarr(store_path / "anndata")
+    _check_aligned_anndata_parts_equal(edata, adata)
 
 
 @pytest.mark.parametrize("harmonize_missing_values", [False, True])
@@ -79,27 +101,6 @@ def test_read_zarr_sparse_with_tem(harmonize_missing_values, cast_variables_to_f
     assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
 
 
-def _check_anndata_part_equal(edata: EHRData, edata_read: EHRData | ad.AnnData):
-    pd.testing.assert_frame_equal(edata.obs.iloc[:, :1], edata_read.obs.iloc[:, :1])
-    pd.testing.assert_frame_equal(edata.var.iloc[:, :1], edata_read.var.iloc[:, :1])
-
-    for key in edata.obsm:
-        assert key in edata_read.obsm
-        assert np.array_equal(edata.obsm[key], edata_read.obsm[key])
-    for key in edata.varm:
-        assert key in edata_read.varm
-        assert np.array_equal(edata.varm[key], edata_read.varm[key])
-    for key in edata.obsp:
-        assert key in edata_read.obsp
-        assert np.array_equal(edata.obsp[key], edata_read.obsp[key])
-    for key in edata.varp:
-        assert key in edata_read.varp
-        assert np.array_equal(edata.varp[key], edata_read.varp[key])
-    for key in edata.uns:
-        assert key in edata_read.uns
-        assert np.array_equal(edata.uns[key], edata_read.uns[key])
-
-
 @pytest.mark.parametrize(
     "edata_name",
     [
@@ -110,31 +111,12 @@ def _check_anndata_part_equal(edata: EHRData, edata_read: EHRData | ad.AnnData):
         "edata_nonnumeric_missing_330",
     ],
 )
-def test_write_read_zarr_anndata_part(edata_name, request, tmp_path):
-    # this test uses ad.io.read_zarr as a sanity check to ensure the anndata subgroup is written properly
+@pytest.mark.parametrize("chunks", ["auto", "ehrdata_auto"])
+def test_write_read_zarr_basic(edata_name, chunks, request, tmp_path):
     edata = request.getfixturevalue(edata_name)
     store_path = tmp_path / f"{edata_name}.zarr"
 
-    write_zarr(edata.copy(), store_path)
-    adata = ad.io.read_zarr(store_path / "anndata")
-    _check_anndata_part_equal(edata, adata)
-
-
-@pytest.mark.parametrize(
-    "edata_name",
-    [
-        "edata_330",
-        "edata_333",
-        "edata_333_larger_obs_var_tem",
-        "edata_basic_with_tem_full",
-        "edata_nonnumeric_missing_330",
-    ],
-)
-def test_write_read_zarr_basic(edata_name, request, tmp_path):
-    edata = request.getfixturevalue(edata_name)
-    store_path = tmp_path / f"{edata_name}.zarr"
-
-    write_zarr(edata.copy(), store_path)
+    write_zarr(edata.copy(), store_path, chunks=chunks)
     edata_read = read_zarr(store_path)
 
     assert edata.shape == edata_read.shape
@@ -143,7 +125,7 @@ def test_write_read_zarr_basic(edata_name, request, tmp_path):
     for key in edata.layers:
         _assert_dtype_object_array_with_missing_values_equal(edata.layers[key], edata_read.layers[key])
 
-    _check_anndata_part_equal(edata, edata_read)
+    _check_aligned_anndata_parts_equal(edata, edata_read)
     pd.testing.assert_frame_equal(edata.tem.iloc[:, :1], edata_read.tem.iloc[:, :1])
 
     # check the test file is an ehrdata zarr store
@@ -158,3 +140,12 @@ def test_write_read_zarr_basic(edata_name, request, tmp_path):
         assert edata_read.var["var_col_2"].dtype == "category"
     if "tem_col_2" in edata_read.tem.columns:
         assert edata_read.tem["tem_col_2"].dtype == "category"
+
+
+def test_write_zarr_chunks_error(edata_333, tmp_path):
+    with pytest.raises(NotImplementedError):
+        write_zarr(edata_333, tmp_path / "test.zarr", chunks=None)
+    with pytest.raises(NotImplementedError):
+        write_zarr(edata_333, tmp_path / "test.zarr", chunks=1000)
+    with pytest.raises(NotImplementedError):
+        write_zarr(edata_333, tmp_path / "test.zarr", chunks="foobar")
