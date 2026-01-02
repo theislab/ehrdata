@@ -65,7 +65,7 @@ optional-dependencies.lamin = [
   #"omop", # Not needed and causing an issue in the readthedocs build https://github.com/laminlabs/lamindb/issues/3081
 ]
 optional-dependencies.test = [
-  "coverage",
+  "coverage>=7.10",
   "ehrdata[dask,lamin,torch,vitessce]",
   "pytest",
   "pytest-cov",
