@@ -66,9 +66,13 @@ optional-dependencies.lamin = [
 ]
 optional-dependencies.test = [
   "coverage>=7.10",
-  "ehrdata[dask,lamin,torch,vitessce]",
+  "dask",
+  "ehrdata",
+  "lamin",
   "pytest",
   "pytest-cov",
+  "torch",
+  "vitessce[all]>=3.4",
 ]
 optional-dependencies.torch = [
   "torch",
@@ -96,7 +100,7 @@ scripts.clean = "git clean -fdX -- {args:docs}"
 features = [ "test" ]
 
 [[tool.hatch.envs.hatch-test.matrix]]
-python = [ "3.12", "3.13" ]
+python = [ "3.12", "3.14" ]
 
 [tool.ruff]
 line-length = 120
