@@ -86,8 +86,7 @@ intersphinx_mapping = {
     "lamin": ("https://docs.lamin.ai", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "pandas": ("https://pandas.pydata.org/docs", None),
-    # TODO: replace `3.13` with `3` once ReadTheDocs supports building with Python 3.14
-    "python": ("https://docs.python.org/3.13", None),
+    "python": ("https://docs.python.org/3", None),
     "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
     "scipy": ("https://docs.scipy.org/doc/scipy", None),
     "torch": ("https://docs.pytorch.org/docs/main", None),
