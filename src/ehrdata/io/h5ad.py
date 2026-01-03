@@ -54,19 +54,26 @@ def read_h5ad(
         msg = "backed reading is not available with 'cast_variables_to_float=True'."
         raise ValueError(msg)
 
-    if backed not in {None, False}:
+    if backed in {None, False}:
+        dictionary_for_init = {}
+
+        with h5py.File(filename, "r") as f:
+            dictionary_for_init.update(
+                {k: ad.io.read_elem(f[k]) for k, _ in dict(f).items() if not k.startswith("raw.")}
+            )
+
+        edata = EHRData(**dictionary_for_init)
+
+    else:
         mode = backed
         if mode is True:
             mode = "r+"
-        assert mode in {"r", "r+"}
-        dictionary_for_init = {"filemode": mode, "filename": filename}
-    else:
-        dictionary_for_init = {}
+        adata = ad.read_h5ad(filename, backed=mode)
 
-    with h5py.File(filename, "r") as f:
-        dictionary_for_init.update({k: ad.io.read_elem(f[k]) for k, _ in dict(f).items() if not k.startswith("raw.")})
+        with h5py.File(filename, "r") as f:
+            tem = ad.io.read_elem(f["tem"]) if "tem" in f else None
 
-    edata = EHRData(**dictionary_for_init)
+            edata = EHRData.from_adata(adata, tem=tem)
 
     if harmonize_missing_values:
         ed.harmonize_missing_values(edata)

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 # -- Path setup --------------------------------------------------------------
-import shutil
 import sys
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
 
-from sphinxcontrib import katex
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "extensions"))
@@ -43,7 +41,6 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinxcontrib.bibtex",
-    "sphinxcontrib.katex",
     "sphinx_autodoc_typehints",
     "sphinx_tabs.tabs",
     "IPython.sphinxext.ipython_console_highlighting",
@@ -126,7 +123,6 @@ html_context = {
 }
 
 pygments_style = "default"
-katex_prerender = shutil.which(katex.NODEJS_BINARY) is not None
 
 # If building the documentation fails because of a missing link that is outside your control,
 # you can add an exception to this list:
