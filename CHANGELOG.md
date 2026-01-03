@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.0.11]
+
+### Fixed
+
+- {func}`~ehrdata.io.read_h5ad` fixed issues when `backed=True`. ([#199](https://github.com/theislab/ehrdata/pull/199)) @eroell
+
 ## [0.0.10]
 
 {class}`~ehrdata.EHRData` drops the `.R` field, and now supports 3D data storage in any slot of `.layers`. See the {doc}`tutorials/getting_started` tutorial for an introduction to this behaviour. In the future, `.X` will be enabled soon for 3D data storage as well.

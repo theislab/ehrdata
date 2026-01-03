@@ -307,6 +307,13 @@ class EHRData(AnnData):
             if tem is not None:
                 instance.tem = tem
 
+            # This is a workaround to ensure an EHRData object created from an AnnData object with backed X is has edata.isbacked == True.
+            # Reason: AnnData's _init_as_actual sets _X = X (which in the backed case is an h5py.Dataset object) regardless of whether it is backed or not.
+            # However, adata.isbacked (which edata inherits) requires _X to be None to return True.
+            if adata.isbacked:
+                # self._X can be safely set to None since it is backed (https://github.com/scverse/anndata/blob/4a62c2e3128b950e7d699506b91d8e572da20a96/src/anndata/_core/anndata.py#L1051C15-L1051C17)
+                instance._X = None
+
         return instance
 
     @property

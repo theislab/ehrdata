@@ -14,7 +14,7 @@ sys.path.insert(0, str(HERE / "extensions"))
 # -- Project information -----------------------------------------------------
 
 info = metadata("ehrdata")
-project_name = info["Name"]
+project = info["Name"]
 author = info["Author"]
 copyright = f"{datetime.now():%Y}, {author}."
 version = info["Version"]
@@ -43,7 +43,6 @@ extensions = [
     "sphinxcontrib.bibtex",
     "sphinx_autodoc_typehints",
     "sphinx_tabs.tabs",
-    "sphinx.ext.mathjax",
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinxext.opengraph",
     "scanpydoc.elegant_typehints",
@@ -106,7 +105,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 html_theme = "scanpydoc"
 html_static_path = ["_static"]
 html_css_files = ["css/custom.css"]
-html_title = project_name
+html_title = project
 html_logo = "_static/tutorial_images/ehrdata_logo.png"
 html_theme_options = {
     "repository_url": repository_url,
@@ -117,7 +116,7 @@ html_theme_options = {
 html_context = {
     "display_github": True,  # Integrate GitHub
     "github_user": "theislab",
-    "github_repo": project_name,
+    "github_repo": project,
     "github_version": "main",
     "conf_py_path": "/docs/",
 }
