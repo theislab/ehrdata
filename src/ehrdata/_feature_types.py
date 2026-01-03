@@ -30,7 +30,7 @@ def _detect_feature_type(col: pd.Series) -> tuple[Literal["date", "categorical",
         The detected feature type (one of 'date', 'categorical', or 'numeric') and a boolean, which is True if the feature type is uncertain.
     """
     n_elements = len(col)
-    col = col.replace(MISSING_VALUES, np.nan)
+    col[col.isin(MISSING_VALUES)] = np.nan
     col = col.infer_objects(copy=False)
     col = col.dropna()
     if len(col) == 0:
@@ -245,8 +245,8 @@ def feature_type_overview(edata: EHRData) -> None:
     else:
         for categorical in sorted(cat_features):
             categorical_feature = df.loc[:, categorical]
-            categorical_feature_nans_cleaned = categorical_feature.replace(MISSING_VALUES, np.nan)
-            branch.add(f"{categorical} ({categorical_feature_nans_cleaned.nunique()} categories)")
+            categorical_feature[categorical_feature.isin(MISSING_VALUES)] = np.nan
+            branch.add(f"{categorical} ({categorical_feature.nunique()} categories)")
 
     print(tree)
 
@@ -321,7 +321,7 @@ def harmonize_missing_values(
         return edata if copy else None
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
-    df.replace(missing_values, np.nan, inplace=True)
+    df[df.isin(missing_values)] = np.nan
     df.infer_objects(copy=False)
 
     if layer is None:
