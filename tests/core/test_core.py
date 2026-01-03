@@ -281,9 +281,9 @@ def test_ehrdata_assignments(X_numpy_32, X_numpy_322, obs_31, var_21):
     edata.var["new_var_col"] = ["a", "b"]
     edata.tem["new_tem_col"] = [1, 2]
 
-    edata.obs["new_obs_col"].iloc[0] = "obs_entry"
-    edata.var["new_var_col"].iloc[0] = "var_entry"
-    edata.tem["new_tem_col"].iloc[0] = "tem_entry"
+    edata.obs.loc[edata.obs.index[0], "new_obs_col"] = 10
+    edata.var.loc[edata.var.index[0], "new_var_col"] = "var_entry"
+    edata.tem.loc[edata.tem.index[0], "new_tem_col"] = 20
 
     edata.varm["varm_entry"] = np.array([[1, 2], [3, 4]])
     edata.obsm["obsm_entry"] = np.array([[1, 2], [3, 4], [5, 6]])
@@ -291,6 +291,7 @@ def test_ehrdata_assignments(X_numpy_32, X_numpy_322, obs_31, var_21):
     edata.obsp["obsp_entry"] = np.array([[1, 2, 3], [3, 4, 5], [5, 6, 7]])
 
 
+@pytest.mark.filterwarnings("ignore:.*Initializing view as actual.*:anndata._core.views.ImplicitModificationWarning")
 def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
     edata = EHRData(X=X_numpy_32, obs=obs_31, var=var_21, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
     edata_view = edata[:2, :1, :1]
