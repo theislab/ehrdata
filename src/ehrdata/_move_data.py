@@ -143,6 +143,7 @@ def move_to_x(
         edata_from_obs = EHRData(X=edata.obs[cols_not_in_x])
         if layer is None:
             new_edata = ad.concat([edata, edata_from_obs], axis=1)
+            new_edata = EHRData.from_adata(new_edata)
         else:
             # anndata can only concatenate if both objects have X.
             # if one has, it raises an Error: if neither has, it returns an object with 0 observations
