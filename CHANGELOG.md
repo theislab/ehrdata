@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.0.11]
 
+### Added
+ - {func}`~ehrdata.move_to_obs` and {func}`~ehrdata.move_to_x` are new helpers for conveniently moving variables from central 2D arrays to the `.obs` field, and vice versa. ([#199](https://github.com/theislab/ehrdata/pull/201)) @eroell
+
 ### Fixed
 - {func}`~ehrdata.io.read_h5ad` fixed issues when `backed=True`. ([#199](https://github.com/theislab/ehrdata/pull/199)) @eroell
 

@@ -67,7 +67,6 @@ optional-dependencies.lamin = [
 optional-dependencies.test = [
   "coverage>=7.10",
   "dask",
-  "ehrdata",
   "lamin",
   "pytest",
   "pytest-cov",
