@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import shutil
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
@@ -408,9 +408,9 @@ def physionet2012(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.physionet_2012()
-    """
-    from ehrdata import EHRData
+        TODO preview
 
+    """
     if data_path is None:
         data_path = DEFAULT_DATA_PATH / "physionet2012"
 
@@ -485,7 +485,155 @@ def physionet2012(
     obs.set_index("RecordID", inplace=True)
 
     # consider only time series features from now
-    df_long = person_long_across_set_df[~person_long_across_set_df["Parameter"].isin(static_features)]
+    df_dynamic_long = person_long_across_set_df[~person_long_across_set_df["Parameter"].isin(static_features)]
+
+    return _create_edata_from_physionet_long_format(
+        df_dynamic_long=df_dynamic_long,
+        obs=obs,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
+        drop_samples=drop_samples,
+        layer=layer,
+        dataset="physionet2012",
+    )
+
+    # interval_df = _generate_timedeltas(
+    #     interval_length_number=interval_length_number,
+    #     interval_length_unit=interval_length_unit,
+    #     num_intervals=num_intervals,
+    # )
+
+    # df_long_time_seconds = np.array(pd.to_timedelta(df_long["Time"] + ":00").dt.total_seconds())
+    # interval_df_interval_end_offset_seconds = np.array(interval_df["interval_end_offset"].dt.total_seconds())
+    # df_long_interval_step = np.argmax(df_long_time_seconds[:, None] <= interval_df_interval_end_offset_seconds, axis=1)
+    # df_long.loc[:, ["interval_step"]] = df_long_interval_step
+
+    # # if one person for one feature (=Parameter) within one interval_step has multiple measurements, decide which one to keep
+    # df_long = df_long.drop_duplicates(subset=["RecordID", "Parameter", "interval_step"], keep=aggregation_strategy)
+
+    # xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
+
+    # var = xa["Parameter"].to_dataframe()
+    # tem = xa["interval_step"].to_dataframe()
+    # tem_layer = xa["Value"].values
+
+    # # Three time series variables in the original dataset ['DiasABP', 'NIDiasABP', 'Weight'] have -1 instead of NaN for some missing values
+    # # No -1 value in the original dataset represents a valid measurement, so we can safely replace -1 with NaN
+    # tem_layer[tem_layer == -1] = np.nan
+
+    # obs.index = obs.index.astype(str)
+    # var.index = var.index.astype(str)
+
+    # edata = (
+    #     EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=tem)
+    #     if layer is not None
+    #     else EHRData(X=tem_layer, obs=obs, var=var, tem=tem)
+    # )
+
+    # return edata[~edata.obs.index.isin(drop_samples or [])]
+
+
+def physionet2019(
+    data_path: Path | None = None,
+    *,
+    interval_length_number: int = 1,
+    interval_length_unit: str = "h",
+    num_intervals: int = 48,
+    aggregation_strategy: str = "last",
+    drop_samples: Iterable[str] | None = None,
+    layer: str | None = None,
+) -> EHRData:
+    """Loads the dataset of the `PhysioNet challenge 2019 (v1.0.0) <https://physionet.org/content/challenge-2019/1.0.0/>`_.
+
+    Truncated if a sample has more `num_intervals` steps; Padded if a sample has less than `num_intervals` steps.
+
+    The data consists of 31 dynamic features and 5 static features (`Age`, `Gender`, `Unit1`, `Unit2`, `HospAdmTime`).
+    More information on the features can be found on the linke above.
+
+    The tensor stored in `.layers[layer_name]` is fully compatible with e.g. the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ :cite:`du2023pypots` package, as the `.layers` field of EHRData objects generally is.
+
+    Args:
+       data_path: Path to the raw data. If the path exists, the data is loaded from there.
+           Else, the data is downloaded.
+       interval_length_number: Numeric value of the length of one interval.
+       interval_length_unit: Unit belonging to the interval length.
+       num_intervals: Number of intervals.
+       aggregation_strategy: Aggregation strategy for the time series data when multiple
+           measurements for a person's parameter within a time interval is available.
+           Available are `'first'` and `'last'`, as used in :meth:`~pandas.DataFrame.drop_duplicates`.
+       drop_samples: Samples to drop from the dataset (indicate their RecordID).
+       layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
+
+    Returns:
+        The processed physionet2019 dataset.
+        The raw data is also downloaded, stored and available under the ``data_path``.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.physionet_2019()
+        TODO preview
+    """
+    if data_path is None:
+        data_path = DEFAULT_DATA_PATH / "physionet2019"
+
+    temp_data_set_names = ["training_setA", "training_setB"]
+
+    static_features = ["Age", "Gender", "Unit1", "Unit2", "HospAdmTime"]
+
+    # person_long_across_set_collector = []
+    person_collector_static = {}
+    person_collector_dynamic = {}
+
+    for data_subset_dir in temp_data_set_names:
+        # each txt file is the data of a person, in wide format
+        # the columns in the txt files are both the dynamic columns and the static columns (the latter repating the information for every recorded timepoint)
+        for txt_file in (data_path / data_subset_dir).glob("*.psv"):
+            person_wide = pd.read_csv(txt_file, sep="|")
+
+            person_static = person_wide[static_features].loc[0]
+            person_static["RecordID"] = txt_file.stem
+            person_static["training_Set"] = data_subset_dir
+            person_collector_static[txt_file.stem] = person_static
+
+            person_dynamic_long = person_wide.iloc[:, ~person_wide.columns.isin(static_features)].melt(
+                id_vars=["ICULOS"], var_name="Parameter", value_name="Value"
+            )
+            person_dynamic_long.dropna(inplace=True)
+            person_dynamic_long["training_Set"] = data_subset_dir
+            person_dynamic_long["RecordID"] = txt_file.stem
+
+            person_collector_dynamic[txt_file.stem] = person_dynamic_long
+
+    obs = pd.concat(person_collector_static.values(), axis=1).T.set_index("RecordID", inplace=True)
+    df_dynamic_long = pd.concat(person_collector_dynamic.values())
+
+    return _create_edata_from_physionet_long_format(
+        df_dynamic_long=df_dynamic_long,
+        obs=obs,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
+        drop_samples=drop_samples,
+        layer=layer,
+        dataset="physionet2019",
+    )
+
+
+def _create_edata_from_physionet_long_format(
+    df_dynamic_long: pd.DataFrame,
+    obs: pd.DataFrame,
+    interval_length_number: int,
+    interval_length_unit: str,
+    num_intervals: int,
+    aggregation_strategy: str,
+    drop_samples: Iterable[str] | None,
+    layer: str | None,
+    dataset: Literal["physionet2012", "physionet2019"] = "physionet2012",
+) -> EHRData:
+    from ehrdata import EHRData
 
     interval_df = _generate_timedeltas(
         interval_length_number=interval_length_number,
@@ -493,23 +641,28 @@ def physionet2012(
         num_intervals=num_intervals,
     )
 
-    df_long_time_seconds = np.array(pd.to_timedelta(df_long["Time"] + ":00").dt.total_seconds())
+    if dataset == "physionet2012":
+        df_long_time_seconds = np.array(pd.to_timedelta(df_dynamic_long["Time"] + ":00").dt.total_seconds())
+    elif dataset == "physionet2019":
+        df_long_time_seconds = np.array(pd.to_timedelta(df_dynamic_long["ICULOS"], unit="h").dt.total_seconds())
+    else:
+        msg = f"Dataset {dataset} not supported."
+        raise ValueError(msg)
+
     interval_df_interval_end_offset_seconds = np.array(interval_df["interval_end_offset"].dt.total_seconds())
     df_long_interval_step = np.argmax(df_long_time_seconds[:, None] <= interval_df_interval_end_offset_seconds, axis=1)
-    df_long.loc[:, ["interval_step"]] = df_long_interval_step
+    df_dynamic_long.loc[:, ["interval_step"]] = df_long_interval_step
 
     # if one person for one feature (=Parameter) within one interval_step has multiple measurements, decide which one to keep
-    df_long = df_long.drop_duplicates(subset=["RecordID", "Parameter", "interval_step"], keep=aggregation_strategy)
+    df_long = df_dynamic_long.drop_duplicates(
+        subset=["RecordID", "Parameter", "interval_step"], keep=aggregation_strategy
+    )
 
     xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
 
     var = xa["Parameter"].to_dataframe()
-    tem = xa["interval_step"].to_dataframe()
+    tem = interval_df.set_index("interval_step")
     tem_layer = xa["Value"].values
-
-    # Three time series variables in the original dataset ['DiasABP', 'NIDiasABP', 'Weight'] have -1 instead of NaN for some missing values
-    # No -1 value in the original dataset represents a valid measurement, so we can safely replace -1 with NaN
-    tem_layer[tem_layer == -1] = np.nan
 
     obs.index = obs.index.astype(str)
     var.index = var.index.astype(str)
