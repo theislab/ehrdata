@@ -27,5 +27,7 @@
     feature_type_overview
     replace_feature_types
     harmonize_missing_values
+    move_to_obs
+    move_to_x
 
 ```
