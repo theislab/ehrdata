@@ -24,29 +24,38 @@ def move_to_obs(
     copy_columns: bool = False,
     copy: bool = False,
 ) -> EHRData | None:
-    """Move features from `X`/`layers` to `obs`.
+    """Move variables from `.X`/`.layers` to `.obs`.
 
-    This function moves the `features` specified from the indicated `layer` to `.obs`.
+    This function moves the `var_names` specified from the indicated `layer` to `.obs`.
 
     Important to note:
+
     - The `layer` must be 2D.
-    - If `copy_columns` is set to `False`, `features` will be removed across `X`/`layers`.
+    - If `copy_columns` is set to `False`, `var_names` will be removed across `.X`/`.layers`.
 
     Args:
         edata: Central data object.
-        var_names: The columns to move to obs.
-        layer: The layer to use from the :class:`~ehrdata.EHRData` object. If `None`, the `X` layer is used. Must be 2D.
-        copy_columns: If False, the columns are moved to `obs` and deleted from `X`/`layers`. If True, the values are copied to obs (and therefore kept in `X`/`layers`).
-        copy: If True, a new :class:`~ehrdata.EHRData` object is returned. If False, the original object is modified inplace and `None` is returned.
+        var_names: The columns to move to `.obs`.
+        layer: The 2D layer to use from the :class:`~ehrdata.EHRData` object. If `None`, the `X` layer is used. Must be 2D.
+        copy_columns: If False, the columns are moved to `obs` and deleted from `.X`/`.layers`. If `True`, the values are copied to obs (and therefore kept in `.X`/`.layers`).
+        copy: If `True`, a new :class:`~ehrdata.EHRData` object is returned. If `False`, the original object is modified inplace and `None` is returned.
 
     Returns:
-        A new :class:`~ehrdata.EHRData` object with moved or copied columns from `X`/`layers` to `obs`.
+        A new :class:`~ehrdata.EHRData` object with moved or copied columns from `.X`/`.layers` to `obs`.
 
     Examples:
         >>> import ehrdata as ed
-        >>> import ehrapy as ep
         >>> edata = ed.dt.mimic_2()
-        >>> ep.ad.move_to_obs(edata, ["age"], copy_obs=False)
+        >>> ed.move_to_obs(edata, ["age"], copy=True)
+        EHRData object with n_obs × n_vars × n_t = 1776 × 45 × 1
+            obs: 'age'
+            shape of .X: (1776, 45)
+
+        where
+
+        >>> edata
+        EHRData object with n_obs × n_vars × n_t = 1776 × 46 × 1
+            shape of .X: (1776, 46)
     """
     if layer is not None and (len(edata.layers[layer].shape) > 2) and (edata.layers[layer].shape[2] > 1):
         msg = "Layer is 3D, but move_to_obs only supports 2D layers."
@@ -86,33 +95,42 @@ def move_to_x(
     layer: str | None = None,
     copy_columns: bool = False,
 ) -> EHRData:
-    """Move features from `.obs` to `.X`/`.layers`.
+    """Move variables from `.obs` to `.X`/`.layers`.
 
-    This function creates a new :class:`~ehrdata.EHRData` object with the `features` specified from `.obs` moved to the indicated `layer`.
+    This function moves the `features` specified from `.obs` to `.X` or the indicated `layer`.
+
     The column names in `.obs` are preserved in `.var_names` of the new object.
-    The new object will only maintain the specified layer and `.obs` from the original object.
-    That means other layers and fields such as `.obsm`, `.varm` etc. will be removed, providing a clean and minimal object for further analysis.
 
-    Important to note:
-    - The `layer` must be 2D.
+    The new object only consists of the specified `layer` and `.obs` from the original object.
+    That means other layers and fields such as `.obsm`, `.varm` etc. are not in the new object, providing a clean and minimal object for further analysis.
+
+    Important: The `layer` must be 2D.
 
     Args:
         edata: Central data object.
-        features: The columns to move to `X`/`layers`.
-        layer: The layer to use from the :class:`~ehrdata.EHRData` object. If `None`, `.X` is used.
-        copy_columns: The values are copied to X (and therefore kept in `.obs`) instead of moved completely
+        features: The columns to move to `.X`/`.layers`.
+        layer: The 2D layer to use from the :class:`~ehrdata.EHRData` object. If `None`, `.X` is used.
+        copy_columns: The values are copied to `.X`/`.layers` (and therefore kept in `.obs`) instead of being moved completely.
 
     Returns:
-        A new data object with moved columns from `.obs` to `.X`/`layers`, with
-        - `.X`/`layers` containing the original plus moved columns
+        A new data object with moved columns from `.obs` to `.X`/`.layers`, with
+
+        - `.X`/`.layers` containing the original plus moved columns
         - `.obs`
 
     Examples:
         >>> import ehrdata as ed
-        >>> import ehrapy as ep
-        >>> edata = ed.dt.mimic_2()
-        >>> ep.ad.move_to_obs(edata, ["age"], copy_columns=False)
-        >>> new_edata = ep.ad.move_to_x(edata, ["age"])
+        >>> edata = ed.dt.mimic_2(columns_obs_only=["age"])
+        >>> ed.move_to_x(edata, ["age"])
+        EHRData object with n_obs × n_vars × n_t = 1776 × 46 × 1
+            shape of .X: (1776, 46)
+
+        where
+
+        >>> edata
+        EHRData object with n_obs × n_vars × n_t = 1776 × 45 × 1
+            obs: 'age'
+            shape of .X: (1776, 45)
     """
     from ehrdata import EHRData
 
