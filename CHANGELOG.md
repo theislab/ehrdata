@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning][].
 - {func}`~ehrdata.io.read_h5ad` fixed issues when `backed=True`. ([#199](https://github.com/theislab/ehrdata/pull/199)) @eroell
 
 ### Maintenance
+- Support Python3.14 ([#194](https://github.com/theislab/ehrdata/pull/194)) @Zethson
 - Address `FutureWarning`s across multiple places ([#200](https://github.com/theislab/ehrdata/pull/200)) @eroell
 
 ## [0.0.10]
