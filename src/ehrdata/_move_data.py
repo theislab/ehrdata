@@ -9,11 +9,6 @@ from ehrdata._logger import logger
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
-# TODO: check 2D/3D
-# TODO: add docs
-# TODO: add pointer in ehrapy
-# TODO: what happens to unaffected layers?
-# TODO: array types
 
 
 def move_to_obs(

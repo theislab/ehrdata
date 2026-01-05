@@ -40,7 +40,6 @@ def test_move_to_obs_vanilla(edata_330: EHRData, array_type: Callable, *, copy_c
     assert "var1" in edata_to_check.obs.columns
     assert "var2" in edata_to_check.obs.columns
 
-    # Check values are correct - var1 had values [1, 4, 7] for the 3 obs
     assert edata_to_check.obs.loc["obs1", "var1"] == 1
     assert edata_to_check.obs.loc["obs2", "var1"] == 4
     assert edata_to_check.obs.loc["obs3", "var1"] == 7
@@ -100,7 +99,6 @@ def test_move_to_x_layer(edata_330: EHRData):
 
     assert edata_result.shape[1] == original_shape[1] + len(features)
     assert edata_result.X is None
-    # assert edata_330.X.shape[1] == original_shape[1] - len(features)
 
 
 def test_move_to_obs_3Dlayer(edata_333: EHRData):
