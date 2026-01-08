@@ -573,7 +573,7 @@ def mimic_2_preprocessed() -> EHRData:
         >>> edata = ed.dt.mimic_2_preprocessed()
     """
     _download(
-        url="https://scverse-exampledata.s3.eu-west-1.amazonaws.com/ehrapy/mimic_2_preprocessed.h5ad",
+        url="https://exampledata.scverse.org/ehrapy/mimic_2_preprocessed.h5ad",
         output_path=DEFAULT_DATA_PATH,
         output_filename="mimic_2_preprocessed.h5ad",
         raw_format="h5ad",
@@ -614,7 +614,7 @@ def diabetes_130_raw(
         )
 
     _download(
-        url="https://scverse-exampledata.s3.eu-west-1.amazonaws.com/ehrapy/diabetes_130_raw.csv",
+        url="https://exampledata.scverse.org/ehrapy/diabetes_130_raw.csv",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_raw.csv",
         raw_format="csv",
@@ -659,7 +659,7 @@ def diabetes_130_fairlearn(
         )
 
     _download(
-        url="https://scverse-exampledata.s3.eu-west-1.amazonaws.com/ehrapy/diabetes_130_fairlearn.csv",
+        url="https://exampledata.scverse.org/ehrapy/diabetes_130_fairlearn.csv",
         output_path=DEFAULT_DATA_PATH,
         output_filename="diabetes_130_fairlearn.csv",
         raw_format="csv",
