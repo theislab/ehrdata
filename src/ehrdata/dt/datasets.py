@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -15,7 +16,6 @@ from ehrdata.io.omop._queries import _generate_timedeltas
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    from pathlib import Path
 
     from duckdb import DuckDBPyConnection
 
@@ -356,7 +356,7 @@ def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None 
 
 
 def physionet2012(
-    data_path: Path | None = None,
+    data_path: Path | str | None = None,
     *,
     interval_length_number: int = 1,
     interval_length_unit: str = "h",
@@ -407,28 +407,59 @@ def physionet2012(
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ed.dt.physionet_2012()
+        >>> edata = ed.dt.physionet_2012(layer="tem_data)
         TODO preview
 
     """
+    EXPECTED_PARAMETERS = [
+        "ALP",
+        "ALT",
+        "AST",
+        "Albumin",
+        "BUN",
+        "Bilirubin",
+        "Cholesterol",
+        "Creatinine",
+        "DiasABP",
+        "FiO2",
+        "GCS",
+        "Glucose",
+        "HCO3",
+        "HCT",
+        "HR",
+        "K",
+        "Lactate",
+        "MAP",
+        "MechVent",
+        "Mg",
+        "NIDiasABP",
+        "NIMAP",
+        "NISysABP",
+        "Na",
+        "PaCO2",
+        "PaO2",
+        "Platelets",
+        "RespRate",
+        "SaO2",
+        "SysABP",
+        "Temp",
+        "TroponinI",
+        "TroponinT",
+        "Urine",
+        "WBC",
+        "Weight",
+        "pH",
+    ]
     if data_path is None:
         data_path = DEFAULT_DATA_PATH / "physionet2012"
 
-    # alternative in future?
-    # config_parser = tsdb.utils.config.read_configs()
-    # tsdb.utils.config.write_configs(
-    #     config_parser=config_parser, key_value_set={"path": {"data_home": "ehrapy_data/physionet2012"}}
-    # )
-
-    # tsdb.load(dataset_name="physionet_2012")
-
-    # # returns a dictionary
-    # tsdb.data_processing.load_physionet2012(data_path)
+    elif isinstance(data_path, str):
+        data_path = Path(data_path)
 
     outcome_filenames = ["Outcomes-a.txt", "Outcomes-b.txt", "Outcomes-c.txt"]
-    temp_data_set_names = ["set-a", "set-b", "set-c"]
+    data_set_names = ["set-a", "set-b", "set-c"]
 
-    for filename in temp_data_set_names:
+    for filename in data_set_names:
         _download(
             url=f"https://physionet.org/files/challenge-2012/1.0.0/{filename}.tar.gz?download",
             output_path=data_path,
@@ -442,10 +473,12 @@ def physionet2012(
             output_path=data_path,
         )
 
+    person_outcome_df = pd.concat([pd.read_csv(data_path / filename) for filename in outcome_filenames])
+
     static_features = ["Age", "Gender", "ICUType", "Height"]
 
     person_long_across_set_collector = []
-    for data_subset_dir in temp_data_set_names:
+    for data_subset_dir in data_set_names:
         person_long_within_set_collector = []
 
         # each txt file is the data of a person, in long format
@@ -466,13 +499,6 @@ def physionet2012(
 
     person_long_across_set_df = pd.concat(person_long_across_set_collector)
 
-    person_outcome_collector = []
-    for outcome_filename in outcome_filenames:
-        outcome_df = pd.read_csv(data_path / outcome_filename)
-        person_outcome_collector.append(outcome_df)
-
-    person_outcome_df = pd.concat(person_outcome_collector)
-
     # gather the static_features together with RecordID and set for each person into the obs table
     obs = (
         person_long_across_set_df[person_long_across_set_df["Parameter"].isin(static_features)]
@@ -490,6 +516,7 @@ def physionet2012(
     return _create_edata_from_physionet_long_format(
         df_dynamic_long=df_dynamic_long,
         obs=obs,
+        expected_parameters=EXPECTED_PARAMETERS,
         interval_length_number=interval_length_number,
         interval_length_unit=interval_length_unit,
         num_intervals=num_intervals,
@@ -499,64 +526,40 @@ def physionet2012(
         dataset="physionet2012",
     )
 
-    # interval_df = _generate_timedeltas(
-    #     interval_length_number=interval_length_number,
-    #     interval_length_unit=interval_length_unit,
-    #     num_intervals=num_intervals,
-    # )
 
-    # df_long_time_seconds = np.array(pd.to_timedelta(df_long["Time"] + ":00").dt.total_seconds())
-    # interval_df_interval_end_offset_seconds = np.array(interval_df["interval_end_offset"].dt.total_seconds())
-    # df_long_interval_step = np.argmax(df_long_time_seconds[:, None] <= interval_df_interval_end_offset_seconds, axis=1)
-    # df_long.loc[:, ["interval_step"]] = df_long_interval_step
-
-    # # if one person for one feature (=Parameter) within one interval_step has multiple measurements, decide which one to keep
-    # df_long = df_long.drop_duplicates(subset=["RecordID", "Parameter", "interval_step"], keep=aggregation_strategy)
-
-    # xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
-
-    # var = xa["Parameter"].to_dataframe()
-    # tem = xa["interval_step"].to_dataframe()
-    # tem_layer = xa["Value"].values
-
-    # # Three time series variables in the original dataset ['DiasABP', 'NIDiasABP', 'Weight'] have -1 instead of NaN for some missing values
-    # # No -1 value in the original dataset represents a valid measurement, so we can safely replace -1 with NaN
-    # tem_layer[tem_layer == -1] = np.nan
-
-    # obs.index = obs.index.astype(str)
-    # var.index = var.index.astype(str)
-
-    # edata = (
-    #     EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=tem)
-    #     if layer is not None
-    #     else EHRData(X=tem_layer, obs=obs, var=var, tem=tem)
-    # )
-
-    # return edata[~edata.obs.index.isin(drop_samples or [])]
-
-
+# TODO:
+# upload to scverse AWS a sample dataset
+# test
+# check documentation
+# sanity check what PyPOTS is doing & try loading theirs once
+# to see features and num obs matches.
 def physionet2019(
-    data_path: Path | None = None,
+    data_path: Path | str | None = None,
     *,
     interval_length_number: int = 1,
     interval_length_unit: str = "h",
     num_intervals: int = 48,
     aggregation_strategy: str = "last",
     drop_samples: Iterable[str] | None = None,
+    n_subsamples: int | None = None,
+    subsample_seed: int | None = 0,
     layer: str | None = None,
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2019 (v1.0.0) <https://physionet.org/content/challenge-2019/1.0.0/>`_.
 
     Truncated if a sample has more `num_intervals` steps; Padded if a sample has less than `num_intervals` steps.
 
-    The data consists of 31 dynamic features and 5 static features (`Age`, `Gender`, `Unit1`, `Unit2`, `HospAdmTime`).
-    More information on the features can be found on the linke above.
+    The data consists of 35 dynamic features and 5 static features (`Age`, `Gender`, `Unit1`, `Unit2`, `HospAdmTime`).
+    More information on the features can be found on the link above.
+
+    The full dataset consists of 40'336 patients, with values for the 35 dynamic features recorded hourly, and indicated missing if the value is not available.
+    This amounts to a final dataset shape of 40'336 x 35 x 48.
 
     The tensor stored in `.layers[layer_name]` is fully compatible with e.g. the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ :cite:`du2023pypots` package, as the `.layers` field of EHRData objects generally is.
 
     Args:
        data_path: Path to the raw data. If the path exists, the data is loaded from there.
-           Else, the data is downloaded.
+           Else, the data is downloaded. Hint: if you have downloaded the data already from <https://physionet.org/content/challenge-2019/1.0.0/>`_, set this path to the 'training' folder.
        interval_length_number: Numeric value of the length of one interval.
        interval_length_unit: Unit belonging to the interval length.
        num_intervals: Number of intervals.
@@ -564,6 +567,8 @@ def physionet2019(
            measurements for a person's parameter within a time interval is available.
            Available are `'first'` and `'last'`, as used in :meth:`~pandas.DataFrame.drop_duplicates`.
        drop_samples: Samples to drop from the dataset (indicate their RecordID).
+       n_subsamples: Number of samples to subsample from the dataset. If not specified, all samples are used.
+       subsample_seed: Seed for the subsampling. If not specified, a random seed is used.
        layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
 
     Returns:
@@ -572,46 +577,137 @@ def physionet2019(
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ed.dt.physionet_2019()
-        TODO preview
+        >>> edata = ed.dt.physionet_2019(layer="tem_data")
+        >>> edata
+        EHRData object with n_obs × n_vars × n_t = 40336 × 35 × 48
+            obs: 'Age', 'Gender', 'Unit1', 'Unit2', 'HospAdmTime', 'training_Set'
+            var: 'Parameter'
+            tem: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47'
+            layers: 'tem_data'
+            shape of .tem_data: (40336, 35, 48)
+
+        Inspect static information
+
+        >>> edata.obs.head()
+                    Age  Gender  Unit1  Unit2  HospAdmTime   training_Set
+        RecordID
+        p014977     77.27     1.0    0.0    1.0       -69.14  training_setA
+        p000902     65.55     1.0    NaN    NaN        -0.02  training_setA
+        p009098     52.16     0.0    NaN    NaN        -0.03  training_setA
+        p008386     24.35     1.0    NaN    NaN        -0.03  training_setA
+        p018195     82.51     1.0    1.0    0.0      -907.88  training_setA
+
+        Inspect the 48-hour trajectory of the variable ``SepsisLabel``:
+
+        >>> edata[edata.obs.index == "p020378", edata.var_names == "SepsisLabel"].layers["tem_data"]
+        [[[nan,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+              0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+              0.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1., nan,
+             nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan]]]
     """
+    EXPECTED_PARAMETERS = [
+        "AST",
+        "Alkalinephos",
+        "BUN",
+        "BaseExcess",
+        "Bilirubin_direct",
+        "Bilirubin_total",
+        "Calcium",
+        "Chloride",
+        "Creatinine",
+        "DBP",
+        "EtCO2",
+        "FiO2",
+        "Fibrinogen",
+        "Glucose",
+        "HCO3",
+        "HR",
+        "Hct",
+        "Hgb",
+        "Lactate",
+        "MAP",
+        "Magnesium",
+        "O2Sat",
+        "PTT",
+        "PaCO2",
+        "Phosphate",
+        "Platelets",
+        "Potassium",
+        "Resp",
+        "SBP",
+        "SaO2",
+        "SepsisLabel",
+        "Temp",
+        "TroponinI",
+        "WBC",
+        "pH",
+    ]
+
     if data_path is None:
         data_path = DEFAULT_DATA_PATH / "physionet2019"
+
+    elif isinstance(data_path, str):
+        data_path = Path(data_path)
 
     temp_data_set_names = ["training_setA", "training_setB"]
 
     static_features = ["Age", "Gender", "Unit1", "Unit2", "HospAdmTime"]
 
-    # person_long_across_set_collector = []
     person_collector_static = {}
     person_collector_dynamic = {}
 
     for data_subset_dir in temp_data_set_names:
+        if not (data_path / data_subset_dir).exists():
+            err = f"Data path {data_path / data_subset_dir} does not exist. Please make sure you point `data_path` to the 'training' folder of the downloaded data."
+            raise FileNotFoundError(err)
+
+    all_files = []
+    for data_subset_dir in temp_data_set_names:
+        all_files.extend((data_path / data_subset_dir).glob("*.psv"))
+
+    all_files = sorted(all_files)
+
+    if drop_samples is not None:
+        drop_samples_set = set(drop_samples)
+        all_files = [f for f in all_files if f.stem not in drop_samples_set]
+
+    if n_subsamples is not None:
+        if n_subsamples > len(all_files):
+            msg = f"n_subsamples ({n_subsamples}) cannot be greater than the available number of samples ({len(all_files)})"
+            raise ValueError(msg)
+        rng = np.random.default_rng(subsample_seed)
+        selected_files = np.sort(rng.choice(len(all_files), size=n_subsamples, replace=False, shuffle=False)).tolist()
+        all_files = np.array(all_files)[selected_files].tolist()
+
+    # Now read only the selected files
+    for txt_file in all_files:
+        data_subset_dir = txt_file.parent.name
+
         # each txt file is the data of a person, in wide format
         # the columns in the txt files are both the dynamic columns and the static columns (the latter repating the information for every recorded timepoint)
-        for txt_file in (data_path / data_subset_dir).glob("*.psv"):
-            person_wide = pd.read_csv(txt_file, sep="|")
+        person_wide = pd.read_csv(txt_file, sep="|")
 
-            person_static = person_wide[static_features].loc[0]
-            person_static["RecordID"] = txt_file.stem
-            person_static["training_Set"] = data_subset_dir
-            person_collector_static[txt_file.stem] = person_static
+        person_static = person_wide[static_features].loc[0]
+        person_static["RecordID"] = txt_file.stem
+        person_static["training_Set"] = data_subset_dir
+        person_collector_static[txt_file.stem] = person_static
 
-            person_dynamic_long = person_wide.iloc[:, ~person_wide.columns.isin(static_features)].melt(
-                id_vars=["ICULOS"], var_name="Parameter", value_name="Value"
-            )
-            person_dynamic_long.dropna(inplace=True)
-            person_dynamic_long["training_Set"] = data_subset_dir
-            person_dynamic_long["RecordID"] = txt_file.stem
+        person_dynamic_long = person_wide.iloc[:, ~person_wide.columns.isin(static_features)].melt(
+            id_vars=["ICULOS"], var_name="Parameter", value_name="Value"
+        )
+        person_dynamic_long.dropna(inplace=True)
+        person_dynamic_long["training_Set"] = data_subset_dir
+        person_dynamic_long["RecordID"] = txt_file.stem
 
-            person_collector_dynamic[txt_file.stem] = person_dynamic_long
+        person_collector_dynamic[txt_file.stem] = person_dynamic_long
 
-    obs = pd.concat(person_collector_static.values(), axis=1).T.set_index("RecordID", inplace=True)
+    obs = pd.concat(person_collector_static.values(), axis=1).T.set_index("RecordID")
     df_dynamic_long = pd.concat(person_collector_dynamic.values())
 
     return _create_edata_from_physionet_long_format(
         df_dynamic_long=df_dynamic_long,
         obs=obs,
+        expected_parameters=EXPECTED_PARAMETERS,
         interval_length_number=interval_length_number,
         interval_length_unit=interval_length_unit,
         num_intervals=num_intervals,
@@ -625,6 +721,7 @@ def physionet2019(
 def _create_edata_from_physionet_long_format(
     df_dynamic_long: pd.DataFrame,
     obs: pd.DataFrame,
+    expected_parameters: Iterable[str],
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
@@ -633,6 +730,13 @@ def _create_edata_from_physionet_long_format(
     layer: str | None,
     dataset: Literal["physionet2012", "physionet2019"] = "physionet2012",
 ) -> EHRData:
+    """Create an EHRData object from prepared physionet2012 or physionet2019 data parts.
+
+    Creates an EHRData object from:
+    1. a long dataframe
+    2. a prepared obs dataframe
+    3. instructions taken in the physionet2012 and physionet2019 dataset preparation functions
+    """
     from ehrdata import EHRData
 
     interval_df = _generate_timedeltas(
@@ -660,6 +764,17 @@ def _create_edata_from_physionet_long_format(
 
     xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
 
+    # since NaNs are dropped, it can happen that a Parameter is completely dropped when it has no values for the subset of persons considered
+    # to provide a full set of Parameters everytime, we reindex to add the missing Parameters back in, just with missing values
+    xa = xa.reindex(
+        Parameter=expected_parameters,
+        fill_value=np.nan,
+    )
+    # to provide a full set of interval_steps everytime, evenif all the samples have less than num_interval steps, we add the missing steps and pad with missing values
+    xa = xa.reindex(
+        interval_step=np.arange(num_intervals),
+        fill_value=np.nan,
+    )
     var = xa["Parameter"].to_dataframe()
     tem = interval_df.set_index("interval_step")
     tem_layer = xa["Value"].values
