@@ -367,6 +367,7 @@ def setup_variables(
     r_collector = {}
     unit_report_collector = {}
     empty_table_counter = 0
+    concept_mapping = False
     for data_table in data_tables:
         # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
         count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_table}").df()["count"].item()
@@ -399,8 +400,33 @@ def setup_variables(
             concepts = backend_handle.sql("SELECT * FROM concept").df()
             concepts.columns = concepts.columns.str.lower()
 
+            if (
+                any(elem not in set(concepts["concept_id"]) for elem in var["data_table_concept_id"])
+                & enrich_var_with_feature_info
+            ):
+                concept_mapping = True
+                logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
+                concepts_relationship = backend_handle.sql(
+                    "SELECT * FROM concept_relationship WHERE relationship_id = 'Mapped from'"
+                ).df()
+                concepts_relationship.columns = concepts_relationship.columns.str.lower()
+                concepts_relationship_dedup = concepts_relationship[
+                    ~(concepts_relationship["concept_id_1"] == concepts_relationship["concept_id_2"])
+                ][["concept_id_1", "concept_id_2"]]
+                concepts_dict = concepts_relationship_dedup.set_index("concept_id_1")["concept_id_2"].to_dict()
+                concepts_mapped_idx = [x not in set(concepts["concept_id"]) for x in var["data_table_concept_id"]]
+                var.loc[concepts_mapped_idx, "data_table_concept_id_mapped"] = var.loc[
+                    concepts_mapped_idx, "data_table_concept_id"
+                ].map(concepts_dict)
+                var["data_table_concept_id_mapped"] = var["data_table_concept_id_mapped"].fillna(
+                    var["data_table_concept_id"]
+                )
+
         if enrich_var_with_feature_info:
-            var = pd.merge(var, concepts, how="left", left_index=True, right_on="concept_id")
+            if concept_mapping:
+                var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id_mapped", right_on="concept_id")
+            else:
+                var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id", right_on="concept_id")
 
         if enrich_var_with_unit_info:
             if unit_report["multiple_units"].sum() > 0:
@@ -592,6 +618,7 @@ def setup_interval_variables(
     var_collector = {}
     r_collector = {}
     empty_table_counter = 0
+    concept_mapping = False
     for data_table in data_tables:
         # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
         count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_table}").df()["count"].item()
@@ -622,8 +649,30 @@ def setup_interval_variables(
             concepts = backend_handle.sql("SELECT * FROM concept").df()
             concepts.columns = concepts.columns.str.lower()
 
+            if any(elem not in set(concepts["concept_id"]) for elem in var["data_table_concept_id"]):
+                concept_mapping = True
+                logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
+                concepts_relationship = backend_handle.sql(
+                    "SELECT * FROM concept_relationship WHERE relationship_id = 'Mapped from'"
+                ).df()
+                concepts_relationship.columns = concepts_relationship.columns.str.lower()
+                concepts_relationship_dedup = concepts_relationship[
+                    ~(concepts_relationship["concept_id_1"] == concepts_relationship["concept_id_2"])
+                ][["concept_id_1", "concept_id_2"]]
+                concepts_dict = concepts_relationship_dedup.set_index("concept_id_1")["concept_id_2"].to_dict()
+                concepts_mapped_idx = [x not in set(concepts["concept_id"]) for x in var["data_table_concept_id"]]
+                var.loc[concepts_mapped_idx, "data_table_concept_id_mapped"] = var.loc[
+                    concepts_mapped_idx, "data_table_concept_id"
+                ].map(concepts_dict)
+                var["data_table_concept_id_mapped"] = var["data_table_concept_id_mapped"].fillna(
+                    var["data_table_concept_id"]
+                )
+
         if enrich_var_with_feature_info:
-            var = pd.merge(var, concepts, how="left", left_index=True, right_on="concept_id")
+            if concept_mapping:
+                var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id_mapped", right_on="concept_id")
+            else:
+                var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id", right_on="concept_id")
 
         if instantiate_tensor:
             ds = (
