@@ -13,9 +13,9 @@ Many are also designed to work seamlessly in Binder, a free cloud computing plat
 :maxdepth: 2
 
 getting_started
-example_dataset_physionet2012
-interactive_visualization_of_ehrdata
-omop_tables_tutorial
-advanced_omop_ml
-advanced_physionet2012
+real_dataset_example_physionet2012
+interactive_visualization
+omop_intro
+omop_ml
+physionet2012_ml
 ```
