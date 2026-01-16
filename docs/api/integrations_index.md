@@ -24,5 +24,6 @@
     :nosignatures:
 
     integrations.vitessce.gen_config
+    integrations.vitessce.optimize_and_gen_config
 
 ```
