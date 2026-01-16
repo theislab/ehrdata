@@ -189,7 +189,6 @@ def test_ehrdata_blobs_categories():
         base_timepoints=10,
         sparse=False,
         random_state=42,
-        # missing_values = 0.1
     )
 
     n_numeric = 10 - 2
