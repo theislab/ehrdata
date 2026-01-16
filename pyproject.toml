@@ -48,7 +48,7 @@ optional-dependencies.doc = [
   "myst-nb>=1.1",
   "pandas",
   "scanpydoc",
-  "sphinx>=4",
+  "sphinx>=4,<9",
   "sphinx-autodoc-typehints",
   "sphinx-book-theme>=1",
   "sphinx-copybutton",
