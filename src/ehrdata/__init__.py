@@ -13,8 +13,8 @@ __all__ = [
     "infer_feature_types",
     "integrations",
     "io",
-    "move_to_X",
     "move_to_obs",
+    "move_to_x",
     "replace_feature_types",
 ]
 

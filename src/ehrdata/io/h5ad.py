@@ -76,8 +76,9 @@ def read_h5ad(
             edata = EHRData.from_adata(adata, tem=tem)
 
     if harmonize_missing_values:
-        ed.harmonize_missing_values(edata)
-        logger.info("Harmonizing missing values of X")
+        if edata.X is not None:
+            ed.harmonize_missing_values(edata)
+            logger.info("Harmonizing missing values of X")
 
         for key in edata.layers:
             ed.harmonize_missing_values(edata, layer=key)

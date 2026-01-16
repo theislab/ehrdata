@@ -81,7 +81,7 @@ def test_synthea27nj_omop():
 def test_physionet2012():
     edata = ed.dt.physionet2012(layer=DEFAULT_TEM_LAYER_NAME)
     assert edata.shape == (11988, 37, 48)
-    assert edata.tem.shape == (48, 1)
+    assert edata.tem.shape == (48, 2)
     assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (11988, 37, 48)
     assert edata.obs.shape == (11988, 10)
     assert edata.var.shape == (37, 1)
@@ -123,10 +123,49 @@ def test_physionet2012_arguments():
         drop_samples=None,
     )
     assert edata.shape == (12000, 37, 24)
-    assert edata.tem.shape == (24, 1)
+    assert edata.tem.shape == (24, 2)
     assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (12000, 37, 24)
     assert edata.obs.shape == (12000, 10)
     assert edata.var.shape == (37, 1)
+
+
+def test_physionet2019():
+    edata = ed.dt.physionet2019(layer=DEFAULT_TEM_LAYER_NAME, n_samples=10)
+    assert edata.shape == (10, 35, 48)
+    assert edata.tem.shape == (48, 2)
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (10, 35, 48)
+    assert edata.obs.shape == (10, 6)
+    assert edata.var.shape == (35, 1)
+
+    # check a few hand-picked values for a stricter test
+    # a randomly picked entry, for which verified the values in the source data
+    assert edata.obs.loc["p000667", "training_Set"] == "training_setA"
+    np.allclose(
+        edata.obs.loc["p000667", ["Age", "Gender", "Unit1", "Unit2", "HospAdmTime"]].values,
+        np.array([19.96, 0.0, 1.0, 0.0, -0.02]),
+    )
+
+    np.allclose(
+        edata[edata.obs.index.get_loc("p000667"), "MAP", :5].layers["tem_data"],
+        np.array([np.nan, np.nan, np.nan, 75.67, 87.33]),
+        equal_nan=True,
+    )
+
+
+def test_physionet2019_arguments():
+    edata = ed.dt.physionet2019(
+        layer=DEFAULT_TEM_LAYER_NAME,
+        interval_length_number=2,
+        num_intervals=24,
+        aggregation_strategy="first",
+        drop_samples=None,
+        n_samples=2,
+    )
+    assert edata.shape == (2, 35, 24)
+    assert edata.tem.shape == (24, 2)
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (2, 35, 24)
+    assert edata.obs.shape == (2, 6)
+    assert edata.var.shape == (35, 1)
 
 
 @pytest.mark.parametrize("sparse_param", [False])  # [False, True]
