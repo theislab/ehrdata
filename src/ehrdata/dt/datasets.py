@@ -408,8 +408,31 @@ def physionet2012(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.physionet_2012(layer="tem_data)
-        TODO preview
+        EHRData object with n_obs × n_vars × n_t = 11988 × 37 × 48
+            obs: 'set', 'Age', 'Gender', 'Height', 'ICUType', 'SAPS-I', 'SOFA', 'Length_of_stay', 'Survival', 'In-hospital_death'
+            var: 'Parameter'
+            tem: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47'
+            layers: 'tem_data'
+            shape of .tem_data: (11988, 37, 48)
 
+        Inspect static information
+
+        >>> edata.obs.head()
+                set	Age	Gender	Height	ICUType	SAPS-I	SOFA	Length_of_stay	Survival	In-hospital_death
+        RecordID
+        132539	set-a	54.0	0.0	-1.0	4.0	6	1	5	-1	0
+        132540	set-a	76.0	1.0	175.3	2.0	16	8	8	-1	0
+        132541	set-a	44.0	0.0	-1.0	3.0	21	11	19	-1	0
+        132543	set-a	68.0	1.0	180.3	3.0	7	1	9	575	0
+        132545	set-a	88.0	0.0	-1.0	3.0	17	2	4	918	0
+
+        Inspect the 48-hour trajectory of the variable ``RespRate``:
+
+        >>> edata[edata.obs.index == "132539", edata.var_names == "RespRate"].layers["tem_data"]
+        [[[19., 18., 19., 20., 20., 17., nan, 15., 14., 17., 15., 15.,
+             12., 15., 15., 12., 14., 13., 18., 13., 12., 20., 15., 24.,
+             nan, 16., 19., 18., nan, 16., nan, 18., nan, 18., nan, 20.,
+             nan, 24., 21., 16., 18., 14., 23., 17., 20., 20., 20., 23.]]]
     """
     EXPECTED_PARAMETERS = [
         "ALP",
@@ -510,6 +533,9 @@ def physionet2012(
     obs = obs.merge(person_outcome_df, how="left", left_on="RecordID", right_on="RecordID")
     obs.set_index("RecordID", inplace=True)
 
+    # in order to conveniently save the produced EHRData object: infer to avoid h5ad error b.c. object columns
+    obs = obs.infer_objects()
+
     # consider only time series features from now
     df_dynamic_long = person_long_across_set_df[~person_long_across_set_df["Parameter"].isin(static_features)]
 
@@ -527,12 +553,6 @@ def physionet2012(
     )
 
 
-# TODO:
-# upload to scverse AWS a sample dataset
-# test
-# check documentation
-# sanity check what PyPOTS is doing & try loading theirs once
-# to see features and num obs matches.
 def physionet2019(
     data_path: Path | str | None = None,
     *,
@@ -541,13 +561,11 @@ def physionet2019(
     num_intervals: int = 48,
     aggregation_strategy: str = "last",
     drop_samples: Iterable[str] | None = None,
-    n_subsamples: int | None = None,
+    n_samples: int | None = None,
     subsample_seed: int | None = 0,
     layer: str | None = None,
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2019 (v1.0.0) <https://physionet.org/content/challenge-2019/1.0.0/>`_.
-
-    Truncated if a sample has more `num_intervals` steps; Padded if a sample has less than `num_intervals` steps.
 
     The data consists of 35 dynamic features and 5 static features (`Age`, `Gender`, `Unit1`, `Unit2`, `HospAdmTime`).
     More information on the features can be found on the link above.
@@ -555,11 +573,13 @@ def physionet2019(
     The full dataset consists of 40'336 patients, with values for the 35 dynamic features recorded hourly, and indicated missing if the value is not available.
     This amounts to a final dataset shape of 40'336 x 35 x 48.
 
+    Truncated if a sample has more `num_intervals` steps; Padded if a sample has less than `num_intervals` steps.
+
     The tensor stored in `.layers[layer_name]` is fully compatible with e.g. the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ :cite:`du2023pypots` package, as the `.layers` field of EHRData objects generally is.
 
     Args:
        data_path: Path to the raw data. If the path exists, the data is loaded from there.
-           Else, the data is downloaded. Hint: if you have downloaded the data already from <https://physionet.org/content/challenge-2019/1.0.0/>`_, set this path to the 'training' folder.
+           Else, the data is downloaded. Hint: if you have downloaded the data already from the link above, set this path to the `training` folder.
        interval_length_number: Numeric value of the length of one interval.
        interval_length_unit: Unit belonging to the interval length.
        num_intervals: Number of intervals.
@@ -567,7 +587,7 @@ def physionet2019(
            measurements for a person's parameter within a time interval is available.
            Available are `'first'` and `'last'`, as used in :meth:`~pandas.DataFrame.drop_duplicates`.
        drop_samples: Samples to drop from the dataset (indicate their RecordID).
-       n_subsamples: Number of samples to subsample from the dataset. If not specified, all samples are used.
+       n_samples: Number of samples to subsample from the dataset. If not specified, all samples are used.
        subsample_seed: Seed for the subsampling. If not specified, a random seed is used.
        layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
 
@@ -649,6 +669,13 @@ def physionet2019(
     elif isinstance(data_path, str):
         data_path = Path(data_path)
 
+    _download(
+        url="https://exampledata.scverse.org/ehrapy/training.zip",
+        output_path=data_path,
+        output_filename="training.zip",
+        archive_format="zip",
+    )
+
     temp_data_set_names = ["training_setA", "training_setB"]
 
     static_features = ["Age", "Gender", "Unit1", "Unit2", "HospAdmTime"]
@@ -657,13 +684,13 @@ def physionet2019(
     person_collector_dynamic = {}
 
     for data_subset_dir in temp_data_set_names:
-        if not (data_path / data_subset_dir).exists():
-            err = f"Data path {data_path / data_subset_dir} does not exist. Please make sure you point `data_path` to the 'training' folder of the downloaded data."
+        if not (data_path / "training" / data_subset_dir).exists():
+            err = f"Data path {data_path / 'training' / data_subset_dir} does not exist. Please make sure you point `data_path` to the 'training' folder of the downloaded data."
             raise FileNotFoundError(err)
 
     all_files = []
     for data_subset_dir in temp_data_set_names:
-        all_files.extend((data_path / data_subset_dir).glob("*.psv"))
+        all_files.extend((data_path / "training" / data_subset_dir).glob("*.psv"))
 
     all_files = sorted(all_files)
 
@@ -671,12 +698,12 @@ def physionet2019(
         drop_samples_set = set(drop_samples)
         all_files = [f for f in all_files if f.stem not in drop_samples_set]
 
-    if n_subsamples is not None:
-        if n_subsamples > len(all_files):
-            msg = f"n_subsamples ({n_subsamples}) cannot be greater than the available number of samples ({len(all_files)})"
+    if n_samples is not None:
+        if n_samples > len(all_files):
+            msg = f"n_samples ({n_samples}) cannot be greater than the available number of samples ({len(all_files)})"
             raise ValueError(msg)
         rng = np.random.default_rng(subsample_seed)
-        selected_files = np.sort(rng.choice(len(all_files), size=n_subsamples, replace=False, shuffle=False)).tolist()
+        selected_files = np.sort(rng.choice(len(all_files), size=n_samples, replace=False, shuffle=False)).tolist()
         all_files = np.array(all_files)[selected_files].tolist()
 
     # Now read only the selected files
@@ -754,6 +781,12 @@ def _create_edata_from_physionet_long_format(
         raise ValueError(msg)
 
     interval_df_interval_end_offset_seconds = np.array(interval_df["interval_end_offset"].dt.total_seconds())
+
+    # need to throw out entries that are later in time than the observation time
+    outside_observation_time_mask = df_long_time_seconds <= interval_df_interval_end_offset_seconds.max()
+    df_dynamic_long = df_dynamic_long[outside_observation_time_mask]
+    df_long_time_seconds = df_long_time_seconds[outside_observation_time_mask]
+
     df_long_interval_step = np.argmax(df_long_time_seconds[:, None] <= interval_df_interval_end_offset_seconds, axis=1)
     df_dynamic_long.loc[:, ["interval_step"]] = df_long_interval_step
 
@@ -781,6 +814,11 @@ def _create_edata_from_physionet_long_format(
 
     obs.index = obs.index.astype(str)
     var.index = var.index.astype(str)
+
+    # in order to conveniently save the produced EHRData object: cast problematic types in .obs and .tem
+    obs = obs.infer_objects()
+    for col in tem.columns:
+        tem[col] = tem[col].astype(str)
 
     edata = (
         EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=tem)
