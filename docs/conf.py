@@ -42,6 +42,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinxcontrib.bibtex",
     "sphinx_autodoc_typehints",
+    "sphinx_tabs.tabs",
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinxext.opengraph",
     "scanpydoc.elegant_typehints",
