@@ -7,6 +7,7 @@ from .datasets import (
     mimic_2_preprocessed,
     mimic_iv_omop,
     physionet2012,
+    physionet2019,
     synthea27nj_omop,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "mimic_2_preprocessed",
     "mimic_iv_omop",
     "physionet2012",
+    "physionet2019",
     "synthea27nj_omop",
 ]
