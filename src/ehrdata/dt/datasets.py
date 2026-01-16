@@ -567,13 +567,13 @@ def physionet2019(
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2019 (v1.0.0) <https://physionet.org/content/challenge-2019/1.0.0/>`_.
 
-    The data consists of 35 dynamic features and 5 static features (`Age`, `Gender`, `Unit1`, `Unit2`, `HospAdmTime`).
+    The data consists of 35 time dependent features and 5 static features (`Age`, `Gender`, `Unit1`, `Unit2`, `HospAdmTime`).
     More information on the features can be found on the link above.
 
     The full dataset consists of 40'336 patients, with values for the 35 dynamic features recorded hourly, and indicated missing if the value is not available.
-    This amounts to a final dataset shape of 40'336 x 35 x 48.
+    This amounts to a final dataset shape of 40'336 x 35 x number of considered time steps.
 
-    Truncated if a sample has more `num_intervals` steps; Padded if a sample has less than `num_intervals` steps.
+    The generated `EHRData` object truincates samples if a sample has more `num_intervals` steps; and pads with missing values if a sample has less than `num_intervals` steps.
 
     The tensor stored in `.layers[layer_name]` is fully compatible with e.g. the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ :cite:`du2023pypots` package, as the `.layers` field of EHRData objects generally is.
 
