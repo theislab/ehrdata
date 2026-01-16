@@ -12,9 +12,12 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
  - {func}`~ehrdata.move_to_obs` and {func}`~ehrdata.move_to_x` are new helpers for conveniently moving variables from central 2D arrays to the `.obs` field, and vice versa. ([#199](https://github.com/theislab/ehrdata/pull/201)) @eroell
+  - {func}`~ehrdata.dt.physionet2019` as another out-of-the-box, conveniently available dataset with 40'000 ICU stays from the Physionet 2019 challenge. ([#204](https://github.com/theislab/ehrdata/pull/204)) @eroell
 
 ### Fixed
 - {func}`~ehrdata.io.read_h5ad` fixed issues when `backed=True`. ([#199](https://github.com/theislab/ehrdata/pull/199)) @eroell
+- {func}`~ehrdata.io.read_h5ad` fixed bug when `.X` is `None` and `harmonize_missing_features` is `True`. ([#206](https://github.com/theislab/ehrdata/pull/206)) @eroell
+
 
 ### Maintenance
 - Support Python3.14 ([#194](https://github.com/theislab/ehrdata/pull/194)) @Zethson
