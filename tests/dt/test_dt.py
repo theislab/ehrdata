@@ -176,7 +176,7 @@ def test_ehrdata_blobs(sparse_param):
         n_observations=100,
         n_variables=5,
         base_timepoints=10,
-        n_categorical=2,
+        n_cat_vars=2,
         sparse=sparse_param,
     )
 
