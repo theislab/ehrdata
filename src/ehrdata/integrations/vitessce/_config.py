@@ -62,8 +62,18 @@ def gen_config(
     from vitessce import AnnDataWrapper, VitessceConfig
     from vitessce import Component as cm
 
+    # Auto-detect EHRData zarr stores and use the anndata subdirectory
+    if path is not None and (path / "anndata").exists() and (path / "tem").exists():
+        # This is an EHRData zarr store, use the anndata subdirectory
+        import zarr
+
+        store = zarr.open_group(str(path / "anndata"), mode="r")
+    elif path is not None:
+        # Convert Path to string for vitessce compatibility
+        path = str(path)
+
     wrapper = AnnDataWrapper(
-        adata_path=path,
+        adata_path=path if isinstance(path, str) else None,
         adata_url=url,
         # vitessce is old and doesn't deal with proper Paths
         adata_store=str(store) if isinstance(store, Path) else store,
@@ -87,7 +97,7 @@ def gen_config(
         ),
         (
             vc.add_view(cm.FEATURE_LIST, dataset=dataset),
-            vc.add_view(cm.SCATTERPLOT, dataset=dataset, mapping="PCA"),
+            vc.add_view(cm.SCATTERPLOT, dataset=dataset, mapping="X_PCA"),
             vc.add_view(cm.FEATURE_VALUE_HISTOGRAM, dataset=dataset),
         ),
         (
