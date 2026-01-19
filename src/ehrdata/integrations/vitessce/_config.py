@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from functools import reduce
 from operator import or_, truediv
 from pathlib import Path
@@ -45,6 +46,33 @@ def gen_config(
     Returns:
         A :doc:`Vitessce <vitessce:index>` configuration object.
         Call :meth:`~vitessce.config.VitessceConfig.widget` on it to display it.
+    """
+    warnings.warn(
+        "gen_config is deprecated and will be removed in a future version. Please use gen_default_config instead.",
+        category=FutureWarning,
+        stacklevel=2,
+    )
+    vc = _gen_config(path, store, url, artifact, name, obs_sets, obs_embeddings, description)
+    return vc
+
+
+def _gen_config(path, store, url, artifact, name, obs_sets, obs_embeddings, description):
+    """Generate a VitessceConfig for EHRData.
+
+    Args:
+        path: Path to the data's Zarr store directory.
+        store: The data's Zarr store or a path to it.
+        url: URL pointing to the data's remote Zarr store.
+        artifact: Lamin artifact representing the data.
+        name: Name of the dataset. If None, derived from path.
+        obs_sets: Mapping of observation set paths to names, e.g.
+            {"obs/some_annotation": "My cool annotation"}
+        obs_embeddings: Mapping of observation embedding paths to names, e.g.
+            {"obsm/X_pca": "PCA"}
+        description: Description of the dataset, to be displayed.
+
+    Returns:
+        A :doc:`Vitessce <vitessce:index>` configuration object.
     """
     obs_type = "person"
     feature_type = "variable"
@@ -111,13 +139,11 @@ def gen_config(
         ),
         (
             vc.add_view(cm.FEATURE_LIST, dataset=dataset),
-            # vc.add_view(cm.SCATTERPLOT, dataset=dataset),  # , mapping="X_PCA"
             view1,
             vc.add_view(cm.FEATURE_VALUE_HISTOGRAM, dataset=dataset),
         ),
         (
             vc.add_view(cm.DESCRIPTION, dataset=dataset, mapping="uns/vitessce_description"),
-            # vc.add_view(cm.STATUS, dataset=dataset),
             view2,
             vc.add_view(cm.HEATMAP, dataset=dataset),
         ),
@@ -135,13 +161,12 @@ def gen_config(
     return vc
 
 
-def optimize_and_gen_config(
+def gen_default_config(
     edata: ed.EHRData,
     zarr_filepath: zarr.storage.StoreLike | Path | str = Path("adata_for_vitessce.zarr"),
     *,
     obs_columns: Iterable[str] | None = None,
     obs_embedding: str | None = None,
-    var_cols: Iterable[str] | None = None,
     scatter_var_cols: Iterable[str] | None = None,
     layer="tem_data",
     timestep=0,
@@ -171,7 +196,6 @@ def optimize_and_gen_config(
         obs_labels: Optional dict mapping column names to display labels
         obs_embedding: Embedding key in edata.obsm
         obs_embedding_labels: Optional dict mapping embedding keys to display labels
-        var_cols: Optional list of variable columns to include
         scatter_var_cols: Optional list of 2 variable columns to create ascatterplot from
         layer: Name of the layer to use for visualization. If the layer is 3D (temporal),
                a timestep must be selected. Default is "tem_data"
@@ -182,22 +206,22 @@ def optimize_and_gen_config(
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ed.dt.physionet2012(layer="tem_data)
-        >>> vc = optimize_and_gen_config(
-                edata2,
-                obs_columns=["Gender", "ICUType", "In-hospital_death", "set"],
-                scatter_var_cols=["HR", "NIDiasABP"],
-                obs_embedding="X_pca",
-                layer="tem_data",
-                timestep=10,
-            )
+        >>> edata = ed.dt.physionet2019(
+        ...     layer="tem_data",
+        ...     n_samples=4000,
+        ... )
+        >>> vc = ed.integrations.vitessce.gen_default_config(
+        ...     edata,
+        ...     obs_columns=["Gender", "Age", "training_Set"],
+        ...     scatter_var_cols=["HR", "MAP"],
+        ...     layer="tem_data",
+        ...     timestep=10,
+        ... )
         >>> vc.widget()
 
         .. image:: ../_static/tutorial_images/vitessce_preview.png
     """
     import anndata as ad
-
-    import ehrdata as ed
 
     # required because there are side-effects from modifying the data, but the copy might be avoided in the future
     edata = edata.copy()
@@ -242,9 +266,8 @@ def optimize_and_gen_config(
     Hint: if the heatmap is unicolored, select its gearwheel and adjust the colormap range.
     """
 
-    vc = ed.integrations.vitessce.gen_config(
+    vc = _gen_config(
         path=zarr_filepath,
-        name="PhysioNet 2012 ICU Data",
         obs_sets=obs_sets,
         obs_embeddings=obs_embeddings_dict,
         description=description,

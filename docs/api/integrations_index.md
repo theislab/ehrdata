@@ -23,7 +23,6 @@
     :toctree:
     :nosignatures:
 
-    integrations.vitessce.gen_config
-    integrations.vitessce.optimize_and_gen_config
+    integrations.vitessce.gen_default_config
 
 ```

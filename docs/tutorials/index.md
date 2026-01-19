@@ -10,7 +10,7 @@ Many are also designed to work seamlessly in Binder, a free cloud computing plat
 **The notebooks can be followed in this order:**
 
 1. **[Getting Started](getting_started)** - Learn the basics of the `EHRData` data structure
-2. **[Real Dataset Example: PhysioNet 2012](real_dataset_example_physionet2012)** - Work with a real clinical dataset
+2. **[Real Dataset Example: PhysioNet 2019 (Sepsis)](real_dataset_example_physionet2019)** - Work with a real clinical dataset
 3. **[OMOP Introduction](omop_intro)** - Learn how to read OMOP data into ehrdata
 4. **[OMOP Machine Learning](omop_ml)** - Quickstart to ML workflows based on an OMOP dataset
 5. **[PhysioNet 2012 Machine Learning](physionet2012_ml)** - Another example for an ML prototyping workflow
@@ -20,9 +20,10 @@ Many are also designed to work seamlessly in Binder, a free cloud computing plat
 :maxdepth: 2
 
 getting_started
-real_dataset_example_physionet2012
+real_dataset_example_physionet2019
 omop_intro
 omop_ml
 physionet2012_ml
 interactive_visualization
+lamin
 ```
