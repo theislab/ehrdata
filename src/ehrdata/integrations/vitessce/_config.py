@@ -218,10 +218,13 @@ def optimize_and_gen_config(
 
     obs_sets = {f"obs/{col}": col for col in obs_columns}
 
-    obs_embeddings_dict = {
-        f"obsm/{obs_embedding}": obs_embedding,
-        f"obsm/{scatter_var_cols[0]}_vs_{scatter_var_cols[1]}": f"{scatter_var_cols[0]}_vs_{scatter_var_cols[1]}",
-    }
+    obs_embeddings_dict = {}
+    if obs_embedding is not None:
+        obs_embeddings_dict[f"obsm/{obs_embedding}"] = obs_embedding
+    if scatter_var_cols is not None:
+        obs_embeddings_dict[f"obsm/{scatter_var_cols[0]}_vs_{scatter_var_cols[1]}"] = (
+            f"{scatter_var_cols[0]}_vs_{scatter_var_cols[1]}"
+        )
 
     description = f"""
     Displaying {edata.n_obs} patients with {edata.n_vars} variables.
