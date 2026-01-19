@@ -407,13 +407,9 @@ def setup_variables(
                 concept_mapping = True
                 logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
                 concepts_relationship = backend_handle.sql(
-                    "SELECT * FROM concept_relationship WHERE relationship_id = 'Mapped from'"
+                    "SELECT concept_id_1, concept_id_2 FROM concept_relationship WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)"
                 ).df()
-                concepts_relationship.columns = concepts_relationship.columns.str.lower()
-                concepts_relationship_dedup = concepts_relationship[
-                    ~(concepts_relationship["concept_id_1"] == concepts_relationship["concept_id_2"])
-                ][["concept_id_1", "concept_id_2"]]
-                concepts_dict = concepts_relationship_dedup.set_index("concept_id_1")["concept_id_2"].to_dict()
+                concepts_dict = concepts_relationship.set_index("concept_id_1")["concept_id_2"].to_dict()
                 concepts_mapped_idx = [x not in set(concepts["concept_id"]) for x in var["data_table_concept_id"]]
                 var.loc[concepts_mapped_idx, "data_table_concept_id_mapped"] = var.loc[
                     concepts_mapped_idx, "data_table_concept_id"
@@ -653,13 +649,9 @@ def setup_interval_variables(
                 concept_mapping = True
                 logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
                 concepts_relationship = backend_handle.sql(
-                    "SELECT * FROM concept_relationship WHERE relationship_id = 'Mapped from'"
+                    "SELECT concept_id_1, concept_id_2 FROM concept_relationship WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)"
                 ).df()
-                concepts_relationship.columns = concepts_relationship.columns.str.lower()
-                concepts_relationship_dedup = concepts_relationship[
-                    ~(concepts_relationship["concept_id_1"] == concepts_relationship["concept_id_2"])
-                ][["concept_id_1", "concept_id_2"]]
-                concepts_dict = concepts_relationship_dedup.set_index("concept_id_1")["concept_id_2"].to_dict()
+                concepts_dict = concepts_relationship.set_index("concept_id_1")["concept_id_2"].to_dict()
                 concepts_mapped_idx = [x not in set(concepts["concept_id"]) for x in var["data_table_concept_id"]]
                 var.loc[concepts_mapped_idx, "data_table_concept_id_mapped"] = var.loc[
                     concepts_mapped_idx, "data_table_concept_id"
