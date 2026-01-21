@@ -14,6 +14,7 @@ from ehrdata.io.omop._check_arguments import (
     VALID_OBSERVATION_TABLES_SINGLE,
     _check_valid_aggregation_strategy,
     _check_valid_backend_handle,
+    _check_valid_birthdates_for_person_table,
     _check_valid_concept_ids,
     _check_valid_data_field_to_keep,
     _check_valid_death_table,
@@ -237,7 +238,7 @@ def setup_obs(
     If `observation_table = "person_visit_occurrence"`, the created `EHRData` object will have 300 rows.
 
     The possible choices affect what is taken as the "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.:
-    - If `"person"`, the `birth_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
+    - If `"person"`, the `birth_datetime` will be used as "time 0". **Note:** All persons must have valid (non-NULL) `birth_datetime` values when using this option with setup_variables/setup_interval_variables.
     - If `"person_cohort"`, the `cohort_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
     - If `"person_observation_period"`, the `observation_period_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
     - If `"person_visit_occurrence"`, the `visit_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
@@ -407,6 +408,8 @@ def setup_variables(
     if time_defining_table is None:
         msg = "The observation table must be set up first, use the `setup_obs` function."
         raise ValueError(msg)
+
+    _check_valid_birthdates_for_person_table(backend_handle, time_defining_table)
 
     data_field_to_keep = {k: [*list(v), "unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()}
 
@@ -663,6 +666,8 @@ def setup_interval_variables(
     if time_defining_table is None:
         msg = "The observation table must be set up first, use the `setup_obs` function."
         raise ValueError(msg)
+
+    _check_valid_birthdates_for_person_table(backend_handle, time_defining_table)
 
     var_collector = {}
     r_collector = {}

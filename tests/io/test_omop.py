@@ -1445,6 +1445,59 @@ def test_datetime_precision_fallback_warning(omop_connection_vanilla, data_table
         assert "Time precision" not in caplog.text or "not found" not in caplog.text
 
 
+def test_person_table_requires_valid_birthdates(omop_connection_vanilla):
+    """Test that using person observation table requires all persons to have valid birthdates."""
+    con = omop_connection_vanilla
+
+    # Set one person's birth_datetime to NULL
+    con.execute("UPDATE person SET birth_datetime = NULL WHERE person_id = 1")
+
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person")
+
+    # Should raise ValueError when trying to setup_variables
+    with pytest.raises(ValueError, match=re.escape("with NULL birth_datetime")):
+        ed.io.omop.setup_variables(
+            edata,
+            backend_handle=con,
+            layer=DEFAULT_TEM_LAYER_NAME,
+            data_tables=["measurement"],
+            data_field_to_keep=["value_as_number"],
+            interval_length_number=1,
+            interval_length_unit="day",
+            num_intervals=2,
+        )
+
+    # Restore the birthdate for other tests
+    con.execute("UPDATE person SET birth_datetime = '1970-01-01 00:00:00' WHERE person_id = 1")
+
+
+def test_person_table_with_valid_birthdates(omop_connection_vanilla):
+    """Test that person observation table works when all persons have valid birthdates."""
+    con = omop_connection_vanilla
+
+    # Ensure all persons have birthdates
+    con.execute("UPDATE person SET birth_datetime = '1970-01-01 00:00:00' WHERE birth_datetime IS NULL")
+
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person")
+
+    # Should work without errors
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        time_precision="datetime",
+        num_intervals=2,
+    )
+
+    # Check that data was extracted
+    assert edata.n_obs > 0
+    assert edata.n_vars > 0
+
+
 def test_capital_letters(omop_connection_capital_letters):
     # test capital letters both in table names and column names
     con = omop_connection_capital_letters

@@ -6,6 +6,7 @@ import duckdb
 import pandas as pd
 
 TIME_DEFINING_TABLE_SUBJECT_KEY = {
+    "person": "person_id",
     "visit_occurrence": "person_id",
     "observation_period": "person_id",
     "cohort": "subject_id",
@@ -39,6 +40,7 @@ DATA_TABLE_DATE_KEYS = {
         "specimen": {"date": "specimen_date", "datetime": "specimen_datetime"},
     },
     "start": {
+        "person": {"date": "birth_datetime", "datetime": "birth_datetime"},
         "visit_occurrence": {"date": "visit_start_date", "datetime": "visit_start_datetime"},
         "observation_period": {"date": "observation_period_start_date"},
         "cohort": {"date": "cohort_start_date"},
@@ -188,13 +190,24 @@ def _write_long_time_interval_table(
 
     time_defining_id_key = TIME_DEFINING_TABLE_ID_KEY.get(time_defining_table, "person_id")
 
-    prepare_alias_query = f"""
-        WITH person_time_defining_table AS ( \
+    # Special handling for person table - no join needed, use far future date as end_date
+    if time_defining_table == "person":
+        person_time_defining_cte = f"""WITH person_time_defining_table AS ( \
+            SELECT person_id, person_id as obs_id, {_get_datetime_key("start", time_defining_table, time_precision)} as start_date, CAST('2999-12-31 23:59:59' AS TIMESTAMP) as end_date \
+            FROM person \
+        ), \
+        """
+    else:
+        person_time_defining_cte = f"""WITH person_time_defining_table AS ( \
             SELECT person.person_id as person_id, {time_defining_table}.{time_defining_id_key} as obs_id, {_get_datetime_key("start", time_defining_table, time_precision)} as start_date, {_get_datetime_key("end", time_defining_table, time_precision)} as end_date \
             FROM person \
             JOIN {time_defining_table} ON person.person_id = {time_defining_table}.{TIME_DEFINING_TABLE_SUBJECT_KEY[time_defining_table]} \
         ), \
-        person_data_table AS( \
+        """
+
+    prepare_alias_query = (
+        person_time_defining_cte
+        + f"""person_data_table AS( \
             WITH distinct_data_table_concept_ids AS ( \
                 SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id
                 FROM {data_table} \
@@ -217,6 +230,7 @@ def _write_long_time_interval_table(
             FROM {data_table} \
         ) \
         """
+    )
 
     if keep_date in ["timepoint", "start", "end"]:
         datetime_col = _get_datetime_key(keep_date, data_table, time_precision)
