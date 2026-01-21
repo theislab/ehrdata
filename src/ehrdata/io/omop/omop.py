@@ -26,9 +26,10 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_keep_date,
     _check_valid_num_intervals,
     _check_valid_observation_table,
+    _check_valid_time_precision,
     _check_valid_variable_data_tables,
 )
-from ehrdata.io.omop._queries import _write_long_time_interval_table
+from ehrdata.io.omop._queries import _get_ordered_table, _get_table_join, _write_long_time_interval_table
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -62,7 +63,27 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
 
             # read raw csv as temporary table
             temp_relation = backend_handle.read_csv(path / filename, dtype=dtype)  # noqa: F841
-            backend_handle.execute("CREATE OR REPLACE TABLE temp_table AS SELECT * FROM temp_relation")
+
+            # reading from csv bears risk of not getting correct schema:
+            # enforce the critical date and datetime columns, prone to be read as VARCHAR
+            schema_df = backend_handle.execute("DESCRIBE temp_relation").df()
+            select_parts = []
+            for _, row in schema_df.iterrows():
+                col = row["column_name"]
+                col_lower = col.lower()
+                if col_lower.endswith("_datetime"):
+                    # Cast to TIMESTAMP (handles YYYY-MM-DD HH:MM:SS)
+                    select_parts.append(f'TRY_CAST("{col}" AS TIMESTAMP) AS "{col}"')
+                elif col_lower.endswith("_date"):
+                    # Cast to DATE (handles YYYY-MM-DD)
+                    select_parts.append(f'TRY_CAST("{col}" AS DATE) AS "{col}"')
+                else:
+                    select_parts.append(f'"{col}" AS "{col}"')
+            select_columns = ", ".join(select_parts)
+            create_table_query = f"CREATE OR REPLACE TABLE temp_table AS SELECT {select_columns} FROM temp_relation"
+            backend_handle.execute(create_table_query)
+
+            # backend_handle.execute("CREATE OR REPLACE TABLE temp_table AS SELECT * FROM temp_relation")
 
             # make query to create table with lowercase column names
             column_names = backend_handle.execute("DESCRIBE temp_table").df()["column_name"].values
@@ -197,9 +218,29 @@ def setup_obs(
 ):
     """Setup the observation table for :class:`~ehrdata.EHRData` object.
 
-    For this, a table from the OMOP CDM which represents the "observed unit" via an id should be selected.
-    A unit can be a person, or the data of a person together with either the information from cohort, observation_period, or visit_occurrence.
-    Notice a single person can have multiple of the latter, and as such can appear multiple times.
+    For this, a table from the OMOP CDM which represents what a "row" in the `EHRData` object should represent.
+
+    This will be used to set that start timepoint for the time series data in the `EHRData` object.
+
+    Possible choices are:
+    - `"person"`: One row per person `person_id` in the `person` table
+    - `"person_cohort"`: One row per person `subject_id` in a cohort in the `cohort` table
+    - `"person_observation_period"`: One row per observation_period_id in the `observation_period` table
+    - `"person_visit_occurrence"`: One row per visit_occurrence_id in the `visit_occurrence` table
+
+    Data characterizing the rows such as person demographics, and e.g. visit start and end dates are stored in the `.obs` field of the created `EHRData` object.
+    Notice a single `person_id` can have multiple rows for e.g. `"person_visit_occurrence"` if a person has multiple visit occurrences.
+
+    Example: 1000 person_id in the `person_table`, with 100 people having 1 visit occurrence, 100 people having 2 visit occurrences, and 800 people having no visit occurrences.
+    If `observation_table = "person"`, the created `EHRData` object will have 1000 rows.
+    If `observation_table = "person_visit_occurrence"`, the created `EHRData` object will have 300 rows.
+
+    The possible choices affect what is taken as the "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.:
+    - If `"person"`, the `birth_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
+    - If `"person_cohort"`, the `cohort_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
+    - If `"person_observation_period"`, the `observation_period_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
+    - If `"person_visit_occurrence"`, the `visit_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
+
     For `"person_cohort"`, the `subject_id` of the cohort is considered to be the `person_id` for a join.
 
     Args:
@@ -231,7 +272,7 @@ def setup_obs(
     from ehrdata import EHRData
 
     if observation_table in VALID_OBSERVATION_TABLES_SINGLE:
-        obs = get_table(backend_handle, observation_table)
+        obs = _get_ordered_table(backend_handle, observation_table)
 
     elif observation_table in VALID_OBSERVATION_TABLES_JOIN:
         if observation_table == "person_cohort":
@@ -242,7 +283,7 @@ def setup_obs(
             obs = _get_table_join(backend_handle, "person", "visit_occurrence")
 
     if death_table:
-        death = get_table(backend_handle, "death")
+        death = backend_handle.sql("SELECT * FROM death").df()
         obs = obs.merge(death, how="left", on="person_id")
 
     # AnnData will make this conversion and raise a Warning.
@@ -262,6 +303,7 @@ def setup_variables(
     data_field_to_keep: str | Sequence[str] | dict[str, str | Sequence[str]],
     interval_length_number: int,
     interval_length_unit: str,
+    time_precision: Literal["date", "datetime"] = "date",
     num_intervals: int,
     concept_ids: Literal["all"] | Sequence[int] = "all",
     aggregation_strategy: Literal[
@@ -298,6 +340,7 @@ def setup_variables(
             if multiple data tables are used. For example, if data_tables=['measurement',
             'observation'], data_field_to_keep={'measurement': 'value_as_number',
             'observation': 'value_as_number'}.
+        time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`).
         interval_length_number: Numeric value of the length of one interval.
         interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
         num_intervals: Number of intervals.
@@ -351,6 +394,7 @@ def setup_variables(
     data_field_to_keep = _check_valid_data_field_to_keep(data_field_to_keep, data_tables)
     _check_valid_interval_length_number(interval_length_number)
     _check_valid_interval_length_unit(interval_length_unit)
+    _check_valid_time_precision(time_precision)
     _check_valid_num_intervals(num_intervals)
     _check_valid_concept_ids(concept_ids)
     _check_valid_aggregation_strategy(aggregation_strategy)
@@ -381,6 +425,7 @@ def setup_variables(
             backend_handle=backend_handle,
             time_defining_table=time_defining_table,
             data_table=data_table,
+            time_precision=time_precision,
             data_field_to_keep=data_field_to_keep[data_table],
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
@@ -450,7 +495,7 @@ def setup_variables(
         if instantiate_tensor:
             ds = (
                 (backend_handle.execute(f"SELECT * FROM long_person_timestamp_feature_value_{data_table}").df())
-                .set_index(["person_id", "data_table_concept_id", "interval_step"])
+                .set_index(["obs_id", "data_table_concept_id", "interval_step"])
                 .to_xarray()
             )
             # order the values in ds according to the order in var
@@ -519,6 +564,7 @@ def setup_interval_variables(
         "episode",
     ],
     data_field_to_keep: str | Sequence[str] | dict[str, str | Sequence[str]],
+    time_precision: Literal["date", "datetime"] = "date",
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
@@ -554,6 +600,7 @@ def setup_interval_variables(
            if multiple data tables are used. For example, if data_tables=['measurement',
            'observation'], data_field_to_keep={'measurement': 'value_as_number',
            'observation': 'value_as_number'}.
+       time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`).
        interval_length_number: Numeric value of the length of one interval.
        interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
        num_intervals: Number of intervals.
@@ -602,6 +649,7 @@ def setup_interval_variables(
     data_field_to_keep = _check_valid_data_field_to_keep(data_field_to_keep, data_tables)
     _check_valid_interval_length_number(interval_length_number)
     _check_valid_interval_length_unit(interval_length_unit)
+    _check_valid_time_precision(time_precision)
     _check_valid_num_intervals(num_intervals)
     _check_valid_concept_ids(concept_ids)
     _check_valid_aggregation_strategy(aggregation_strategy)
@@ -629,6 +677,7 @@ def setup_interval_variables(
             backend_handle=backend_handle,
             time_defining_table=time_defining_table,
             data_table=data_table,
+            time_precision=time_precision,
             data_field_to_keep=data_field_to_keep[data_table],
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
@@ -671,7 +720,7 @@ def setup_interval_variables(
         if instantiate_tensor:
             ds = (
                 (backend_handle.execute(f"SELECT * FROM long_person_timestamp_feature_value_{data_table}").df())
-                .set_index(["person_id", "data_table_concept_id", "interval_step"])
+                .set_index(["obs_id", "data_table_concept_id", "interval_step"])
                 .to_xarray()
             )
             ds = ds.sel(data_table_concept_id=var["data_table_concept_id"].values)
@@ -706,28 +755,3 @@ def setup_interval_variables(
         edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
     return edata
-
-
-def get_table(duckdb_instance, table_name: str) -> pd.DataFrame:
-    """Extract a table of an OMOP CDM Database."""
-    return _lowercase_column_names(duckdb_instance.sql(f"SELECT * FROM {table_name}").df())
-
-
-def _get_table_join(
-    duckdb_instance, table1: str, table2: str, left_key: str = "person_id", right_key: str = "person_id"
-) -> pd.DataFrame:
-    """Extract a table of an OMOP CDM Database."""
-    return _lowercase_column_names(
-        duckdb_instance.sql(
-            f"SELECT * \
-        FROM {table1} as t1 \
-        JOIN {table2} as t2 ON t1.{left_key} = t2.{right_key} \
-        "
-        ).df()
-    )
-
-
-def _lowercase_column_names(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize all column names to lowercase."""
-    df.columns = map(str.lower, df.columns)  # Convert all column names to lowercase
-    return df

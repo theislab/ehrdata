@@ -23,6 +23,7 @@ VALID_INTERVAL_VARIABLE_TABLES = [
     "episode",
 ]
 VALID_KEEP_DATES = ["start", "end", "interval"]
+VALID_TIME_PRECISIONS = ["date", "datetime"]
 
 
 def _check_valid_backend_handle(backend_handle) -> None:
@@ -163,4 +164,13 @@ def _check_valid_keep_date(keep_date: str) -> None:
         raise TypeError(msg)
     if keep_date not in VALID_KEEP_DATES:
         msg = f"keep_date must be one of {VALID_KEEP_DATES}."
+        raise ValueError(msg)
+
+
+def _check_valid_time_precision(time_precision: str) -> None:
+    if not isinstance(time_precision, str):
+        msg = "Expected time_precision to be a string."
+        raise TypeError(msg)
+    if time_precision not in VALID_TIME_PRECISIONS:
+        msg = f"time_precision must be one of {VALID_TIME_PRECISIONS}."
         raise ValueError(msg)

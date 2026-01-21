@@ -71,19 +71,34 @@ VAR_MAPPING_INFO = [2000030004, 2000001003]
 
 
 @pytest.mark.parametrize(
-    ("observation_table", "death_table", "expected_length", "expected_obs_num_columns"),
+    (
+        "observation_table",
+        "death_table",
+        "expected_length",
+        "expected_obs_num_columns",
+        "expected_row_identifier_key",
+        "expected_row_identifier_values",
+    ),
     [
-        ("person", False, 4, 18),
-        ("person", True, 4, 24),
-        ("person_cohort", False, 3, 22),
-        ("person_cohort", True, 3, 28),
-        ("person_observation_period", False, 3, 23),
-        ("person_observation_period", True, 3, 29),
-        ("person_visit_occurrence", False, 3, 35),
-        ("person_visit_occurrence", True, 3, 41),
+        ("person", False, 4, 18, "person_id", [1, 2, 3, 4]),
+        ("person", True, 4, 24, "person_id", [1, 2, 3, 4]),
+        ("person_cohort", False, 3, 22, "subject_id", [1, 2, 3]),
+        ("person_cohort", True, 3, 28, "subject_id", [1, 2, 3]),
+        ("person_observation_period", False, 3, 23, "observation_period_id", [1, 2, 3]),
+        ("person_observation_period", True, 3, 29, "observation_period_id", [1, 2, 3]),
+        ("person_visit_occurrence", False, 3, 35, "visit_occurrence_id", [1, 2, 3]),
+        ("person_visit_occurrence", True, 3, 41, "visit_occurrence_id", [1, 2, 3]),
     ],
 )
-def test_setup_obs(omop_connection_vanilla, observation_table, death_table, expected_length, expected_obs_num_columns):
+def test_setup_obs(
+    omop_connection_vanilla,
+    observation_table,
+    death_table,
+    expected_length,
+    expected_obs_num_columns,
+    expected_row_identifier_key,
+    expected_row_identifier_values,
+):
     con = omop_connection_vanilla
     edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table, death_table=death_table)
     assert isinstance(edata, ed.EHRData)
@@ -91,6 +106,15 @@ def test_setup_obs(omop_connection_vanilla, observation_table, death_table, expe
     # 4 persons, only 3 are in cohort, or have observation period, or visit occurrence
     assert len(edata) == expected_length
     assert edata.obs.shape[1] == expected_obs_num_columns
+
+    assert np.array_equal(
+        edata.obs[expected_row_identifier_key].values,
+        np.array(expected_row_identifier_values, dtype=np.int64),
+    )
+
+
+# person_id: 1, 2, 3, 4
+# observation_period_id [1, 2, 3]
 
 
 @pytest.mark.parametrize(
@@ -139,9 +163,9 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
             ["measurement"],
             ["value_as_number"],
             [
-                [[np.nan, np.nan, np.nan, np.nan], [18.0, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [20.0, np.nan, np.nan, np.nan]],
-                [[np.nan, np.nan, np.nan, np.nan], [22.0, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [19.0, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [21.0, np.nan, np.nan, np.nan]],
+                [[np.nan, np.nan, np.nan, np.nan], [23.0, np.nan, np.nan, np.nan]],
             ],
             MEASUREMENT_VAR,
         ),
@@ -193,7 +217,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
             [
                 [
                     [np.nan, np.nan, np.nan, np.nan],
-                    [18.0, np.nan, np.nan, np.nan],
+                    [19.0, np.nan, np.nan, np.nan],
                     [1.0, np.nan, np.nan, np.nan],
                     [1.0, np.nan, np.nan, np.nan],
                     [0.5, np.nan, np.nan, np.nan],
@@ -201,7 +225,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
                 ],
                 [
                     [np.nan, np.nan, np.nan, np.nan],
-                    [20.0, np.nan, np.nan, np.nan],
+                    [21.0, np.nan, np.nan, np.nan],
                     [1.0, np.nan, np.nan, np.nan],
                     [1.0, np.nan, np.nan, np.nan],
                     [0.5, np.nan, np.nan, np.nan],
@@ -209,7 +233,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
                 ],
                 [
                     [np.nan, np.nan, np.nan, np.nan],
-                    [22.0, np.nan, np.nan, np.nan],
+                    [23.0, np.nan, np.nan, np.nan],
                     [1.0, np.nan, np.nan, np.nan],
                     [1.0, np.nan, np.nan, np.nan],
                     [0.5, np.nan, np.nan, np.nan],
@@ -228,6 +252,10 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
     "enrich_var_with_unit_info",
     [True, False],
 )
+@pytest.mark.parametrize(
+    "time_precision",
+    ["date", "datetime"],
+)
 def test_setup_variables(
     omop_connection_vanilla,
     observation_table,
@@ -235,6 +263,7 @@ def test_setup_variables(
     data_field_to_keep,
     enrich_var_with_feature_info,
     enrich_var_with_unit_info,
+    time_precision,
     target_R,
     target_var,
 ):
@@ -249,6 +278,7 @@ def test_setup_variables(
         data_field_to_keep=data_field_to_keep,
         interval_length_number=1,
         interval_length_unit="day",
+        time_precision=time_precision,
         num_intervals=num_intervals,
         enrich_var_with_feature_info=enrich_var_with_feature_info,
         enrich_var_with_unit_info=enrich_var_with_unit_info,
@@ -727,11 +757,16 @@ def test_setup_variables(
     "enrich_var_with_feature_info",
     [False, True],
 )
+# @pytest.mark.parametrize(
+#     "time_precision",
+#     ["date", "datetime"],
+# )
 def test_setup_interval_type_variables(
     omop_connection_vanilla,
     observation_table,
     data_tables,
     data_field_to_keep,
+    # time_precision,
     target_R,
     enrich_var_with_feature_info,
     keep_date,
@@ -748,6 +783,7 @@ def test_setup_interval_type_variables(
         data_field_to_keep=data_field_to_keep,
         interval_length_number=1,
         interval_length_unit="day",
+        # time_precision=time_precision,
         num_intervals=num_intervals,
         enrich_var_with_feature_info=enrich_var_with_feature_info,
         keep_date=keep_date,
@@ -774,6 +810,7 @@ def test_setup_interval_type_variables(
         "data_field_to_keep",
         "interval_length_number",
         "interval_length_unit",
+        "time_precision",
         "num_intervals",
         "enrich_var_with_feature_info",
         "enrich_var_with_unit_info",
@@ -787,6 +824,7 @@ def test_setup_interval_type_variables(
             ["value_as_number"],
             1,
             "day",
+            "date",
             4,
             False,
             False,
@@ -799,6 +837,7 @@ def test_setup_interval_type_variables(
             ["value_as_number"],
             1,
             "day",
+            "date",
             4,
             False,
             False,
@@ -811,6 +850,7 @@ def test_setup_interval_type_variables(
             ["value_as_number"],
             1,
             "day",
+            "date",
             4,
             False,
             False,
@@ -823,6 +863,7 @@ def test_setup_interval_type_variables(
             123,
             1,
             "day",
+            "date",
             4,
             False,
             False,
@@ -835,6 +876,7 @@ def test_setup_interval_type_variables(
             ["value_as_number"],
             1,
             "day",
+            "date",
             4,
             False,
             False,
@@ -847,6 +889,7 @@ def test_setup_interval_type_variables(
             {"measurement": 123},
             1,
             "day",
+            "date",
             4,
             False,
             False,
@@ -859,6 +902,7 @@ def test_setup_interval_type_variables(
             ["value_as_number"],
             "wrong_type",
             "day",
+            "date",
             4,
             False,
             False,
@@ -871,6 +915,7 @@ def test_setup_interval_type_variables(
             ["value_as_number"],
             1,
             123,
+            "date",
             4,
             False,
             False,
@@ -883,6 +928,20 @@ def test_setup_interval_type_variables(
             ["value_as_number"],
             1,
             "day",
+            123,
+            4,
+            False,
+            False,
+            "Expected time_precision to be a string.",
+        ),
+        (
+            None,
+            None,
+            ["measurement"],
+            ["value_as_number"],
+            1,
+            "day",
+            "date",
             "wrong_type",
             False,
             False,
@@ -895,6 +954,7 @@ def test_setup_interval_type_variables(
             ["value_as_number"],
             1,
             "day",
+            "date",
             123,
             "wrong_type",
             False,
@@ -907,6 +967,7 @@ def test_setup_interval_type_variables(
             ["value_as_number"],
             1,
             "day",
+            "date",
             123,
             False,
             "wrong_type",
@@ -922,6 +983,7 @@ def test_setup_variables_illegal_argument_types(
     data_field_to_keep,
     interval_length_number,
     interval_length_unit,
+    time_precision,
     num_intervals,
     enrich_var_with_feature_info,
     enrich_var_with_unit_info,
@@ -937,6 +999,7 @@ def test_setup_variables_illegal_argument_types(
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
+            time_precision=time_precision,
             num_intervals=num_intervals,
             enrich_var_with_feature_info=enrich_var_with_feature_info,
             enrich_var_with_unit_info=enrich_var_with_unit_info,
@@ -951,6 +1014,7 @@ def test_setup_variables_illegal_argument_types(
         "data_field_to_keep",
         "interval_length_number",
         "interval_length_unit",
+        "time_precision",
         "num_intervals",
         "enrich_var_with_feature_info",
         "expected_error",
@@ -963,6 +1027,7 @@ def test_setup_variables_illegal_argument_types(
             ["is_present"],
             1,
             "day",
+            "date",
             4,
             False,
             "Expected edata to be of type EHRData.",
@@ -974,6 +1039,7 @@ def test_setup_variables_illegal_argument_types(
             ["is_present"],
             1,
             "day",
+            "date",
             4,
             False,
             "Expected backend_handle to be of type DuckDBPyConnection.",
@@ -985,6 +1051,7 @@ def test_setup_variables_illegal_argument_types(
             ["is_present"],
             1,
             "day",
+            "date",
             4,
             False,
             "Expected data_tables to be a string or Sequence.",
@@ -996,6 +1063,7 @@ def test_setup_variables_illegal_argument_types(
             123,
             1,
             "day",
+            "date",
             4,
             False,
             "Expected data_field_to_keep to be a string, Sequence, or dict, but is <class 'int'>",
@@ -1007,6 +1075,7 @@ def test_setup_variables_illegal_argument_types(
             ["is_present"],
             1,
             "day",
+            "date",
             4,
             False,
             "data_field_to_keep must be a dictionary if more than one data table is used.",
@@ -1018,6 +1087,7 @@ def test_setup_variables_illegal_argument_types(
             {"drug_exposure": 123},
             1,
             "day",
+            "date",
             4,
             False,
             "data_field_to_keep values must be a string or Sequence.",
@@ -1029,6 +1099,7 @@ def test_setup_variables_illegal_argument_types(
             ["is_present"],
             "wrong_type",
             "day",
+            "date",
             4,
             False,
             "Expected interval_length_number to be an integer.",
@@ -1040,6 +1111,7 @@ def test_setup_variables_illegal_argument_types(
             ["value_as_number"],
             1,
             123,
+            "date",
             4,
             False,
             "Expected interval_length_unit to be a string.",
@@ -1051,6 +1123,19 @@ def test_setup_variables_illegal_argument_types(
             ["is_present"],
             1,
             "day",
+            123,
+            4,
+            False,
+            "Expected time_precision to be a string.",
+        ),
+        (
+            None,
+            None,
+            ["drug_exposure"],
+            ["is_present"],
+            1,
+            "day",
+            "date",
             "wrong_type",
             False,
             "Expected num_intervals to be an integer.",
@@ -1062,6 +1147,7 @@ def test_setup_variables_illegal_argument_types(
             ["is_present"],
             1,
             "day",
+            "date",
             123,
             "wrong_type",
             "Expected enrich_var_with_feature_info to be a boolean.",
@@ -1076,6 +1162,7 @@ def test_setup_interval_variables_illegal_argument_types(
     data_field_to_keep,
     interval_length_number,
     interval_length_unit,
+    time_precision,
     num_intervals,
     enrich_var_with_feature_info,
     expected_error,
@@ -1090,6 +1177,7 @@ def test_setup_interval_variables_illegal_argument_types(
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
+            time_precision=time_precision,
             num_intervals=num_intervals,
             enrich_var_with_feature_info=enrich_var_with_feature_info,
         )
@@ -1103,6 +1191,7 @@ def test_setup_interval_variables_illegal_argument_types(
         "data_field_to_keep",
         "interval_length_number",
         "interval_length_unit",
+        "time_precision",
         "num_intervals",
         "enrich_var_with_feature_info",
         "enrich_var_with_unit_info",
@@ -1116,6 +1205,7 @@ def test_setup_interval_variables_illegal_argument_types(
             ["value_as_number"],
             1,
             "day",
+            "date",
             4,
             False,
             False,
@@ -1128,10 +1218,24 @@ def test_setup_interval_variables_illegal_argument_types(
             {"measurement": "value_as_number"},
             1,
             "day",
+            "date",
             4,
             False,
             False,
             "data_field_to_keep keys must be equal to data_tables.",
+        ),
+        (
+            None,
+            None,
+            ["measurement"],
+            ["value_as_number"],
+            1,
+            "day",
+            "invalid",
+            4,
+            False,
+            False,
+            re.escape("time_precision must be one of ['date', 'datetime']."),
         ),
     ],
 )
@@ -1143,6 +1247,7 @@ def test_setup_variables_illegal_argument_values(
     data_field_to_keep,
     interval_length_number,
     interval_length_unit,
+    time_precision,
     num_intervals,
     enrich_var_with_feature_info,
     enrich_var_with_unit_info,
@@ -1158,6 +1263,7 @@ def test_setup_variables_illegal_argument_values(
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
+            time_precision=time_precision,
             num_intervals=num_intervals,
             enrich_var_with_feature_info=enrich_var_with_feature_info,
             enrich_var_with_unit_info=enrich_var_with_unit_info,
@@ -1172,6 +1278,7 @@ def test_setup_variables_illegal_argument_values(
         "data_field_to_keep",
         "interval_length_number",
         "interval_length_unit",
+        "time_precision",
         "num_intervals",
         "enrich_var_with_feature_info",
         "expected_error",
@@ -1184,6 +1291,7 @@ def test_setup_variables_illegal_argument_values(
             ["is_present"],
             1,
             "day",
+            "date",
             4,
             False,
             re.escape(
@@ -1197,9 +1305,22 @@ def test_setup_variables_illegal_argument_values(
             {"drug_exposure": "is_present"},
             1,
             "day",
+            "date",
             4,
             False,
             "data_field_to_keep keys must be equal to data_tables.",
+        ),
+        (
+            None,
+            None,
+            ["drug_exposure"],
+            ["is_present"],
+            1,
+            "day",
+            "invalid",
+            4,
+            False,
+            re.escape("time_precision must be one of ['date', 'datetime']."),
         ),
     ],
 )
@@ -1211,6 +1332,7 @@ def test_setup_interval_variables_illegal_argument_values(
     data_field_to_keep,
     interval_length_number,
     interval_length_unit,
+    time_precision,
     num_intervals,
     enrich_var_with_feature_info,
     expected_error,
@@ -1225,6 +1347,7 @@ def test_setup_interval_variables_illegal_argument_values(
             data_field_to_keep=data_field_to_keep,
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
+            time_precision=time_precision,
             num_intervals=num_intervals,
             enrich_var_with_feature_info=enrich_var_with_feature_info,
         )
@@ -1314,3 +1437,158 @@ def test_multiple_units(omop_connection_multiple_units, caplog):
     )
     # assert edata.shape == (1, 0)
     assert "multiple units for features: [[0]\n [1]]\n" in caplog.text
+
+
+def test_multiple_visit_occurrences_for_single_patient(omop_connection_multiple_visit_occurrences):
+    """Test that multiple visits for a single patient are handled correctly.
+
+    Person 1 has 2 visits (visit_occurrence_id 1 and 4).
+    The obs should have 4 rows total (one per visit occurrence).
+    """
+    con = omop_connection_multiple_visit_occurrences
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+
+    assert edata.n_obs == 4
+
+    assert np.array_equal(edata.obs["visit_occurrence_id"].values, np.array([1, 2, 3, 4], dtype=np.int64)), (
+        f"visit_occurrence_id not ordered correctly: {edata.obs['visit_occurrence_id'].values}"
+    )
+
+    assert np.array_equal(edata.obs["person_id"].values, np.array([1, 2, 3, 1], dtype=np.int64))
+
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=2,
+    )
+
+    assert np.allclose(
+        np.array(edata[edata.obs["person_id"] == 3, edata.var["data_table_concept_id"] == 3031147].layers["tem_data"]),
+        np.array([23.0, np.nan]),
+        equal_nan=True,
+    )
+
+    assert np.allclose(
+        np.array(
+            edata[edata.obs["visit_occurrence_id"] == 4, edata.var["data_table_concept_id"] == 3031147].layers[
+                "tem_data"
+            ]
+        ),
+        np.array([[[29.0, np.nan]]]),
+        equal_nan=True,
+    )
+
+
+def test_multiple_visit_occurrences_for_single_patient_datetime(omop_connection_multiple_visit_occurrences):
+    """Test that multiple visits for a single patient are handled correctly.
+
+    Person 1 has 2 visits (visit_occurrence_id 1 and 4).
+    The obs should have 4 rows total (one per visit occurrence).
+    """
+    con = omop_connection_multiple_visit_occurrences
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+
+    assert edata.n_obs == 4
+
+    assert np.array_equal(edata.obs["visit_occurrence_id"].values, np.array([1, 2, 3, 4], dtype=np.int64)), (
+        f"visit_occurrence_id not ordered correctly: {edata.obs['visit_occurrence_id'].values}"
+    )
+
+    assert np.array_equal(edata.obs["person_id"].values, np.array([1, 2, 3, 1], dtype=np.int64))
+
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        time_precision="date",
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=2,
+    )
+
+    assert np.allclose(
+        np.array(edata[edata.obs["person_id"] == 3, edata.var["data_table_concept_id"] == 3031147].layers["tem_data"]),
+        np.array([23.0, np.nan]),
+        equal_nan=True,
+    )
+
+    assert np.allclose(
+        np.array(
+            edata[edata.obs["visit_occurrence_id"] == 4, edata.var["data_table_concept_id"] == 3031147].layers[
+                "tem_data"
+            ]
+        ),
+        np.array([[[29.0, np.nan]]]),
+        equal_nan=True,
+    )
+
+
+def test_multiple_visit_occurrences_for_single_patient_datetime_specific(omop_connection_multiple_visit_occurrences):
+    """Test that multiple visits for a single patient are handled correctly.
+
+    Person 1 has 2 visits (visit_occurrence_id 1 and 4).
+    The obs should have 4 rows total (one per visit occurrence).
+    """
+    con = omop_connection_multiple_visit_occurrences
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+
+    assert edata.n_obs == 4
+
+    assert np.array_equal(edata.obs["visit_occurrence_id"].values, np.array([1, 2, 3, 4], dtype=np.int64)), (
+        f"visit_occurrence_id not ordered correctly: {edata.obs['visit_occurrence_id'].values}"
+    )
+
+    assert np.array_equal(edata.obs["person_id"].values, np.array([1, 2, 3, 1], dtype=np.int64))
+
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        time_precision="datetime",
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="h",
+        num_intervals=24,
+    )
+    assert np.allclose(
+        edata[0, 1, :].layers["tem_data"],
+        np.array(
+            [
+                [
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    18.0,
+                    19.0,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                ]
+            ]
+        ),
+        equal_nan=True,
+    )

@@ -299,6 +299,14 @@ def omop_connection_multiple_units():
     con.close()
 
 
+@pytest.fixture
+def omop_connection_multiple_visit_occurrences():
+    con = duckdb.connect()
+    setup_connection(path="tests/data/toy_omop/multiple_visit_occurrences", backend_handle=con)
+    yield con
+    con.close()
+
+
 def _assert_io_read(edata: EHRData):
     """Assert the test zarr and h5ad files are read correctly."""
     assert "survival" in edata.obs.columns
