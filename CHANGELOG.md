@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning][].
 - Address `FutureWarning`s across multiple places ([#200](https://github.com/theislab/ehrdata/pull/200)) @eroell
 
 ### Modified
-- Dataset generator function `ed.dt.ehrdata_blobs` now takes `n_cat_var` and `n_categories` arguments to generate categorical (integer encoded) time series data
+- Dataset generator function `ed.dt.ehrdata_blobs` now takes `n_cat_var` and `n_categories` arguments to generate categorical (integer encoded) time series data ([#207](https://github.com/theislab/ehrdata/pull/207)) @sueoglu
 
 ## [0.0.10]
 
