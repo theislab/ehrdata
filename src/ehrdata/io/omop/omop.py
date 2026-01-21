@@ -28,6 +28,7 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_observation_table,
     _check_valid_time_precision,
     _check_valid_variable_data_tables,
+    _warn_time_precision_interval_mismatch,
 )
 from ehrdata.io.omop._queries import _get_ordered_table, _get_table_join, _write_long_time_interval_table
 
@@ -395,6 +396,7 @@ def setup_variables(
     _check_valid_interval_length_number(interval_length_number)
     _check_valid_interval_length_unit(interval_length_unit)
     _check_valid_time_precision(time_precision)
+    _warn_time_precision_interval_mismatch(interval_length_unit, time_precision)
     _check_valid_num_intervals(num_intervals)
     _check_valid_concept_ids(concept_ids)
     _check_valid_aggregation_strategy(aggregation_strategy)
@@ -650,6 +652,7 @@ def setup_interval_variables(
     _check_valid_interval_length_number(interval_length_number)
     _check_valid_interval_length_unit(interval_length_unit)
     _check_valid_time_precision(time_precision)
+    _warn_time_precision_interval_mismatch(interval_length_unit, time_precision)
     _check_valid_num_intervals(num_intervals)
     _check_valid_concept_ids(concept_ids)
     _check_valid_aggregation_strategy(aggregation_strategy)

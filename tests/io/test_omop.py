@@ -1353,6 +1353,98 @@ def test_setup_interval_variables_illegal_argument_values(
         )
 
 
+@pytest.mark.parametrize(
+    ("interval_length_unit", "time_precision", "should_warn"),
+    [
+        ("hour", "date", True),
+        ("minute", "date", True),
+        ("second", "date", True),
+        ("ms", "date", True),
+        ("day", "date", False),
+        ("hour", "datetime", False),
+    ],
+)
+def test_time_precision_interval_mismatch_warning(
+    omop_connection_vanilla, interval_length_unit, time_precision, should_warn, caplog
+):
+    """Test that warnings are logged for fine-grained intervals with date precision."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_cohort")
+
+    # Test setup_variables
+    caplog.clear()
+    ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit=interval_length_unit,
+        time_precision=time_precision,
+        num_intervals=2,
+    )
+
+    if should_warn:
+        assert "Using interval_length_unit" in caplog.text
+    else:
+        assert "Using interval_length_unit" not in caplog.text
+
+    # Test setup_interval_variables
+    caplog.clear()
+    ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["is_present"],
+        interval_length_number=1,
+        interval_length_unit=interval_length_unit,
+        time_precision=time_precision,
+        num_intervals=2,
+    )
+
+    if should_warn:
+        assert "Using interval_length_unit" in caplog.text
+    else:
+        assert "Using interval_length_unit" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("data_table", "time_precision", "should_warn"),
+    [
+        ("drug_era", "datetime", True),
+        ("dose_era", "datetime", True),
+        ("condition_era", "datetime", True),
+        ("drug_era", "date", False),
+        ("drug_exposure", "datetime", False),
+    ],
+)
+def test_datetime_precision_fallback_warning(omop_connection_vanilla, data_table, time_precision, should_warn, caplog):
+    """Test that warnings are logged when datetime precision is requested but not available."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_cohort")
+
+    caplog.clear()
+    ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=[data_table],
+        data_field_to_keep=["is_present"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        time_precision=time_precision,
+        num_intervals=2,
+    )
+
+    if should_warn:
+        assert "Time precision datetime not available" in caplog.text
+        assert "Using '...date' and midnight" in caplog.text
+    else:
+        assert "Time precision" not in caplog.text or "not found" not in caplog.text
+
+
 def test_capital_letters(omop_connection_capital_letters):
     # test capital letters both in table names and column names
     con = omop_connection_capital_letters

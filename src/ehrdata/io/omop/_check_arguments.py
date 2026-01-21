@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 import duckdb
@@ -174,3 +175,48 @@ def _check_valid_time_precision(time_precision: str) -> None:
     if time_precision not in VALID_TIME_PRECISIONS:
         msg = f"time_precision must be one of {VALID_TIME_PRECISIONS}."
         raise ValueError(msg)
+
+
+def _warn_time_precision_interval_mismatch(interval_length_unit: str, time_precision: str) -> None:
+    """Warn if using fine-grained time intervals with date-only precision.
+
+    https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timedelta.html
+
+    Args:
+        interval_length_unit: The unit for interval length (e.g., 'day', 'hour', 'minute', 'second').
+        time_precision: The time precision ('date' or 'datetime').
+    """
+    fine_grained_units = [
+        "hours",
+        "hour",
+        "hr",
+        "h",
+        "minutes",
+        "minute",
+        "min",
+        "m",
+        "seconds",
+        "second",
+        "sec",
+        "s",
+        "milliseconds",
+        "millisecond",
+        "millis",
+        "milli",
+        "ms",
+        "microseconds",
+        "microsecond",
+        "micros",
+        "micro",
+        "us",
+        "nanoseconds",
+        "nanosecond",
+        "nanos",
+        "nano",
+        "ns",
+    ]
+    if time_precision == "date" and interval_length_unit.lower() in fine_grained_units:
+        logging.warning(
+            f"Using interval_length_unit='{interval_length_unit}' with time_precision='date' may lead to "
+            f"unexpected results. Consider using time_precision='datetime' for fine-grained time intervals. ",
+        )

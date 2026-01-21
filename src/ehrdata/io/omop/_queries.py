@@ -80,7 +80,7 @@ def _get_datetime_key(
     value = DATA_TABLE_DATE_KEYS[key][data_table].get(time_precision)
     if not value:
         logging.warning(
-            f"Time precision {time_precision} not found for data table {data_table}. Using date and midnight instead."
+            f"Time precision {time_precision} not available for data table {data_table}. Using '...date' and midnight (00:00:00) as '...datetime' instead. Consider using time_precision='date' and less fine-grained intervals when working with this table."
         )
         value = DATA_TABLE_DATE_KEYS[key][data_table]["date"]
     return value
