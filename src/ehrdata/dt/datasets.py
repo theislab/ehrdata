@@ -74,6 +74,16 @@ def ehrdata_blobs(
 
     .. image:: /_static/tutorial_images/ehrdata_blobs.png
        :alt: EHR data blobs visualization
+
+    Categorical variables can be generated with different cardinalities per variable
+    (e.g. 2, 3, 4 categories). Different clusters (groups) can also exhibit different
+    category distributions:
+
+    .. image:: /_static/tutorial_images/ehrdata_blobs_categorical_5_groups.png
+       :alt: Histograms of categorical variables by group (5 clusters)
+
+    .. image:: /_static/tutorial_images/ehrdata_blobs_categorical_20_groups.png
+       :alt: Histograms of categorical variables by group (20 clusters)
     """
     rng = np.random.default_rng(random_state if isinstance(random_state, int) else None)
 

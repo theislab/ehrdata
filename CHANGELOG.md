@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning][].
 - Support Python3.14 ([#194](https://github.com/theislab/ehrdata/pull/194)) @Zethson
 - Address `FutureWarning`s across multiple places ([#200](https://github.com/theislab/ehrdata/pull/200)) @eroell
 
+### Modified
+- Dataset generator function `ed.dt.ehrdata_blobs` now takes `n_cat_var` and `n_categories` arguments to generate categorical (integer encoded) time series data
+
 ## [0.0.10]
 
 {class}`~ehrdata.EHRData` drops the `.R` field, and now supports 3D data storage in any slot of `.layers`. See the {doc}`tutorials/getting_started` tutorial for an introduction to this behaviour. In the future, `.X` will be enabled soon for 3D data storage as well.
