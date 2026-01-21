@@ -48,7 +48,7 @@ def ehrdata_blobs(
     Args:
         layer: The name of the layer to store the data in. If not specified, uses `X`.
         n_variables: Dimension of feature space.
-        n_cat_vars: Number of categorical variables
+        n_cat_vars: Number of categorical variables.
         n_categories: List of cardinalities for each categorical variable.
         n_centers: Number of cluster centers.
         cluster_std: Standard deviation of clusters.
@@ -83,6 +83,9 @@ def ehrdata_blobs(
             raise ValueError(msg)
         if n_categories is None:
             n_categories = rng.integers(2, 4, size=n_cat_vars).tolist()
+        if n_categories is not None and len(n_categories) != n_cat_vars:
+            msg = f"Length of n_categories ({len(n_categories)}) must match n_cat_vars ({n_cat_vars})"
+            raise ValueError(msg)
 
     n_numeric = n_variables - n_cat_vars
 
@@ -210,10 +213,14 @@ def ehrdata_blobs(
                 # Determine cluster-preferred state for this categorical variable
                 preferred_state = cluster % cardinality
 
-                # Generate probabilities biased toward the preferred state
-                # Preferred state has 50% probability, rest is distributed uniformly
-                probs = np.ones(cardinality) * 0.5 / (cardinality - 1) if cardinality > 1 else np.ones(1)
-                probs[preferred_state] = 0.5
+                # Smaller cluster standard deviation = higher concentration around that cluster
+                concentration = 1.0 / (1.0 + cluster_std)
+
+                # Generate probabilities biased (concentration) toward the preferred state, rest split uniformly
+                probs = (
+                    np.ones(cardinality) * (1 - concentration) / (cardinality - 1) if cardinality > 1 else np.ones(1)
+                )
+                probs[preferred_state] = concentration
 
                 # Randomly assign categorical values with cluster bias
                 random_states = rng.choice(cardinality, size=len(time_indices), p=probs)

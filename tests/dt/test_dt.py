@@ -220,6 +220,13 @@ def test_ehrdata_blobs(sparse_param):
 
 
 def test_ehrdata_blobs_categories():
+    with pytest.raises(
+        ValueError, match=r"Number of categorical variables cannot be greater than number of variables."
+    ):
+        ed.dt.ehrdata_blobs(n_variables=5, n_cat_vars=6)
+    with pytest.raises(ValueError, match=r"Length of n_categories .* must match n_cat_vars"):
+        ed.dt.ehrdata_blobs(n_variables=5, n_cat_vars=2, n_categories=[2, 3, 4])
+
     edata = ed.dt.ehrdata_blobs(
         n_observations=100,
         n_variables=10,
