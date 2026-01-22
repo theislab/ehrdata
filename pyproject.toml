@@ -47,7 +47,6 @@ optional-dependencies.doc = [
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
-  "pandas",
   "scanpydoc",
   "sphinx>=4,<9",
   "sphinx-autodoc-typehints",
