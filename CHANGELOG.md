@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning][].
 - Dataset generator function `ed.dt.ehrdata_blobs` now takes `n_cat_var` and `n_categories` arguments to generate categorical (integer encoded) time series data ([#207](https://github.com/theislab/ehrdata/pull/207)) @sueoglu
 - If `enrich_var_with_feature_info=True` in {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables`, `data_table_concept_ids` not included within the concept table are now mapped from their respective alternate `concept_id` included in the concept_relationship table to retrieve the available feature information. ([#205](https://github.com/theislab/ehrdata/pull/205)) @KilianDahm
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with use of `"person"` now checks `birth_datetime` for meaningful behaviour and error messages. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
+- {func}`~ehrdata.integrations.vitessce.gen_default_config` provides convenience to generate a config directly from an `EHRData` object, and should be used instead of the previous `ehrdata.integrations.vitessce.gen_config`. ([#211](https://github.com/theislab/ehrdata/pull/211)) @eroell
 
 ## [0.0.10]
 
