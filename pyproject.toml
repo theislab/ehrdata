@@ -27,7 +27,6 @@ dependencies = [
   "duckdb",
   "fast-array-utils[sparse]",
   "filelock",
-  "pandas<3",
   # for debug logging (referenced from the issue template)
   "requests",
   "rich",
@@ -47,6 +46,7 @@ optional-dependencies.doc = [
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
+  "pandas",
   "scanpydoc",
   "sphinx>=4,<9",
   "sphinx-autodoc-typehints",

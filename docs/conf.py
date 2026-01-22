@@ -155,4 +155,5 @@ qualname_overrides = {
     "zarr.storage._common.StorePath": "zarr.storage.StorePath",
     "zarr.core.group.Group": "zarr.group.Group",
     "lnschema_core.models.Artifact": "lamindb.Artifact",
+    "pandas.core.series.Series": "pandas.Series",
 }
