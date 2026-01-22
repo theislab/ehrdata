@@ -5,7 +5,7 @@ from duckdb import DuckDBPyConnection
 
 from ehrdata._compat import lazy_import_torch
 from ehrdata.core import EHRData
-from ehrdata.io.omop._queries import DATA_TABLE_DATE_KEYS
+from ehrdata.io.omop._queries import DATA_TABLE_DATE_KEYS, TIME_DEFINING_TABLE_ID_KEY
 
 if TYPE_CHECKING:
     import torch
@@ -20,13 +20,16 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
     It is a Dataset structure for the tensor in ehrdata.R, in a suitable format for :class:`~torch.utils.data.DataLoader`.
     This allows to stream the data in batches from the RDBMS, not requiring to load the entire dataset in memory.
 
+    Note: Each item in the dataset represents an observation unit (e.g., a visit, observation period, or person),
+    not necessarily a unique patient. A single patient can have multiple observation units.
+
     Args:
         con: The connection to the database.
         edata: Central data object.
         data_tables: The OMOP data tables to extract.
         target: The target variable to be used.
         datetime: If True, use datetime, if False, use date.
-        idxs: The indices of the patients to be used, can be used to include only a
+        idxs: The indices of the observation units to be used, can be used to include only a
             subset of the data, for e.g. train-test splits.
     """
 
@@ -59,24 +62,24 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         ).fetchone()[0]
 
     def __len__(self):
-        where_clause = f"WHERE person_id IN ({','.join(str(_) for _ in self.idxs)})" if self.idxs else ""
+        where_clause = f"WHERE obs_id IN ({','.join(str(_) for _ in self.idxs)})" if self.idxs else ""
         query = f"""
-            SELECT COUNT(DISTINCT person_id)
+            SELECT COUNT(DISTINCT obs_id)
             FROM long_person_timestamp_feature_value_{self.data_tables[0]}
             {where_clause}
         """
         return self.con.execute(query).fetchone()[0]
 
-    def __getitem__(self, person_index):
-        person_id_query = f"SELECT DISTINCT person_id FROM long_person_timestamp_feature_value_{self.data_tables[0]} WHERE person_index = {person_index}"
-        person_id = self.con.execute(person_id_query).fetchone()[0]
-        where_clause = f"WHERE person_index = {person_index}"
+    def __getitem__(self, obs_index):
+        obs_id_query = f"SELECT DISTINCT obs_id FROM long_person_timestamp_feature_value_{self.data_tables[0]} WHERE obs_index = {obs_index}"
+        obs_id = self.con.execute(obs_id_query).fetchone()[0]
+        where_clause = f"WHERE obs_index = {obs_index}"
 
         if self.idxs:
-            where_clause += f" AND person_index IN ({','.join(str(_) for _ in self.idxs)})"
+            where_clause += f" AND obs_index IN ({','.join(str(_) for _ in self.idxs)})"
 
         query = f"""
-            SELECT person_index, data_table_concept_id, interval_step, COALESCE(CAST(value_as_number AS DOUBLE), 'NaN') AS value_as_number
+            SELECT obs_index, data_table_concept_id, interval_step, COALESCE(CAST(value_as_number AS DOUBLE), 'NaN') AS value_as_number
             FROM long_person_timestamp_feature_value_{self.data_tables[0]}
             {where_clause}
         """
@@ -95,19 +98,32 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
             msg = f"Target {self.target} is not implemented"
             raise NotImplementedError(msg)
 
-        # If person has an entry in the death table that is within visit_start_datetime and visit_end_datetime of the visit_occurrence table, report 1, else 0:
-        # Left join ensures that for every patient, 0 or 1 is obtained
+        # If person has an entry in the death table that is within the observation period, report 1, else 0:
+        # Left join ensures that for every observation unit, 0 or 1 is obtained
         omop_io_observation_table = self.edata.uns["omop_io_observation_table"]
-        time_postfix = "time" if self.datetime else ""
+
+        # Get the actual table ID column name and value
+        obs_id_column = TIME_DEFINING_TABLE_ID_KEY[omop_io_observation_table]
+        obs_table_id = self.edata.obs[self.edata.obs[obs_id_column] == obs_id][obs_id_column].item()
+
+        # Get the appropriate date/datetime column names based on precision
+        time_precision = "datetime" if self.datetime else "date"
+        start_date_col = DATA_TABLE_DATE_KEYS["start"][omop_io_observation_table].get(
+            time_precision, DATA_TABLE_DATE_KEYS["start"][omop_io_observation_table]["date"]
+        )
+        end_date_col = DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table].get(
+            time_precision, DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table]["date"]
+        )
+
         target_query = f"""
         SELECT
             CASE
-                WHEN death_datetime BETWEEN {DATA_TABLE_DATE_KEYS["start"][omop_io_observation_table]}{time_postfix} AND {DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table]}{time_postfix} THEN 1
+                WHEN death_datetime BETWEEN {start_date_col} AND {end_date_col} THEN 1
                 ELSE 0
             END AS mortality
         FROM {self.edata.uns["omop_io_observation_table"]}
         LEFT JOIN death USING (person_id)
-        WHERE person_id = {person_id} AND {omop_io_observation_table}_id = {self.edata.obs[self.edata.obs["person_id"] == person_id][f"{omop_io_observation_table}_id"].item()}
+        WHERE {obs_id_column} = {obs_table_id}
         """
 
         targets = torch.tensor(self.con.execute(target_query).fetchall(), dtype=torch.float32)

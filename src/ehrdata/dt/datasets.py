@@ -27,6 +27,8 @@ from scipy.sparse import coo_array, csr_matrix
 def ehrdata_blobs(
     *,
     n_variables: int = 11,
+    n_cat_vars: int = 0,
+    n_categories: list[int] | None = None,
     n_centers: int = 5,
     cluster_std: float = 1.0,
     n_observations: int = 1000,
@@ -46,6 +48,8 @@ def ehrdata_blobs(
     Args:
         layer: The name of the layer to store the data in. If not specified, uses `X`.
         n_variables: Dimension of feature space.
+        n_cat_vars: Number of categorical variables.
+        n_categories: List of cardinalities for each categorical variable.
         n_centers: Number of cluster centers.
         cluster_std: Standard deviation of clusters.
         n_observations: Number of observations.
@@ -70,16 +74,38 @@ def ehrdata_blobs(
 
     .. image:: /_static/tutorial_images/ehrdata_blobs.png
        :alt: EHR data blobs visualization
+
+    Categorical variables can be generated with different cardinalities per variable
+    (e.g. 2, 3, 4 categories). Different clusters (groups) can also exhibit different
+    category distributions:
+
+    .. image:: /_static/tutorial_images/ehrdata_blobs_categorical_5_groups.png
+       :alt: Histograms of categorical variables by group (5 clusters)
+
+    .. image:: /_static/tutorial_images/ehrdata_blobs_categorical_20_groups.png
+       :alt: Histograms of categorical variables by group (20 clusters)
     """
     rng = np.random.default_rng(random_state if isinstance(random_state, int) else None)
 
+    if n_cat_vars > 0:
+        if n_cat_vars > n_variables:
+            msg = "Number of categorical variables cannot be greater than number of variables."
+            raise ValueError(msg)
+        if n_categories is None:
+            n_categories = rng.integers(2, 4, size=n_cat_vars).tolist()
+        if n_categories is not None and len(n_categories) != n_cat_vars:
+            msg = f"Length of n_categories ({len(n_categories)}) must match n_cat_vars ({n_cat_vars})"
+            raise ValueError(msg)
+
+    n_numeric = n_variables - n_cat_vars
+
     # Generate cluster centers and assignments
-    centers = rng.normal(0, 5, size=(n_centers, n_variables))
+    centers = rng.normal(0, 5, size=(n_centers, n_numeric))
     y = rng.integers(0, n_centers, size=n_observations)
 
     # Generate base feature values (X)
     X = np.zeros((n_observations, n_variables))
-    X = centers[y] + rng.normal(0, cluster_std, size=(n_observations, n_variables))
+    X[:, :n_numeric] = centers[y] + rng.normal(0, cluster_std, size=(n_observations, n_numeric))
 
     # Determine time series lengths for each observation
     if variable_length:
@@ -140,7 +166,7 @@ def ehrdata_blobs(
     tem_layer = np.zeros((n_observations, n_variables, n_total_timepoints))
     tem_layer.fill(np.nan)
 
-    # Generate time series for each observation
+    # Generate numeric time series for each observation
     for i in range(n_observations):
         # Map this observation's time points to the global time index
         obs_timepoints = all_timepoints[i]
@@ -149,7 +175,7 @@ def ehrdata_blobs(
         time_indices = np.searchsorted(all_unique_times, obs_timepoints)
 
         # Generate patterns for this observation
-        for v in range(n_variables):
+        for v in range(n_numeric):
             base_value = X[i, v]
 
             # Time series with different patterns
@@ -181,6 +207,35 @@ def ehrdata_blobs(
             time_series += base_value
 
             tem_layer[i, v, time_indices] = time_series
+
+    # Generate categorical time series if requested
+    if n_cat_vars > 0:
+        for i in range(n_observations):
+            obs_timepoints = all_timepoints[i]
+            time_indices = np.searchsorted(all_unique_times, obs_timepoints)
+            cluster = y[i]
+
+            for cat_idx in range(n_cat_vars):
+                # Variable index in the layer
+                v = n_numeric + cat_idx
+                cardinality = n_categories[cat_idx]
+
+                # Determine cluster-preferred state for this categorical variable
+                preferred_state = cluster % cardinality
+
+                # Smaller cluster standard deviation = higher concentration around that cluster
+                concentration = 1.0 / (1.0 + cluster_std)
+
+                # Generate probabilities biased (concentration) toward the preferred state, rest split uniformly
+                probs = (
+                    np.ones(cardinality) * (1 - concentration) / (cardinality - 1) if cardinality > 1 else np.ones(1)
+                )
+                probs[preferred_state] = concentration
+
+                # Randomly assign categorical values with cluster bias
+                random_states = rng.choice(cardinality, size=len(time_indices), p=probs)
+
+                tem_layer[i, v, time_indices] = random_states.astype(float)
 
     # Add random missing values if requested
     if missing_values > 0:

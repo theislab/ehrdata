@@ -172,7 +172,12 @@ def test_physionet2019_arguments():
 def test_ehrdata_blobs(sparse_param):
     """Test the ehrdata_blobs function."""
     edata = ed.dt.ehrdata_blobs(
-        layer=DEFAULT_TEM_LAYER_NAME, n_observations=100, n_variables=5, base_timepoints=10, sparse=sparse_param
+        layer=DEFAULT_TEM_LAYER_NAME,
+        n_observations=100,
+        n_variables=5,
+        base_timepoints=10,
+        n_cat_vars=2,
+        sparse=sparse_param,
     )
 
     assert isinstance(edata, ed.EHRData)
@@ -212,6 +217,54 @@ def test_ehrdata_blobs(sparse_param):
     assert isinstance(edata.tem, pd.DataFrame)
     assert "timepoint" in edata.tem.columns
     assert edata.tem.shape == (10, 2)
+
+
+def test_ehrdata_blobs_categories():
+    with pytest.raises(
+        ValueError, match=r"Number of categorical variables cannot be greater than number of variables."
+    ):
+        ed.dt.ehrdata_blobs(n_variables=5, n_cat_vars=6)
+    with pytest.raises(ValueError, match=r"Length of n_categories .* must match n_cat_vars"):
+        ed.dt.ehrdata_blobs(n_variables=5, n_cat_vars=2, n_categories=[2, 3, 4])
+
+    edata = ed.dt.ehrdata_blobs(
+        n_observations=100,
+        n_variables=10,
+        n_cat_vars=2,
+        n_categories=[3, 2],
+        base_timepoints=10,
+        sparse=False,
+        random_state=42,
+    )
+
+    n_numeric = 10 - 2
+
+    for cat_idx, k in enumerate([3, 2]):
+        v = n_numeric + cat_idx
+        vals = edata.layers[DEFAULT_TEM_LAYER_NAME][:, v, :].ravel()
+        vals = vals[~np.isnan(vals)]
+        assert vals.size > 0
+        assert vals.min() >= 0
+        assert vals.max() <= (k - 1)
+        assert np.allclose(vals, np.round(vals))
+
+    for i in range(100):
+        valid_times = ~np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][i, 0, :])
+        valid_idx = np.where(valid_times)[0]
+        assert valid_idx.size > 0
+        mid_idx = valid_idx[len(valid_idx) // 2]
+        for cat_idx in range(2):
+            v = n_numeric + cat_idx
+            assert edata.X[i, v] == edata.layers[DEFAULT_TEM_LAYER_NAME][i, v, mid_idx]
+
+    assert isinstance(edata, ed.EHRData)
+    assert edata.shape == (100, 10, 10)
+
+    assert isinstance(edata.X, np.ndarray)
+    assert edata.X.shape == (100, 10)
+
+    assert isinstance(edata.layers[DEFAULT_TEM_LAYER_NAME], np.ndarray)
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (100, 10, 10)
 
 
 def test_ehrdata_blobs_distribution():

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 import duckdb
@@ -23,6 +24,7 @@ VALID_INTERVAL_VARIABLE_TABLES = [
     "episode",
 ]
 VALID_KEEP_DATES = ["start", "end", "interval"]
+VALID_TIME_PRECISIONS = ["date", "datetime"]
 
 
 def _check_valid_backend_handle(backend_handle) -> None:
@@ -164,3 +166,86 @@ def _check_valid_keep_date(keep_date: str) -> None:
     if keep_date not in VALID_KEEP_DATES:
         msg = f"keep_date must be one of {VALID_KEEP_DATES}."
         raise ValueError(msg)
+
+
+def _check_valid_time_precision(time_precision: str) -> None:
+    if not isinstance(time_precision, str):
+        msg = "Expected time_precision to be a string."
+        raise TypeError(msg)
+    if time_precision not in VALID_TIME_PRECISIONS:
+        msg = f"time_precision must be one of {VALID_TIME_PRECISIONS}."
+        raise ValueError(msg)
+
+
+def _warn_time_precision_interval_mismatch(interval_length_unit: str, time_precision: str) -> None:
+    """Warn if using fine-grained time intervals with date-only precision.
+
+    https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timedelta.html
+
+    Args:
+        interval_length_unit: The unit for interval length (e.g., 'day', 'hour', 'minute', 'second').
+        time_precision: The time precision ('date' or 'datetime').
+    """
+    fine_grained_units = [
+        "hours",
+        "hour",
+        "hr",
+        "h",
+        "minutes",
+        "minute",
+        "min",
+        "m",
+        "seconds",
+        "second",
+        "sec",
+        "s",
+        "milliseconds",
+        "millisecond",
+        "millis",
+        "milli",
+        "ms",
+        "microseconds",
+        "microsecond",
+        "micros",
+        "micro",
+        "us",
+        "nanoseconds",
+        "nanosecond",
+        "nanos",
+        "nano",
+        "ns",
+    ]
+    if time_precision == "date" and interval_length_unit.lower() in fine_grained_units:
+        logging.warning(
+            f"Using interval_length_unit='{interval_length_unit}' with time_precision='date' may lead to "
+            f"unexpected results. Consider using time_precision='datetime' for fine-grained time intervals. ",
+        )
+
+
+def _check_valid_birthdates_for_person_table(backend_handle, time_defining_table: str) -> None:
+    """Check that all persons have valid birthdates when using person as observation table.
+
+    Args:
+        backend_handle: DuckDB connection handle.
+        time_defining_table: The observation table being used.
+
+    Raises:
+        ValueError: If the observation table is 'person' and any persons have NULL or invalid birthdates.
+    """
+    if time_defining_table == "person":
+        # Check for NULL birth_datetime values
+        query = """
+            SELECT COUNT(*) as null_count
+            FROM person
+            WHERE birth_datetime IS NULL
+        """
+        null_count = backend_handle.execute(query).fetchone()[0]
+
+        if null_count > 0:
+            msg = (
+                f"Found {null_count} person(s) with NULL birth_datetime. "
+                f"When using observation_table='person', all persons must have valid birthdates. "
+                f"Please ensure birth_datetime is populated for all persons, or consider using "
+                f"'person_observation_period' or 'person_visit_occurrence' in ehrdata.io.omop.setup_obs."
+            )
+            raise ValueError(msg)
