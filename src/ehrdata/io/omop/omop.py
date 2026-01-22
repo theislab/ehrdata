@@ -223,6 +223,7 @@ def setup_obs(
     This will be used to set that start timepoint for the time series data in the `EHRData` object.
 
     Possible choices for the `observation_table` parameter are:
+
     - `"person"`: Create one row per person `person_id` in the `person` table
     - `"person_cohort"`: Create one row per person `subject_id` in a cohort in the `cohort` table
     - `"person_observation_period"`: Create one row per observation_period_id in the `observation_period` table
@@ -235,8 +236,9 @@ def setup_obs(
     If `observation_table = "person"`, the created `EHRData` object will have 1000 rows.
     If `observation_table = "person_visit_occurrence"`, the created `EHRData` object will have 300 rows.
 
-    The possible choices affect what is taken as the "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.:
-    - If `"person"`, the `birth_datetime` will be used as "time 0". **Note:** All persons must have valid (non-NULL) `birth_datetime` values when using this option with setup_variables/setup_interval_variables.
+    The possible choices affect what is taken as the "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions:
+
+    - If `"person"`, the `birth_datetime` will be used as "time 0". **Note:** All persons must have valid (non-NULL) `birth_datetime` values when using this option with :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables`.
     - If `"person_cohort"`, the `cohort_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
     - If `"person_observation_period"`, the `observation_period_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
     - If `"person_visit_occurrence"`, the `visit_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
@@ -315,7 +317,7 @@ def setup_variables(
 ):
     """Extracts selected tables of a data-point character from the OMOP CDM.
 
-    The distinct `concept_id` is encountered in the selected tables form the variables in the EHRData object.
+    The distinct `concept_id`s encountered in the selected tables form the variables in the EHRData object.
     The variables are sorted by the `concept_id` for each `data_table` in ascending order, and stacked together in the order that the `data_tables` are specified.
 
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
