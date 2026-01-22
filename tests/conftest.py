@@ -10,6 +10,7 @@ from scipy import sparse
 
 from ehrdata import EHRData
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
+from ehrdata.dt import mimic_iv_omop
 from ehrdata.io.omop import setup_connection
 
 
@@ -303,6 +304,14 @@ def omop_connection_multiple_units():
 def omop_connection_multiple_visit_occurrences():
     con = duckdb.connect()
     setup_connection(path="tests/data/toy_omop/multiple_visit_occurrences", backend_handle=con)
+    yield con
+    con.close()
+
+
+@pytest.fixture
+def omop_connection_mimic_iv(tmp_path):
+    con = duckdb.connect(":memory:")
+    mimic_iv_omop(data_path=tmp_path, backend_handle=con)
     yield con
     con.close()
 

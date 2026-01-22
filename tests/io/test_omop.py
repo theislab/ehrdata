@@ -1739,7 +1739,7 @@ def test_multiple_visit_occurrences_for_single_patient_datetime_specific(omop_co
     )
 
 
-def test_mimic_iv_omop_visit_measurement_validation():
+def test_mimic_iv_omop_visit_measurement_validation(omop_connection_mimic_iv):
     """Validation test using real MIMIC-IV OMOP data.
 
     This test validates the complete pipeline from OMOP database to EHRData tensor
@@ -1749,12 +1749,7 @@ def test_mimic_iv_omop_visit_measurement_validation():
     - Measured at 2177-03-12 12:47:00 (5.5 hours after visit start at 07:15:00)
     - Should appear at interval 5 (the 5-6 hour time bin)
     """
-    import duckdb
-
-    import ehrdata as ed
-
-    con = duckdb.connect(":memory:")
-    ed.dt.mimic_iv_omop(backend_handle=con)
+    con = omop_connection_mimic_iv
 
     edata = ed.io.omop.setup_obs(
         backend_handle=con,
