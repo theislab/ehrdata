@@ -85,8 +85,6 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
             create_table_query = f"CREATE OR REPLACE TABLE temp_table AS SELECT {select_columns} FROM temp_relation"
             backend_handle.execute(create_table_query)
 
-            # backend_handle.execute("CREATE OR REPLACE TABLE temp_table AS SELECT * FROM temp_relation")
-
             # make query to create table with lowercase column names
             column_names = backend_handle.execute("DESCRIBE temp_table").df()["column_name"].values
             select_columns = ", ".join([f'"{col}" AS "{col.lower()}"' for col in column_names])
@@ -224,11 +222,11 @@ def setup_obs(
 
     This will be used to set that start timepoint for the time series data in the `EHRData` object.
 
-    Possible choices are:
-    - `"person"`: One row per person `person_id` in the `person` table
-    - `"person_cohort"`: One row per person `subject_id` in a cohort in the `cohort` table
-    - `"person_observation_period"`: One row per observation_period_id in the `observation_period` table
-    - `"person_visit_occurrence"`: One row per visit_occurrence_id in the `visit_occurrence` table
+    Possible choices for the `observation_table` parameter are:
+    - `"person"`: Create one row per person `person_id` in the `person` table
+    - `"person_cohort"`: Create one row per person `subject_id` in a cohort in the `cohort` table
+    - `"person_observation_period"`: Create one row per observation_period_id in the `observation_period` table
+    - `"person_visit_occurrence"`: Create one row per visit_occurrence_id in the `visit_occurrence` table
 
     Data characterizing the rows such as person demographics, and e.g. visit start and end dates are stored in the `.obs` field of the created `EHRData` object.
     Notice a single `person_id` can have multiple rows for e.g. `"person_visit_occurrence"` if a person has multiple visit occurrences.

@@ -13,10 +13,13 @@ and this project adheres to [Semantic Versioning][].
 ### Added
  - {func}`~ehrdata.move_to_obs` and {func}`~ehrdata.move_to_x` are new helpers for conveniently moving variables from central 2D arrays to the `.obs` field, and vice versa. ([#199](https://github.com/theislab/ehrdata/pull/201)) @eroell
   - {func}`~ehrdata.dt.physionet2019` as another out-of-the-box, conveniently available dataset with 40'000 ICU stays from the Physionet 2019 challenge. ([#204](https://github.com/theislab/ehrdata/pull/204)) @eroell
+ - `time_precision` parameter (`"date"` or `"datetime"`) to {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` for finer temporal granularity control. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
 
 ### Fixed
 - {func}`~ehrdata.io.read_h5ad` fixed issues when `backed=True`. ([#199](https://github.com/theislab/ehrdata/pull/199)) @eroell
 - {func}`~ehrdata.io.read_h5ad` fixed bug when `.X` is `None` and `harmonize_missing_features` is `True`. ([#206](https://github.com/theislab/ehrdata/pull/206)) @eroell
+- {func}`~ehrdata.io.omop.setup_obs` with `observation_table="person_visit_occurrence"` now supports multiple visits per patient, creating one row per visit with unique observation IDs, instead of failing with xarray conversion errors with non-unique indices. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
+- OMOP time interval boundaries now use half-open intervals `[start, end)` to prevent duplicate measurements at interval boundaries. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
 
 
 ### Maintenance
@@ -25,6 +28,8 @@ and this project adheres to [Semantic Versioning][].
 
 ### Modified
 - Dataset generator function `ed.dt.ehrdata_blobs` now takes `n_cat_var` and `n_categories` arguments to generate categorical (integer encoded) time series data ([#207](https://github.com/theislab/ehrdata/pull/207)) @sueoglu
+- If `enrich_var_with_feature_info=True` in {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables`, `data_table_concept_ids` not included within the concept table are now mapped from their respective alternate `concept_id` included in the concept_relationship table to retrieve the available feature information. @KilianDahm
+- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with use of `"person"` now checks `birth_datetime` for meaningful behaviour and error messages. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
 
 ## [0.0.10]
 
@@ -42,7 +47,6 @@ and this project adheres to [Semantic Versioning][].
 - The following functions now take a `layer` argument: {func}`~ehrdata.io.read_csv`, {func}`~ehrdata.io.from_pandas`, {func}`~ehrdata.io.to_pandas`, {func}`~ehrdata.io.omop.setup_variables`, {func}`~ehrdata.io.omop.setup_interval_variables`, {func}`~ehrdata.dt.ehrdata_blobs`, {func}`~ehrdata.dt.physionet2012`. If it is let to its default, `None`, the `.X` field of `EHRData` is used. Since `.X` is 2D in this release, in cases with 3D data, the `layer` argument needs to be used. ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
 - {func}`~ehrdata.io.write_zarr` now writes an `EHRData` specific store encoding, with `anndata` as a substore. This change allows to use `AnnData` with its change to consolidated Zarr metadata, and better isolates `AnnData`'s io. ([#185](https://github.com/theislab/ehrdata/pull/185)) @eroell
 - {func}`~ehrdata.io.read_zarr` is adapted to read the new store encoding, and can also deal with `AnnData` stores. ([#185](https://github.com/theislab/ehrdata/pull/185)) @eroell
-- If `enrich_var_with_feature_info=True` in {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables`, `data_table_concept_ids` not included within the concept table are now mapped from their respective alternate `concept_id` included in the concept_relationship table to retrieve the available feature information. @KilianDahm
 
 
 ## [0.0.9]

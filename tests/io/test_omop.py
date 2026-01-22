@@ -757,16 +757,16 @@ def test_setup_variables(
     "enrich_var_with_feature_info",
     [False, True],
 )
-# @pytest.mark.parametrize(
-#     "time_precision",
-#     ["date", "datetime"],
-# )
+@pytest.mark.parametrize(
+    "time_precision",
+    ["date", "datetime"],
+)
 def test_setup_interval_type_variables(
     omop_connection_vanilla,
     observation_table,
     data_tables,
     data_field_to_keep,
-    # time_precision,
+    time_precision,
     target_R,
     enrich_var_with_feature_info,
     keep_date,
@@ -783,7 +783,7 @@ def test_setup_interval_type_variables(
         data_field_to_keep=data_field_to_keep,
         interval_length_number=1,
         interval_length_unit="day",
-        # time_precision=time_precision,
+        time_precision=time_precision,
         num_intervals=num_intervals,
         enrich_var_with_feature_info=enrich_var_with_feature_info,
         keep_date=keep_date,
@@ -1737,3 +1737,68 @@ def test_multiple_visit_occurrences_for_single_patient_datetime_specific(omop_co
         ),
         equal_nan=True,
     )
+
+
+def test_mimic_iv_omop_visit_measurement_validation():
+    """Validation test using real MIMIC-IV OMOP data.
+
+    This test validates the complete pipeline from OMOP database to EHRData tensor
+    using a concrete example from the MIMIC-IV demo dataset:
+    - Visit -9149771978458038515 (Patient 4239478333578644568)
+    - Creatinine measurement (concept_id 3016723) with value 1.1
+    - Measured at 2177-03-12 12:47:00 (5.5 hours after visit start at 07:15:00)
+    - Should appear at interval 5 (the 5-6 hour time bin)
+    """
+    import duckdb
+
+    import ehrdata as ed
+
+    con = duckdb.connect(":memory:")
+    ed.dt.mimic_iv_omop(backend_handle=con)
+
+    edata = ed.io.omop.setup_obs(
+        backend_handle=con,
+        observation_table="person_visit_occurrence",
+        death_table=True,
+    )
+
+    edata = ed.io.omop.setup_variables(
+        edata=edata,
+        layer="tem_data",
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="h",
+        num_intervals=24,
+        concept_ids="all",
+        aggregation_strategy="last",
+        time_precision="datetime",
+    )
+
+    # Validate the dataset structure
+    assert edata.n_obs == 852, f"Expected 852 visits, got {edata.n_obs}"
+    assert edata.shape[2] == 24, f"Expected 24 time intervals, got {edata.shape[2]}"
+
+    # Validate the specific example
+    visit_occurrence_id = -9149771978458038515
+    variable_concept_id = 3016723  # Creatinine [Mass/volume] in Serum or Plasma
+
+    # Create boolean masks to select the visit and variable
+    visit_index = edata.obs["visit_occurrence_id"] == visit_occurrence_id
+    variable_index = edata.var["data_table_concept_id"] == variable_concept_id
+
+    # Extract the time series
+    time_series = edata[visit_index, variable_index, :].layers["tem_data"]
+
+    # Expected: value 1.1 at interval 5, NaN everywhere else
+    expected = np.full((1, 1, 24), np.nan)
+    expected[0, 0, 5] = 1.1
+
+    assert np.allclose(time_series, expected, equal_nan=True), (
+        f"Expected value 1.1 at interval 5. Got: {time_series[0, 0, :]}"
+    )
+
+    # Verify visit metadata
+    patient_id = edata.obs[visit_index]["person_id"].item()
+    assert patient_id == 4239478333578644568, f"Expected patient 4239478333578644568, got {patient_id}"
