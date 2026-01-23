@@ -25,5 +25,4 @@ omop_intro
 omop_ml
 physionet2012_ml
 interactive_visualization
-lamin
 ```
