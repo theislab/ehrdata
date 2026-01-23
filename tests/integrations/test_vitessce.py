@@ -131,6 +131,58 @@ def test_gen_default_config_with_embedding_and_scatter(edata_blobs_small, tmp_pa
     assert (tmp_path / "test_embedding_and_scatter.zarr").exists()
 
 
+def test_gen_default_config_illegal_arguments(edata_blobs_small, tmp_path):
+    """Test gen_default_config with various illegal arguments."""
+    import ehrdata as ed
+
+    np.random.seed(42)
+    edata_blobs_small.obs["Gender"] = np.random.choice(["M", "F"], size=edata_blobs_small.n_obs)
+    edata_blobs_small.obsm["X_pca"] = np.random.randn(edata_blobs_small.n_obs, 2)
+
+    # Test 1: Invalid obs_columns
+    with pytest.raises(ValueError, match=r"not found in edata\.obs"):
+        ed.integrations.vitessce.gen_default_config(
+            edata_blobs_small,
+            zarr_filepath=tmp_path / "test_invalid_obs.zarr",
+            obs_columns=["NonexistentColumn"],
+            layer="tem_data",
+            timestep=0,
+        )
+
+    # Test 2: Invalid scatter_var_cols - wrong number of variables
+    with pytest.raises(ValueError, match="scatter_var_cols must be an Iterable of 2 variables"):
+        ed.integrations.vitessce.gen_default_config(
+            edata_blobs_small,
+            zarr_filepath=tmp_path / "test_invalid_scatter_count.zarr",
+            obs_columns=["Gender"],
+            scatter_var_cols=[edata_blobs_small.var_names[0]],  # Only 1 variable
+            layer="tem_data",
+            timestep=0,
+        )
+
+    # Test 3: Invalid scatter_var_cols - nonexistent variables
+    with pytest.raises(ValueError, match=r"not found in edata\.var\.index"):
+        ed.integrations.vitessce.gen_default_config(
+            edata_blobs_small,
+            zarr_filepath=tmp_path / "test_invalid_scatter_vars.zarr",
+            obs_columns=["Gender"],
+            scatter_var_cols=["nonexistent_var1", "nonexistent_var2"],
+            layer="tem_data",
+            timestep=0,
+        )
+
+    # Test 4: Invalid obs_embedding
+    with pytest.raises(ValueError, match=r"Embedding .* not found in edata.obsm"):
+        ed.integrations.vitessce.gen_default_config(
+            edata_blobs_small,
+            zarr_filepath=tmp_path / "test_invalid_embedding.zarr",
+            obs_columns=["Gender"],
+            obs_embedding="NonexistentEmbedding",
+            layer="tem_data",
+            timestep=0,
+        )
+
+
 # needs more setup until it works
 # def test_gen_config_lamin(adata):
 #    artifact = ln.Artifact.from_anndata(adata, description="Test AnnData")

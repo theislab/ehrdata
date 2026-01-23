@@ -225,21 +225,42 @@ def gen_default_config(
     """
     import anndata as ad
 
-    # required because there are side-effects from modifying the data, but the copy might be avoided in the future
-    edata = edata.copy()
+    if obs_columns is not None and not all(col in edata.obs for col in obs_columns):
+        err = f"Columns {[col for col in obs_columns if col not in edata.obs]} not found in edata.obs"
+        raise ValueError(err)
+    if scatter_var_cols is not None:
+        if len(scatter_var_cols) != 2:
+            err = "scatter_var_cols must be an Iterable of 2 variables"
+            raise ValueError(err)
+        if not all(col in edata.var.index for col in scatter_var_cols):
+            err = f"Columns {[col for col in scatter_var_cols if col not in edata.var.index]} not found in edata.var.index"
+            raise ValueError(err)
+    if obs_embedding is not None and obs_embedding not in edata.obsm:
+        err = f"Embedding {obs_embedding} not found in edata.obsm"
+        raise ValueError(err)
 
     if layer is not None and layer in edata.layers:
         layer_data = edata.layers[layer]
-        if len(layer_data.shape) == 3:
-            edata.X = layer_data[:, :, timestep].reshape(edata.n_obs, -1)
-        else:
-            edata.X = layer_data
+        X = layer_data[:, :, timestep].reshape(edata.n_obs, -1) if len(layer_data.shape) == 3 else layer_data
+    else:
+        X = edata.X
+
+    obsm = {}
+    if obs_embedding is not None and obs_embedding in edata.obsm:
+        obsm[obs_embedding] = edata.obsm[obs_embedding]
 
     if scatter_var_cols is not None:
-        edata.obsm[f"{scatter_var_cols[0]}_vs_{scatter_var_cols[1]}"] = edata[:, scatter_var_cols].X
+        var_indices = [list(edata.var_names).index(var) for var in scatter_var_cols]
+        scatter_data = X[:, var_indices]
+        obsm[f"{scatter_var_cols[0]}_vs_{scatter_var_cols[1]}"] = scatter_data
 
-    # Vitessce expects an AnnData object as zarr store; easy to obtain from EHRData
-    adata = ad.AnnData(edata)
+    # Create AnnData with only the required components
+    adata = ad.AnnData(
+        X=X,
+        obs=edata.obs.copy(),
+        var=edata.var.copy(),
+        obsm=obsm,
+    )
     adata.write_zarr(zarr_filepath)
 
     obs_sets = {f"obs/{col}": col for col in obs_columns}
