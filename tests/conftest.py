@@ -269,6 +269,21 @@ def edata_basic_with_tem_full():
 
 
 @pytest.fixture
+def edata_blobs_small():
+    """Create EHRData with 3D layers for testing."""
+    import ehrdata as ed
+
+    return ed.dt.ehrdata_blobs(
+        layer="tem_data",
+        n_observations=20,
+        n_variables=10,
+        base_timepoints=5,
+        n_centers=2,
+        random_state=42,
+    )
+
+
+@pytest.fixture
 def omop_connection_vanilla():
     con = duckdb.connect()
     setup_connection(path="tests/data/toy_omop/vanilla", backend_handle=con)
