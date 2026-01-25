@@ -316,7 +316,7 @@ def _setup_eunomia_datasets(
 def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
     """Loads the MIMIC-IV demo data in the OMOP Common Data model.
 
-    Loads the MIMIC-IV demo dataset from its `physionet repository <https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel>`_ :cite:`kallfelz2021mimic`.
+    Loads the MIMIC-IV demo dataset from its `physionet repository <https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel>`_ :cite:`kallfelz2021mimic` :cite:`goldberger2000physiobank`.
 
     Args:
         backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
@@ -434,6 +434,8 @@ def physionet2012(
     layer: str | None = None,
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>`_.
+
+    This dataset was designed to encourage the development of algorithms for mortality rate prediction using physiological data :cite:`silva2012predicting` :cite:`goldberger2000physiobank`.
 
     If `interval_length_number` is 1, `interval_length_unit` is `"h"` (hour), and `num_intervals` is 48, this is the same as the `SAITS <https://arxiv.org/pdf/2202.08516>`_ preprocessing :cite:`du2023saits`.
     Truncated if a sample has more `num_intervals` steps; Padded if a sample has less than `num_intervals` steps.
@@ -621,6 +623,8 @@ def physionet2019(
     layer: str | None = None,
 ) -> EHRData:
     """Loads the dataset of the `PhysioNet challenge 2019 (v1.0.0) <https://physionet.org/content/challenge-2019/1.0.0/>`_.
+
+    This dataset was designed to encourage the development of algorithms for sepsis prediction using physiological data :cite:`reyna2020early` :cite:`goldberger2000physiobank`.
 
     The data consists of 35 time dependent features and 5 static features (`Age`, `Gender`, `Unit1`, `Unit2`, `HospAdmTime`).
     More information on the features can be found on the link above.
