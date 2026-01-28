@@ -20,7 +20,6 @@ jobs:
                         "docs/tutorials/real_dataset_example_physionet2019.ipynb",
                         "docs/tutorials/omop_intro.ipynb",
                         "docs/tutorials/omop_ml.ipynb",
-                        "docs/tutorials/physionet2012_ml.ipynb",
                         "docs/tutorials/interactive_visualization.ipynb",
                     ]
         steps:
