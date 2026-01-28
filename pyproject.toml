@@ -4,7 +4,7 @@ requires = [ "hatchling" ]
 
 [project]
 name = "ehrdata"
-version = "0.0.10"
+version = "0.1.0"
 description = "A Python package for EHR data"
 readme = "README.md"
 license = "Apache-2.0"
