@@ -6,8 +6,8 @@
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/theislab/ehrdata/test.yaml?branch=main
 [badge-docs]: https://img.shields.io/readthedocs/ehrdata
 
-Ehrdata is a data framework that comprises a FAIR storage format and a collection of Python libraries for performant access, alignment, and processing of uni- and multi-modal electronic health record datasets.
-This repository contains the core ehrdata library.
+`EHRData` is a data framework that comprises a FAIR storage format and a collection of Python libraries for performant access, alignment, and processing of uni- and multi-modal electronic health record datasets.
+This repository contains the core `ehrdata` library, which has the `EHRData` class at its heart.
 See the [ehrapy][] package for an analysis package that uses ehrdata to enable the analysis of electronic health record datasetes.
 
 ## Getting started
@@ -17,7 +17,7 @@ in particular, the [API documentation][].
 
 ## Disclaimer
 
-ehrdata is under heavy construction, and its API not stable.
+`ehrdata` is under heavy construction, and its API not stable.
 If you find it potentially interesting for your work, reach out to us via the [scverse zulip platform](https://scverse.zulipchat.com/)!
 We can help you using it and will be able to stabilize things you need.
 
