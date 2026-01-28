@@ -92,6 +92,7 @@ intersphinx_mapping = {
     "torch": ("https://docs.pytorch.org/docs/main", None),
     "vitessce": ("https://python-docs.vitessce.io", None),
     "zarr": ("https://zarr.readthedocs.io/en/stable", None),
+    "ehrapy": ("https://ehrapy.readthedocs.io/en/latest", None),
 }
 
 # List of patterns, relative to source directory, that match files and

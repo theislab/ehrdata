@@ -172,6 +172,7 @@ def gen_default_config(
     scatter_var_cols: Iterable[str] | None = None,
     layer="tem_data",
     timestep=0,
+    return_lamin_artifact: bool = False,
 ):
     """Quickstart interactive Vitessce generator.
 
@@ -202,6 +203,7 @@ def gen_default_config(
         layer: Name of the layer to use for visualization. If the layer is 3D (temporal),
                a timestep must be selected. Default is "tem_data"
         timestep: For 3D layers, the timestep index to extract. Default is 0
+        return_lamin_artifact: If `True`, return a Lamin `Artifact` of the generated .zarr file.
 
     Returns:
         VitessceConfig object
@@ -289,14 +291,26 @@ def gen_default_config(
     Hint: if the heatmap is unicolored, select its gearwheel and adjust the colormap range.
     """
 
+    if return_lamin_artifact:
+        import lamindb as ln
+
+        artifact = ln.Artifact(
+            zarr_filepath,
+            kind="dataset",
+        )
+
     vc = _gen_config(
-        path=zarr_filepath,
+        path=zarr_filepath if not return_lamin_artifact else None,
         store=None,
         url=None,
-        artifact=None,
+        artifact=artifact if return_lamin_artifact else None,
         name=None,
         obs_sets=obs_sets,
         obs_embeddings=obs_embeddings_dict,
         description=description,
     )
-    return vc
+
+    if return_lamin_artifact:
+        return vc, artifact
+    else:
+        return vc

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.1.0] Future
+## [0.1.0]
 
 ### Added
  - {func}`~ehrdata.move_to_obs` and {func}`~ehrdata.move_to_x` are new helpers for conveniently moving variables from central 2D arrays to the `.obs` field, and vice versa. ([#199](https://github.com/theislab/ehrdata/pull/201)) @eroell
@@ -21,10 +21,10 @@ and this project adheres to [Semantic Versioning][].
 - {func}`~ehrdata.io.omop.setup_obs` with `observation_table="person_visit_occurrence"` now supports multiple visits per patient, creating one row per visit with unique observation IDs, instead of failing with xarray conversion errors with non-unique indices. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
 - OMOP time interval boundaries now use half-open intervals `[start, end)` to prevent duplicate measurements at interval boundaries. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
 
-
 ### Maintenance
 - Support Python3.14 ([#194](https://github.com/theislab/ehrdata/pull/194)) @Zethson
 - Address `FutureWarning`s across multiple places ([#200](https://github.com/theislab/ehrdata/pull/200)) @eroell
+- Enhanced tutorial structure ([#208](https://github.com/theislab/ehrdata/pull/208)) @eroell
 
 ### Modified
 - Dataset generator function `ed.dt.ehrdata_blobs` now takes `n_cat_var` and `n_categories` arguments to generate categorical (integer encoded) time series data ([#207](https://github.com/theislab/ehrdata/pull/207)) @sueoglu

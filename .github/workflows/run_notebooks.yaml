@@ -17,10 +17,10 @@ jobs:
             matrix:
                 notebook: [
                         "docs/tutorials/getting_started.ipynb",
+                        "docs/tutorials/real_dataset_example_physionet2019.ipynb",
+                        "docs/tutorials/omop_intro.ipynb",
                         "docs/tutorials/omop_ml.ipynb",
-                        "docs/tutorials/omop_tables_tutorial.ipynb",
-                        "docs/tutorials/physionet2012.ipynb",
-                        "docs/tutorials/tutorial_time_series_with_pypots.ipynb",
+                        "docs/tutorials/interactive_visualization.ipynb",
                     ]
         steps:
             - uses: actions/checkout@v5
