@@ -77,20 +77,22 @@ def infer_feature_types(
     output: Literal["tree", "dataframe"] | None = "tree",
     verbose: bool = True,
 ) -> pd.DataFrame | None:
-    """Infer feature types from an :class:`~ehrdata.EHRData` object.
+    """Infer feature types of an :class:`~ehrdata.EHRData` object.
 
     For each feature in `edata.var_names`, the method infers one of the following types: `'date'`, `'categorical'`, or `'numeric'`.
-    The inferred types are stored in `edata.var['feature_type']`. Please check the inferred types and adjust if necessary using
-    `edata.var['feature_type']['feature1']='corrected_type'` or with :func:`~ehrdata.replace_feature_types`.
+    The inferred types are stored in `edata.var['feature_type']`.
+    Please check the inferred types and adjust if necessary using `edata.var['feature_type']['feature1']='corrected_type'` or with :func:`~ehrdata.replace_feature_types`.
     Be aware that not all features stored numerically are of `'numeric'` type, as categorical features might be stored in a numerically encoded format.
-    For example, a feature with values [0, 1, 2] might be a categorical feature with three categories. This is accounted for in the method, but it is
-    recommended to check the inferred types.
+    For example, a feature with values [0, 1, 2] might be a categorical feature with three categories.
+    This is accounted for in the method, but it is recommended to check the inferred types.
 
     Args:
         edata: Data object.
         layer: The layer to use from the EHRData object. If `None`, the `X` field is used.
-        output: The output format. Choose between `'tree'`, `'dataframe'`, or `None`. If `'tree'`, the feature types will be printed to the console in a tree format.
-            If `'dataframe'`, a :class:`~pandas.DataFrame` with the feature types will be returned. If `None`, nothing will be returned.
+        output: The output format. Choose between `'tree'`, `'dataframe'`, or `None`.
+            If `'tree'`, the feature types will be printed to the console in a tree format.
+            If `'dataframe'`, a :class:`~pandas.DataFrame` with the feature types will be returned.
+            If `None`, nothing will be returned.
         verbose: Whether to print warnings for uncertain feature types.
 
     Examples:
@@ -124,13 +126,13 @@ def infer_feature_types(
 
     if verbose:
         logger.warning(
-            f"{'Features' if len(uncertain_features) > 1 else 'Feature'} {str(uncertain_features)[1:-1]} {'were' if len(uncertain_features) > 1 else 'was'} detected as categorical features stored numerically."
-            f"Please verify and adjust if necessary using `ed.replace_feature_types`."
+            f"{'Features' if len(uncertain_features) > 1 else 'Feature'} {str(uncertain_features)[1:-1]} {'were' if len(uncertain_features) > 1 else 'was'} detected as categorical features stored numerically. "
+            f"Adjust using `ed.replace_feature_types` if needed."
         )
 
         logger.info(
-            f"Stored feature types in edata.var['{FEATURE_TYPE_KEY}']."
-            f" Please verify and adjust if necessary using `ed.replace_feature_types`."
+            f"Stored feature types in edata.var['{FEATURE_TYPE_KEY}']. "
+            f"Adjust using `ed.replace_feature_types` if needed."
         )
 
     if output == "tree":
@@ -178,7 +180,7 @@ def _check_feature_types(func):
         if FEATURE_TYPE_KEY not in edata.var:
             infer_feature_types(edata, output=None)
             logger.warning(
-                f"Feature types were inferred and stored in edata.var[{FEATURE_TYPE_KEY}]. Please verify using `ed.feature_type_overview` and adjust if necessary using `ed.replace_feature_types`."
+                f"Feature types were inferred and stored in edata.var[{FEATURE_TYPE_KEY}]. Verify using `ed.feature_type_overview` and adjust using `ed.replace_feature_types` if needed."
             )
 
         for feature in edata.var_names:
@@ -189,7 +191,7 @@ def _check_feature_types(func):
                 and feature_type not in [CATEGORICAL_TAG, NUMERIC_TAG, DATE_TAG]
             ):
                 logger.warning(
-                    f"Feature '{feature}' has an invalid feature type '{feature_type}'. Please correct using `ed.replace_feature_types`."
+                    f"Feature '{feature}' has an invalid feature type '{feature_type}'. Correct using `ed.replace_feature_types`."
                 )
 
         if _self is not None:
