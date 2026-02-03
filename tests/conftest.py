@@ -292,6 +292,14 @@ def omop_connection_vanilla():
 
 
 @pytest.fixture
+def omop_connection_vanilla_parquet():
+    con = duckdb.connect()
+    setup_connection(path="tests/data/toy_omop/vanilla_parquet", backend_handle=con)
+    yield con
+    con.close()
+
+
+@pytest.fixture
 def omop_connection_capital_letters():
     con = duckdb.connect()
     setup_connection(path="tests/data/toy_omop/capital_letters", backend_handle=con)

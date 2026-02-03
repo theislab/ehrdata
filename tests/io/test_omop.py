@@ -1797,3 +1797,46 @@ def test_mimic_iv_omop_visit_measurement_validation(omop_connection_mimic_iv):
     # Verify visit metadata
     patient_id = edata.obs[visit_index]["person_id"].item()
     assert patient_id == 4239478333578644568, f"Expected patient 4239478333578644568, got {patient_id}"
+
+
+def test_setup_obs_parquet(omop_connection_vanilla_parquet):
+    """Test that setup_obs works with Parquet files."""
+    con = omop_connection_vanilla_parquet
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+
+    assert isinstance(edata, ed.EHRData)
+    assert len(edata) == 3
+    assert edata.obs.shape[1] == 23
+
+
+def test_setup_variables_parquet(omop_connection_vanilla_parquet):
+    """Test that setup_variables works with Parquet files."""
+    num_intervals = 4
+    con = omop_connection_vanilla_parquet
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        time_precision="date",
+        num_intervals=num_intervals,
+        enrich_var_with_feature_info=False,
+        enrich_var_with_unit_info=False,
+    )
+
+    assert isinstance(edata, ed.EHRData)
+    assert edata.n_obs == 3
+    assert edata.n_vars == 2
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape[2] == num_intervals
+
+    # Verify the data matches expected values (same as CSV)
+    expected_data = [
+        [[np.nan, np.nan, np.nan, np.nan], [19.0, np.nan, np.nan, np.nan]],
+        [[np.nan, np.nan, np.nan, np.nan], [21.0, np.nan, np.nan, np.nan]],
+        [[np.nan, np.nan, np.nan, np.nan], [23.0, np.nan, np.nan, np.nan]],
+    ]
+    assert np.allclose(edata.layers[DEFAULT_TEM_LAYER_NAME], np.array(expected_data), equal_nan=True)
