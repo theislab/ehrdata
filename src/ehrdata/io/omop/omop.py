@@ -48,7 +48,7 @@ def _get_table_list() -> list:
 
 
 def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
-    """Create tables in the backend from the CSV files in the path from datasets in the OMOP Common Data model."""
+    """Create tables in the backend from CSV or Parquet files in the path from datasets in the OMOP Common Data model."""
     tables = _get_table_list()
 
     used_tables = []
@@ -63,10 +63,19 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
 
             dtype = {"measurement_source_value": str} if regular_omop_table_name == "measurement" else None
 
-            # read raw csv as temporary table
-            temp_relation = backend_handle.read_csv(path / filename, dtype=dtype)  # noqa: F841
+            # Detect file format and read accordingly
+            file_extension = filename.split(".")[-1].lower()
+            if file_extension == "parquet":
+                # Read parquet file
+                temp_relation = backend_handle.read_parquet(str(path / filename))
+            elif file_extension == "csv":
+                # Read CSV file
+                temp_relation = backend_handle.read_csv(path / filename, dtype=dtype)  # noqa: F841
+            else:
+                logging.warning(f"Unsupported file format for {filename}. Skipping.")
+                continue
 
-            # reading from csv bears risk of not getting correct schema:
+            # reading from csv/parquet bears risk of not getting correct schema:
             # enforce the critical date and datetime columns, prone to be read as VARCHAR
             schema_df = backend_handle.execute("DESCRIBE temp_relation").df()
             select_parts = []
@@ -82,7 +91,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
                 else:
                     select_parts.append(f'"{col}" AS "{col}"')
             select_columns = ", ".join(select_parts)
-            create_table_query = f"CREATE OR REPLACE TABLE temp_table AS SELECT {select_columns} FROM temp_relation"
+            create_table_query = f"CREATE OR REPLACE VIEW temp_table AS SELECT {select_columns} FROM temp_relation"
             backend_handle.execute(create_table_query)
 
             # make query to create table with lowercase column names
@@ -96,11 +105,11 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
             existing_tables = backend_handle.execute("SHOW TABLES").df()["name"].values
             if regular_omop_table_name in existing_tables:
                 logging.info(f"Table {regular_omop_table_name} already exists. Dropping and recreating...")
-                backend_handle.execute(f"DROP TABLE {regular_omop_table_name}")
+                backend_handle.execute(f"DROP VIEW {regular_omop_table_name}")
 
             backend_handle.execute(create_table_with_lowercase_columns_query)
 
-            backend_handle.execute("DROP TABLE temp_table")
+            backend_handle.execute("DROP VIEW temp_table")
 
         elif filename_trunk != DOWNLOAD_VERIFICATION_TAG:
             unused_files.append(filename)
@@ -199,9 +208,9 @@ def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefi
 
 
     Args:
-        path: The path to the folder containing the CSV files.
+        path: The path to the folder containing the CSV or Parquet files.
         backend_handle: The backend handle to the database.
-        prefix: The prefix to be removed from the CSV filenames.
+        prefix: The prefix to be removed from the CSV/Parquet filenames.
 
     Returns:
         An EHRData object with populated .uns["omop_table_capitalization"] field.
