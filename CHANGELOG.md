@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.2.0]
+
+### Added
+ - {func}`~ehrdata.io.omop.setup_connection` can read `.parquet` files. ([#217](https://github.com/theislab/ehrdata/pull/217)) @eroell
+
+### Fixed
+
+### Maintenance
+
+### Modified
+
 ## [0.1.0]
 
 ### Added
