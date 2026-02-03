@@ -91,7 +91,7 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
                 else:
                     select_parts.append(f'"{col}" AS "{col}"')
             select_columns = ", ".join(select_parts)
-            create_table_query = f"CREATE OR REPLACE TABLE temp_table AS SELECT {select_columns} FROM temp_relation"
+            create_table_query = f"CREATE OR REPLACE VIEW temp_table AS SELECT {select_columns} FROM temp_relation"
             backend_handle.execute(create_table_query)
 
             # make query to create table with lowercase column names
@@ -105,11 +105,11 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
             existing_tables = backend_handle.execute("SHOW TABLES").df()["name"].values
             if regular_omop_table_name in existing_tables:
                 logging.info(f"Table {regular_omop_table_name} already exists. Dropping and recreating...")
-                backend_handle.execute(f"DROP TABLE {regular_omop_table_name}")
+                backend_handle.execute(f"DROP VIEW {regular_omop_table_name}")
 
             backend_handle.execute(create_table_with_lowercase_columns_query)
 
-            backend_handle.execute("DROP TABLE temp_table")
+            backend_handle.execute("DROP VIEW temp_table")
 
         elif filename_trunk != DOWNLOAD_VERIFICATION_TAG:
             unused_files.append(filename)
