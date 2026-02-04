@@ -615,3 +615,19 @@ def test_inplace_subset_var(edata_333):
         edata_333.layers[DEFAULT_TEM_LAYER_NAME],
     )
     assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
+
+
+def test_slicing_view_with_3d_layer():
+    """Test that slicing works correctly when _adata_ref is an `AnnData`."""
+    import anndata as ad
+    import numpy as np
+
+    import ehrdata as ed
+
+    adata_view = ad.AnnData(np.random.rand(10, 5))[:5, :3]
+    edata = ed.EHRData.from_adata(adata_view)[:2, :2]
+
+    # verify that _adata_ref is an `AnnData`
+    assert isinstance(edata._adata_ref, ad.AnnData)
+
+    edata[:2, :2]
