@@ -424,8 +424,15 @@ class EHRData(AnnData):
             # the input tidx might be of various kinds, and we want to store
             # a resolved version in AnnData style
             tidx = _resolve_idx(slice(None), tidx, self.n_t)
-        if self._tidx is not None:
-            tidx = _resolve_idx(self._tidx, tidx, self._adata_ref.n_t)
+        else:
+            # When this is a view, get n_t from the parent if it's an EHRData object
+            # Otherwise use self.n_t (handles case where _adata_ref is None or is AnnData)
+            parent_n_t = (
+                self._adata_ref.n_t
+                if self.is_view and self._adata_ref is not None and hasattr(self._adata_ref, "n_t")
+                else self.n_t
+            )
+            tidx = _resolve_idx(self._tidx, tidx, parent_n_t)
 
         # if tidx is an integer, numpy's automatic dimension reduction by drops an axis
         if isinstance(tidx, (int | np.integer)):

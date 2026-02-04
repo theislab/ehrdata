@@ -8,16 +8,17 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.2.0]
+## [0.1.1]
 
 ### Added
  - {func}`~ehrdata.io.omop.setup_connection` can read `.parquet` files. ([#217](https://github.com/theislab/ehrdata/pull/217)) @eroell
 
 ### Fixed
+ - Sliceing of `EHRData` objects fixed when the backing object is an `AnnData`. ([#218](https://github.com/theislab/ehrdata/pull/218)) @eroell
 
 ### Maintenance
+ - More concise messages in {func}`~ehrdata.infer_feature_types`. ([#215](https://github.com/theislab/ehrdata/pull/215)) @zethson
 
-### Modified
 
 ## [0.1.0]
 
