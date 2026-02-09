@@ -62,7 +62,7 @@ optional-dependencies.ehrapy = [
 ]
 optional-dependencies.lamin = [
   "lamindb>=1.1",
-  #"omop", # Not needed and causing an issue in the readthedocs build https://github.com/laminlabs/lamindb/issues/3081
+  # "omop", # Not needed and causing an issue in the readthedocs build https://github.com/laminlabs/lamindb/issues/3081
 ]
 optional-dependencies.test = [
   "coverage>=7.10",
@@ -76,7 +76,6 @@ optional-dependencies.test = [
 optional-dependencies.torch = [
   "torch",
 ]
-
 optional-dependencies.vitessce = [
   "vitessce[all]>=3.4", # the actual dependency
 ]
@@ -85,29 +84,21 @@ urls.Documentation = "https://ehrdata.readthedocs.io/"
 urls.Homepage = "https://github.com/theislab/ehrdata"
 urls.Source = "https://github.com/theislab/ehrdata"
 
-[tool.hatch.envs.default]
-installer = "uv"
-features = [ "dev" ]
-
-[tool.hatch.envs.docs]
-features = [ "doc" ]
-scripts.build = "sphinx-build -M html docs docs/_build {args}"
-scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
-scripts.clean = "git clean -fdX -- {args:docs}"
-
-[tool.hatch.envs.hatch-test]
-features = [ "test" ]
-
-[[tool.hatch.envs.hatch-test.matrix]]
-python = [ "3.12", "3.14" ]
+[tool.hatch]
+envs.default.installer = "uv"
+envs.default.features = [ "dev" ]
+envs.docs.features = [ "doc" ]
+envs.docs.scripts.build = "sphinx-build -M html docs docs/_build {args}"
+envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
+envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
+envs.hatch-test.features = [ "test" ]
+envs.hatch-test.matrix = [ { python = [ "3.12", "3.14" ] } ]
 
 [tool.ruff]
 line-length = 120
 src = [ "src" ]
 extend-include = [ "*.ipynb" ]
-
 format.docstring-code-format = true
-
 lint.select = [
   "B",      # Likely bugs and design issues
   "BLE",    # Blind exception raised
@@ -134,11 +125,11 @@ lint.select = [
   "W",      # Warning detected by Pycodestyle
 ]
 lint.ignore = [
-  "B008", # Errors from function calls in argument defaults. These are fine when the result is immutable.
-  "D100", # Missing docstring in public module
-  "D104", # Missing docstring in public package
-  "D105", # __magic__ methods are often self-explanatory, allow missing docstrings
-  "D107", # Missing docstring in __init__
+  "B008",    # Errors from function calls in argument defaults. These are fine when the result is immutable.
+  "D100",    # Missing docstring in public module
+  "D104",    # Missing docstring in public package
+  "D105",    # __magic__ methods are often self-explanatory, allow missing docstrings
+  "D107",    # Missing docstring in __init__
   # Disable one in each pair of mutually incompatible rules
   "D203",    # We don’t want a blank line before a class docstring
   "D213",    # <> We want docstrings to start immediately after the opening triple quote
@@ -162,19 +153,19 @@ lint.per-file-ignores."docs/*" = [ "I" ]
 lint.per-file-ignores."tests/*" = [ "D" ]
 lint.pydocstyle.convention = "google"
 
-[tool.pytest.ini_options]
-testpaths = [ "tests" ]
-xfail_strict = true
-addopts = [
+[tool.pytest]
+ini_options.testpaths = [ "tests" ]
+ini_options.xfail_strict = true
+ini_options.addopts = [
   "--import-mode=importlib", # allow using test files with same name
 ]
 
-[tool.coverage.run]
-source = [ "ehrdata" ]
-patch = [ "subprocess" ]
-omit = [
+[tool.coverage]
+run.omit = [
   "**/test_*.py",
 ]
+run.patch = [ "subprocess" ]
+run.source = [ "ehrdata" ]
 
 [tool.cruft]
 skip = [
