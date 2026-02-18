@@ -27,7 +27,6 @@ dependencies = [
   "duckdb",
   "fast-array-utils[sparse]",
   "filelock",
-  # for debug logging (referenced from the issue template)
   "requests",
   "rich",
   "xarray",
@@ -61,13 +60,13 @@ optional-dependencies.ehrapy = [
   "ehrapy",
 ]
 optional-dependencies.lamin = [
-  "lamindb>=1.1",
+  "lamindb>=2.1",
   # "omop", # Not needed and causing an issue in the readthedocs build https://github.com/laminlabs/lamindb/issues/3081
 ]
 optional-dependencies.test = [
   "coverage>=7.10",
   "dask",
-  "lamin",
+  "lamindb",
   "pytest",
   "pytest-cov",
   "torch",
