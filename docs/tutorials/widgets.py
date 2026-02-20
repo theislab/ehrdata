@@ -1,7 +1,7 @@
 import ipywidgets as widgets
 
 
-def create_single_option_widget(title_text: str, options: list[str]):
+def create_single_option_widget(title_text: str, options: list[str]) -> tuple[widgets.VBox, widgets.RadioButtons]:
     """Create a single-option selection widget (RadioButtons).
 
     Args:
@@ -20,7 +20,7 @@ def create_single_option_widget(title_text: str, options: list[str]):
     return ui, radio_buttons
 
 
-def create_multiple_options_widget(title_text: str, options: list[str]):
+def create_multiple_options_widget(title_text: str, options: list[str]) -> tuple[widgets.VBox, widgets.SelectMultiple]:
     """Create a multiple-option selection widget (SelectMultiple).
 
     Args:

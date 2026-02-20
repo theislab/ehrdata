@@ -14,7 +14,7 @@ Many are also designed to work seamlessly in Binder, a free cloud computing plat
 3. **[OMOP Introduction](omop_intro)** - Learn how to read OMOP data into `EHRData`
 4. **[OMOP Machine Learning](omop_ml)** - Quickstart to ML workflows based on an OMOP dataset
 5. **[Interactive Visualization](interactive_visualization)** - Explore your data interactively with Vitessce
-6. **[Advanced: Data Management with LaminDB](lamin)** - Store, share, and track datasets in the cloud
+6. **[Advanced: Data Management with LaminDB](lamindb)** - Store, share, and track datasets in the cloud
 
 ```{toctree}
 :maxdepth: 2
@@ -24,5 +24,5 @@ real_dataset_example_physionet2019
 omop_intro
 omop_ml
 interactive_visualization
-lamin
+lamindb
 ```
