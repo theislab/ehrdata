@@ -149,6 +149,7 @@ nitpick_ignore = [
     ("py:class", "anndata.compat.CupySparseMatrix"),
     ("py:class", "sparse.numba_backend._coo.core.COO"),
     ("py:class", "sparse._coo.core.COO"),
+    ("py:class", "pandas.core.arrays.base.ExtensionArray"),
 ]
 
 # Redirect broken parameter annotation classes
