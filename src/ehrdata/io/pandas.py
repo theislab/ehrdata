@@ -271,7 +271,11 @@ def from_pandas(
             time_key = long_format_keys["time_column"]
             current_times = xr_dataarray[time_key].values
             full_range = np.arange(int(current_times.min()), int(current_times.max()) + 1)
-            xr_dataarray = xr_dataarray.reindex({time_key: full_range}, fill_value=np.nan)
+            # Select only the value variable before reindexing to avoid dtype conflicts
+            # (e.g. datetime64 columns can't be filled with np.nan)
+            xr_dataarray = xr_dataarray[[long_format_keys["value_column"]]].reindex(
+                {time_key: full_range}, fill_value=np.nan
+            )
 
         tem_layer = xr_dataarray[long_format_keys["value_column"]].values
 
