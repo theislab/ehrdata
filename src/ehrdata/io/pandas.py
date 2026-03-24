@@ -259,6 +259,10 @@ def from_pandas(
 
         tem_layer = xr_dataarray[long_format_keys["value_column"]].values
 
+        # xarray sorts the coordinates, so obs must be reindexed to match
+        xr_obs_order = xr_dataarray[long_format_keys["observation_column"]].values
+        obs = obs.reindex(xr_obs_order)
+
         var = pd.DataFrame(index=xr_dataarray[long_format_keys["variable_column"]].values)
         var.index = var.index.astype(str)
         tem = pd.DataFrame(index=xr_dataarray[long_format_keys["time_column"]].values)

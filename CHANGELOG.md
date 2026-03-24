@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.1.2]
+
+### Fixed
+ - {func}`~ehrdata.move_to_obs` with `format='long'` misordered entries in `.X`/`.layers` with `.obs` if the input df was not sorted for the obs id keys, which is now fixed. ([#228](https://github.com/theislab/ehrdata/pull/228)) @eroell
+
 ## [0.1.1]
 
 ### Added
