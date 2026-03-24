@@ -327,6 +327,34 @@ def test_from_pandas_longitudinal_long_index_column_not_implemented():
         from_pandas(df, layer=DEFAULT_TEM_LAYER_NAME, index_column="observation_id", format="long")
 
 
+def test_from_pandas_longitudinal_long_fill_time_gaps():
+    df = pd.DataFrame(
+        {
+            "observation_id": ["p1", "p1", "p1", "p1", "p2", "p2", "p2", "p2"],
+            "variable": ["v1", "v1", "v2", "v2", "v1", "v1", "v2", "v2"],
+            "time": [0, 2, 0, 2, 0, 2, 0, 2],
+            "value": [1.0, 3.0, 4.0, 6.0, 7.0, 9.0, 10.0, 12.0],
+        }
+    )
+    edata = from_pandas(df, layer=DEFAULT_TEM_LAYER_NAME, format="long", fill_time_gaps=True)
+    _assert_shape_matches(edata, (2, 2, 3), check_X_None=True)
+
+    assert np.array_equal(edata.tem.index.values, ["0", "1", "2"])
+
+    # time=1 should be NaN for all observations and variables
+    assert np.all(np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][:, :, 1]))
+
+    # time=0 and time=2 should have the original values
+    np.testing.assert_array_equal(edata.layers[DEFAULT_TEM_LAYER_NAME][0, 0, :], [1.0, np.nan, 3.0])
+    np.testing.assert_array_equal(edata.layers[DEFAULT_TEM_LAYER_NAME][0, 1, :], [4.0, np.nan, 6.0])
+
+
+def test_from_pandas_fill_time_gaps_wrong_format():
+    df = pd.DataFrame({"a": [1]})
+    with pytest.raises(ValueError, match="fill_time_gaps"):
+        from_pandas(df, format="flat", fill_time_gaps=True)
+
+
 def test_to_pandas_longitudinal_wide(edata_333):
     df = to_pandas(edata_333, layer=DEFAULT_TEM_LAYER_NAME, format="wide")
     assert df.shape == (3, 9)
