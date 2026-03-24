@@ -10,8 +10,17 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.1.2]
 
+### Added
+ - {func}`~ehrdata.io.from_pandas` with `format='long'` provides a new keyword argument `fill_time_gaps` that fills missing timegaps in the common case of integer time steps from 0 to n_timesteps ([#229](https://github.com/theislab/ehrdata/pull/229)) @eroell
+
+### Modified
+ - {func}`~ehrdata.dt.mimic_2` column `censor_flg` switched to lifeline's convention with 1=event, 0=censored, before this dataset loader function had them vice versa since the dataset provides them as such originally. ([#227](https://github.com/theislab/ehrdata/pull/227)) @sueoglu
+
 ### Fixed
- - {func}`~ehrdata.move_to_obs` with `format='long'` misordered entries in `.X`/`.layers` with `.obs` if the input df was not sorted for the obs id keys, which is now fixed. ([#228](https://github.com/theislab/ehrdata/pull/228)) @eroell
+ - {func}`~ehrdata.io.from_pandas` with `format='long'` misordered entries in `.X`/`.layers` with `.obs` if the input df was not sorted for the obs id keys, which is now fixed. ([#228](https://github.com/theislab/ehrdata/pull/228)) @eroell
+
+ ### Documentation
+ - Documentation style polishing ([#223](https://github.com/theislab/ehrdata/pull/223)) @zethson
 
 ## [0.1.1]
 
