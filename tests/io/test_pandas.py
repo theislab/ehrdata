@@ -284,6 +284,30 @@ def test_from_pandas_longitudinal_long():
     assert np.array_equal(edata.tem.index.values, ["t1", "t2"])
 
 
+def test_from_pandas_longitudinal_long_unsorted_observations():
+    """Regression test: obs order must match the data, even when observations appear unsorted in the DataFrame."""
+    df = pd.DataFrame(
+        {
+            "observation_id": ["p2", "p2", "p2", "p2", "p3", "p3", "p3", "p3", "p1", "p1", "p1", "p1"],
+            "variable": ["HR", "HR", "temp", "temp", "HR", "HR", "temp", "temp", "HR", "HR", "temp", "temp"],
+            "time": ["t0", "t1", "t0", "t1", "t0", "t1", "t0", "t1", "t0", "t1", "t0", "t1"],
+            "value": [72, 78, 36.5, 37.1, 65, 68, 36.8, 36.9, 80, 90, 37.5, 38.2],
+        }
+    )
+    edata = from_pandas(df, layer=DEFAULT_TEM_LAYER_NAME, format="long")
+    _assert_shape_matches(edata, (3, 2, 2), check_X_None=True)
+
+    for obs_name in ["p1", "p2", "p3"]:
+        obs_idx = edata.obs_names.get_loc(obs_name)
+        expected = (
+            df[df["observation_id"] == obs_name]
+            .pivot(index="variable", columns="time", values="value")
+            .loc[edata.var_names]
+            .values
+        )
+        np.testing.assert_array_equal(edata.layers[DEFAULT_TEM_LAYER_NAME][obs_idx], expected)
+
+
 def test_from_pandas_invalid_format():
     df = pd.DataFrame()
     with pytest.raises(ValueError):
