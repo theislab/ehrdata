@@ -917,6 +917,13 @@ def mimic_2(
         columns_obs_only=columns_obs_only,
     )
 
+    # In the raw dataset, the variable censor_flg is encoded inversely (0=death, 1=censored)
+    # We flip it here so it follows the standard convention (0=censored, 1=event happened)
+
+    censor_col = "censor_flg"
+    if censor_col in edata.var.index:
+        edata[:, [censor_col]].X = np.where(edata[:, [censor_col]].X == 0, 1, 0)
+
     return edata
 
 
