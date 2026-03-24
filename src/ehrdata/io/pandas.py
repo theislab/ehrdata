@@ -26,6 +26,7 @@ def from_pandas(
     wide_format_time_suffix: str | None = None,
     long_format_keys: dict[Literal["observation_column", "variable_column", "time_column", "value_column"], str]
     | None = None,
+    fill_time_gaps: bool = False,
 ) -> EHRData:
     """Transform a given :class:`~pandas.DataFrame` into an :class:`~ehrdata.EHRData` object.
 
@@ -53,6 +54,11 @@ def from_pandas(
             "variable_column": "<the column name of the variable ids>",
             "time_column": "<the column name of the time>",
             "value_column": "<the column name of the values>"}`.
+        fill_time_gaps: Use only if `format="long"`.
+            If `True`, fills gaps in the numeric time axis with NaN values so that the 3rd dimension is a
+            continuous integer range from 0 to the maximum time value.
+            For example, if the data contains time indices ``[0, 1, 2, 5]``, the resulting time axis will be
+            ``[0, 1, 2, 3, 4, 5]`` with NaN values at indices 3 and 4 for all observations and variables.
 
     Examples:
         >>> import ehrdata as ed
@@ -136,6 +142,10 @@ def from_pandas(
         if invalid_keys:
             err_msg = f"Invalid keys: {invalid_keys}. Please use only the following keys: {valid_long_format_keys}."
             raise ValueError(err_msg)
+
+    if fill_time_gaps and format != "long":
+        err_msg = "fill_time_gaps should only be used if format is 'long'."
+        raise ValueError(err_msg)
 
     if format != "wide" and wide_format_time_suffix is not None:
         err_msg = "wide_format_time_suffix should only be used if format is 'wide'."
@@ -256,6 +266,16 @@ def from_pandas(
                 long_format_keys["time_column"],
             ]
         ).to_xarray()
+
+        if fill_time_gaps:
+            time_key = long_format_keys["time_column"]
+            current_times = xr_dataarray[time_key].values
+            full_range = np.arange(0, int(current_times.max()) + 1)
+            # Select only the value variable before reindexing to avoid dtype conflicts
+            # (e.g. datetime64 columns can't be filled with np.nan)
+            xr_dataarray = xr_dataarray[[long_format_keys["value_column"]]].reindex(
+                {time_key: full_range}, fill_value=np.nan
+            )
 
         tem_layer = xr_dataarray[long_format_keys["value_column"]].values
 
