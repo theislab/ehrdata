@@ -923,6 +923,8 @@ def mimic_2(
     censor_col = "censor_flg"
     if censor_col in edata.var.index:
         edata[:, [censor_col]].X = np.where(edata[:, [censor_col]].X == 0, 1, 0)
+    elif censor_col in edata.obs.columns:
+        edata.obs[censor_col] = np.where(edata.obs[censor_col] == 0, 1, 0)
 
     return edata
 
