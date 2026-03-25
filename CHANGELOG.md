@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.1.3] Future
 
+
+
 ### Modified
  - {func}`~ehrdata.infer_feature_types` considers integers from 0, ..., n as numeric. It further provides a new argument `binary_as`, to steer if columns 0/1 should be considered numeric or categorical. ([#231](https://github.com/theislab/ehrdata/pull/231)) @eroell
 
