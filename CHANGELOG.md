@@ -21,10 +21,10 @@ and this project adheres to [Semantic Versioning][].
 ### Modified
  - {func}`~ehrdata.dt.mimic_2` column `censor_flg` switched to lifeline's convention with 1=event, 0=censored, before this dataset loader function had them vice versa since the dataset provides them as such originally. ([#227](https://github.com/theislab/ehrdata/pull/227)) @sueoglu
 
- ### Fixed
+### Fixed
  - {func}`~ehrdata.io.from_pandas` with `format='long'` misordered entries in `.X`/`.layers` with `.obs` if the input df was not sorted for the obs id keys, which is now fixed. ([#228](https://github.com/theislab/ehrdata/pull/228)) @eroell
 
-  ### Documentation
+### Documentation
  - Documentation style polishing ([#223](https://github.com/theislab/ehrdata/pull/223)) @zethson
 
 ## [0.1.1]
@@ -178,17 +178,6 @@ and this project adheres to [Semantic Versioning][].
 ### Added
 
 - Initial release
-
-## [Unreleased]
-
-### Added
-
-- Basic tool, preprocessing and plotting functions
-
-### Fixed
-
-- tutorial notebooks updated to align with breaking changes
-e
 
 ## [Unreleased]
 
