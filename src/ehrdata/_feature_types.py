@@ -20,16 +20,20 @@ if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
-def _detect_feature_type(col: pd.Series) -> tuple[Literal["date", "categorical", "numeric"], bool]:
+def _detect_feature_type(
+    col: pd.Series,
+    *,
+    binary_as: Literal["categorical", "numeric"] = "categorical",
+) -> tuple[Literal["date", "categorical", "numeric"], bool]:
     """Detect the feature type of a :class:`~pandas.Series`.
 
     Args:
         col: The series to detect the feature type of.
+        binary_as: How to classify binary (0/1) features.
 
     Returns:
         The detected feature type (one of 'date', 'categorical', or 'numeric') and a boolean, which is True if the feature type is uncertain.
     """
-    n_elements = len(col)
     col[col.isin(MISSING_VALUES)] = np.nan
     col = col.infer_objects(copy=False)
     col = col.dropna()
@@ -56,15 +60,10 @@ def _detect_feature_type(col: pd.Series) -> tuple[Literal["date", "categorical",
     if majority_type not in [int, float]:
         return CATEGORICAL_TAG, False  # type: ignore
 
-    # Guess categorical if the feature is an integer and the values are 0/1 to n-1/n with no gaps
-    if (
-        (majority_type is int or (np.all(i.is_integer() for i in col)))
-        and (n_elements != col.nunique())
-        and (
-            (col.min() == 0 and np.all(np.sort(col.unique()) == np.arange(col.nunique())))
-            or (col.min() == 1 and np.all(np.sort(col.unique()) == np.arange(1, col.nunique() + 1)))
-        )
-    ):
+    # Guess categorical if the feature is binary (values are exactly {0, 1})
+    if (majority_type is int or (np.all(i.is_integer() for i in col))) and set(col.unique()) == {0, 1}:
+        if binary_as == "numeric":
+            return NUMERIC_TAG, False  # type: ignore
         return CATEGORICAL_TAG, True  # type: ignore
 
     return NUMERIC_TAG, False  # type: ignore
@@ -75,6 +74,7 @@ def infer_feature_types(
     *,
     layer: str | None = None,
     output: Literal["tree", "dataframe"] | None = "tree",
+    binary_as: Literal["categorical", "numeric"] = "categorical",
     verbose: bool = True,
 ) -> pd.DataFrame | None:
     """Infer feature types of an :class:`~ehrdata.EHRData` object.
@@ -93,6 +93,9 @@ def infer_feature_types(
             If `'tree'`, the feature types will be printed to the console in a tree format.
             If `'dataframe'`, a :class:`~pandas.DataFrame` with the feature types will be returned.
             If `None`, nothing will be returned.
+        binary_as: How to classify binary features with values 0 and 1.
+            If `'categorical'` (default), binary features are classified as categorical.
+            If `'numeric'`, binary features are classified as numeric.
         verbose: Whether to print warnings for uncertain feature types.
 
     Examples:
@@ -118,7 +121,7 @@ def infer_feature_types(
         ):
             feature_types[feature] = edata.var[FEATURE_TYPE_KEY][feature]
         else:
-            feature_types[feature], raise_warning = _detect_feature_type(df[feature])
+            feature_types[feature], raise_warning = _detect_feature_type(df[feature], binary_as=binary_as)
             if raise_warning:
                 uncertain_features.append(feature)
 
@@ -142,27 +145,6 @@ def infer_feature_types(
     elif output is not None:
         err_msg = f"Output format {output} not recognized. Choose between 'tree', 'dataframe', or None."
         raise ValueError(err_msg)
-
-
-# TODO: this function is a different flavor of inferring feature types. We should decide on a single implementation in the future.
-def _infer_numerical_column_indices(
-    edata: EHRData, layer: str | None = None, column_indices: Iterable[int] | None = None
-) -> list[int]:
-    mtx = edata.X if layer is None else edata[layer]
-    indices = (
-        list(range(mtx.shape[1])) if column_indices is None else [i for i in column_indices if i < mtx.shape[1] - 1]
-    )
-    non_numerical_indices = []
-    for i in indices:
-        # The astype("float64") call will throw only if the feature's data type cannot be cast to float64, meaning in
-        # practice it contains non-numeric values. Consequently, it won't throw if the values are numeric but stored
-        # as an "object" dtype, as astype("float64") can successfully convert them to floats.
-        try:
-            mtx[::, i].astype("float64")
-        except ValueError:
-            non_numerical_indices.append(i)
-
-    return [idx for idx in indices if idx not in non_numerical_indices]
 
 
 def _check_feature_types(func):

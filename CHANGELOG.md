@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning][].
 ### Fixed
  - {func}`~ehrdata.io.from_pandas` with `format='long'` misordered entries in `.X`/`.layers` with `.obs` if the input df was not sorted for the obs id keys, which is now fixed. ([#228](https://github.com/theislab/ehrdata/pull/228)) @eroell
 
- ### Documentation
+### Documentation
  - Documentation style polishing ([#223](https://github.com/theislab/ehrdata/pull/223)) @zethson
 
 ## [0.1.1]
