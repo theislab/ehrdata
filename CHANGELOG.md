@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.2.0] Future
+## [0.2.0]
 
 ### Fixed
  - Assigning `.X` to a view of an X-less {class}`~ehrdata.EHRData` (e.g. one created with `layers=` only) no longer raises `TypeError: 'NoneType' object does not support item assignment`. The view is now materialised before the assignment, consistent with how AnnData handles other field modifications on views. ([#233](https://github.com/theislab/ehrdata/pull/233)) @eroell
