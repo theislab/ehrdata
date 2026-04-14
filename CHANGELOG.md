@@ -8,9 +8,10 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.1.3] Future
+## [0.2.0] Future
 
-
+### Fixed
+ - Assigning `.X` to a view of an X-less {class}`~ehrdata.EHRData` (e.g. one created with `layers=` only) no longer raises `TypeError: 'NoneType' object does not support item assignment`. The view is now materialised before the assignment, consistent with how AnnData handles other field modifications on views. ([#233](https://github.com/theislab/ehrdata/pull/233)) @eroell
 
 ### Modified
  - {func}`~ehrdata.infer_feature_types` considers integers from 0, ..., n as numeric. It further provides a new argument `binary_as`, to steer if columns 0/1 should be considered numeric or categorical. ([#231](https://github.com/theislab/ehrdata/pull/231)) @eroell
