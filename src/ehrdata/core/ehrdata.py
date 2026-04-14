@@ -353,6 +353,13 @@ class EHRData(AnnData):
 
     @X.setter
     def X(self, value):
+        # When this is a view whose parent has no X (parent._X is None), AnnData's
+        # setter tries to write into None and raises TypeError. Materialise the view
+        # first so the assignment lands on a real object, matching the behaviour for
+        # other fields (obs, var, …) on X-less views.
+        if self.is_view and self._adata_ref is not None and self._adata_ref._X is None:
+            self._init_as_actual(self.copy())
+
         # this is a bit hacky, but anndata checks its own shape to match the shape of X
         n_t = self.n_t
         self._n_t = None  # type: ignore

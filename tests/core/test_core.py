@@ -326,6 +326,29 @@ def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
     edata_view.obsp["obsp_entry"] = np.array([[1, 2], [3, 4]])
 
 
+def test_assign_X_to_layers_only(X_numpy_32, X_numpy_322):
+    """EHRData created with layers only: assigning X should work and preserve layers/n_t."""
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
+    assert edata.X is None
+    edata.X = X_numpy_32
+    assert edata.X.shape == X_numpy_32.shape
+    assert edata.n_t == X_numpy_322.shape[2]
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == X_numpy_322.shape
+
+
+@pytest.mark.filterwarnings("ignore:.*Initializing view as actual.*:anndata._core.views.ImplicitModificationWarning")
+@pytest.mark.filterwarnings("ignore:.*Modifying.*on a view.*:anndata._core.views.ImplicitModificationWarning")
+def test_assign_X_to_view_of_layers_only(X_numpy_32, X_numpy_322):
+    """Assigning X to a view of an X-less EHRData should materialise the view instead of crashing."""
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
+    view = edata[:2]
+    assert view.is_view
+    view.X = X_numpy_32[:2]
+    assert not view.is_view
+    assert view.X.shape == (2, X_numpy_32.shape[1])
+    assert view.n_t == X_numpy_322.shape[2]
+
+
 #################################################################
 ### Test slicing
 #################################################################
