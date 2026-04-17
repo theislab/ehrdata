@@ -11,9 +11,12 @@ matching is robust to leading-zero loss during CSV export.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _NDC11_LEN = 11
 

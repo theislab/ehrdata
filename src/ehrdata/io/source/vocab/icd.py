@@ -7,7 +7,10 @@ claims codes, plus stubs for GEM (General Equivalence Mapping) and CCS
 
 from __future__ import annotations
 
-import pandas as pd
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # ICD-9 code series that begin with E (external causes) or V (supplemental
 # factors) are unambiguously ICD-9 when the version flag is absent in claims
@@ -67,7 +70,8 @@ def load_gem_map(path: str) -> pd.DataFrame:  # pragma: no cover
     Raises:
         NotImplementedError: Always — implementation pending external data.
     """
-    raise NotImplementedError("GEM loader requires external CMS GEM file; not yet implemented.")
+    msg = "GEM loader requires external CMS GEM file; not yet implemented."
+    raise NotImplementedError(msg)
 
 
 def load_ccs_map(path: str) -> pd.DataFrame:  # pragma: no cover
@@ -83,4 +87,5 @@ def load_ccs_map(path: str) -> pd.DataFrame:  # pragma: no cover
     Raises:
         NotImplementedError: Always — implementation pending external data.
     """
-    raise NotImplementedError("CCS loader requires external AHRQ CCS file; not yet implemented.")
+    msg = "CCS loader requires external AHRQ CCS file; not yet implemented."
+    raise NotImplementedError(msg)

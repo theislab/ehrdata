@@ -8,10 +8,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from ehrdata.io.source.to_ehrdata import to_ehrdata
-
 
 # ---------------------------------------------------------------------------
 # Minimal fixture helpers
@@ -19,58 +17,68 @@ from ehrdata.io.source.to_ehrdata import to_ehrdata
 
 
 def _patinfo(*patient_ids: str) -> pd.DataFrame:
-    return pd.DataFrame({
-        "patient_id": list(patient_ids),
-        "dobyr": [1960 + i for i in range(len(patient_ids))],
-        "sex": ["F" if i % 2 == 0 else "M" for i in range(len(patient_ids))],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": list(patient_ids),
+            "dobyr": [1960 + i for i in range(len(patient_ids))],
+            "sex": ["F" if i % 2 == 0 else "M" for i in range(len(patient_ids))],
+        }
+    )
 
 
 def _diagnosis(rows: list[tuple[str, str]]) -> pd.DataFrame:
-    pids, dxs = zip(*rows) if rows else ([], [])
-    return pd.DataFrame({
-        "patient_id": list(pids),
-        "dxver": [None] * len(pids),
-        "eventdate": pd.NaT,
-        "dx": list(dxs),
-    })
+    pids, dxs = zip(*rows, strict=False) if rows else ([], [])
+    return pd.DataFrame(
+        {
+            "patient_id": list(pids),
+            "dxver": [None] * len(pids),
+            "eventdate": pd.NaT,
+            "dx": list(dxs),
+        }
+    )
 
 
 def _therapy(rows: list[tuple[str, str | None]]) -> pd.DataFrame:
-    pids, ings = zip(*rows) if rows else ([], [])
-    return pd.DataFrame({
-        "patient_id": list(pids),
-        "prescription_date": pd.NaT,
-        "start_date": pd.NaT,
-        "fill_date": pd.NaT,
-        "end_date": pd.NaT,
-        "refill": pd.array([pd.NA] * len(pids), dtype="Int64"),
-        "rxcui": None,
-        "ndc11": None,
-        "ingredient": list(ings),
-    })
+    pids, ings = zip(*rows, strict=False) if rows else ([], [])
+    return pd.DataFrame(
+        {
+            "patient_id": list(pids),
+            "prescription_date": pd.NaT,
+            "start_date": pd.NaT,
+            "fill_date": pd.NaT,
+            "end_date": pd.NaT,
+            "refill": pd.array([pd.NA] * len(pids), dtype="Int64"),
+            "rxcui": None,
+            "ndc11": None,
+            "ingredient": list(ings),
+        }
+    )
 
 
 def _labtest(rows: list[tuple[str, str | None]]) -> pd.DataFrame:
-    pids, loincs = zip(*rows) if rows else ([], [])
-    return pd.DataFrame({
-        "patient_id": list(pids),
-        "eventdate": pd.NaT,
-        "value": None,
-        "valuecat": None,
-        "unit": None,
-        "loinc": list(loincs),
-    })
+    pids, loincs = zip(*rows, strict=False) if rows else ([], [])
+    return pd.DataFrame(
+        {
+            "patient_id": list(pids),
+            "eventdate": pd.NaT,
+            "value": None,
+            "valuecat": None,
+            "unit": None,
+            "loinc": list(loincs),
+        }
+    )
 
 
 def _procedure(rows: list[tuple[str, str]]) -> pd.DataFrame:
-    pids, procs = zip(*rows) if rows else ([], [])
-    return pd.DataFrame({
-        "patient_id": list(pids),
-        "proctype": None,
-        "eventdate": pd.NaT,
-        "proc": list(procs),
-    })
+    pids, procs = zip(*rows, strict=False) if rows else ([], [])
+    return pd.DataFrame(
+        {
+            "patient_id": list(pids),
+            "proctype": None,
+            "eventdate": pd.NaT,
+            "proc": list(procs),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

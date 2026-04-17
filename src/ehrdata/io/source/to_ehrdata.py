@@ -46,7 +46,7 @@ def to_ehrdata(
     labtest: pd.DataFrame | None = None,
     procedure: pd.DataFrame | None = None,
     source: str | None = None,
-) -> "EHRData":
+) -> EHRData:
     """Convert canonical source tables into an :class:`~ehrdata.EHRData` presence matrix.
 
     Args:
@@ -76,7 +76,14 @@ def to_ehrdata(
         >>> import pandas as pd
         >>> import ehrdata as ed
         >>> patinfo = pd.DataFrame({"patient_id": ["P1", "P2"], "dobyr": [1960, 1975], "sex": ["M", "F"]})
-        >>> diagnosis = pd.DataFrame({"patient_id": ["P1", "P1", "P2"], "dx": ["E11.9", "I10", "E11.9"], "dxver": [None, None, None], "eventdate": pd.NaT})
+        >>> diagnosis = pd.DataFrame(
+        ...     {
+        ...         "patient_id": ["P1", "P1", "P2"],
+        ...         "dx": ["E11.9", "I10", "E11.9"],
+        ...         "dxver": [None, None, None],
+        ...         "eventdate": pd.NaT,
+        ...     }
+        ... )
         >>> edata = ed.io.source.to_ehrdata(patinfo, diagnosis=diagnosis, source="example")
         >>> edata.obs_names.tolist()
         ['P1', 'P2']
@@ -176,8 +183,10 @@ def _append_pairs(
     if sub.empty:
         return
     frames.append(
-        pd.DataFrame({
-            "patient_id": sub[pid_col].astype(str).values,
-            "concept": prefix + ":" + sub[code_col].astype(str).values,
-        })
+        pd.DataFrame(
+            {
+                "patient_id": sub[pid_col].astype(str).values,
+                "concept": prefix + ":" + sub[code_col].astype(str).values,
+            }
+        )
     )

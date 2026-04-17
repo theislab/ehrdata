@@ -77,9 +77,10 @@ class TestLoadMedicalMap:
 
     def test_deduplicates_on_medcode(self):
         # feeding a path where the same medcode appears twice
-        import io
         data = "medcode\treadcode\tdesc\n100\tA10..00\tFoo\n100\tA10..00\tFoo duplicate\n"
-        import tempfile, os
+        import os
+        import tempfile
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write(data)
             tmp = f.name
@@ -155,8 +156,10 @@ class TestLoadProductMap:
         assert row["drugsubstance"].iloc[0] == "metformin"
 
     def test_prefers_updated_column(self):
-        import io, tempfile, os
-        data = "prodcode\tdrugsubstance\tdrugsubstance.updated\n" "PC1\traw name\tupdated name\n"
+        import os
+        import tempfile
+
+        data = "prodcode\tdrugsubstance\tdrugsubstance.updated\nPC1\traw name\tupdated name\n"
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write(data)
             tmp = f.name
@@ -167,7 +170,9 @@ class TestLoadProductMap:
             os.unlink(tmp)
 
     def test_csv_separator(self):
-        import tempfile, os
+        import os
+        import tempfile
+
         data = "prodcode,drugsubstance\nPC1,aspirin\n"
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             f.write(data)

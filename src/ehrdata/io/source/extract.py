@@ -13,13 +13,12 @@ found across the original MarketScan, LCED, and CPRD R scripts:
 from __future__ import annotations
 
 import zipfile
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
 
 if TYPE_CHECKING:
-    pass
+    from pathlib import Path
 
 
 def union_tables(dfs: list[pd.DataFrame]) -> pd.DataFrame:
@@ -39,7 +38,8 @@ def union_tables(dfs: list[pd.DataFrame]) -> pd.DataFrame:
         ValueError: If *dfs* is empty.
     """
     if not dfs:
-        raise ValueError("dfs must contain at least one DataFrame")
+        msg = "dfs must contain at least one DataFrame"
+        raise ValueError(msg)
     return pd.concat(dfs, ignore_index=True).drop_duplicates().reset_index(drop=True)
 
 
@@ -77,12 +77,7 @@ def unnest_codes(
         value_vars=code_cols,
         value_name=value_name,
     )
-    return (
-        long.dropna(subset=[value_name])
-        .drop(columns="variable")
-        .drop_duplicates()
-        .reset_index(drop=True)
-    )
+    return long.dropna(subset=[value_name]).drop(columns="variable").drop_duplicates().reset_index(drop=True)
 
 
 def read_zipped_tsv(
@@ -92,7 +87,7 @@ def read_zipped_tsv(
     usecols: list[str] | None = None,
     **kwargs,
 ) -> pd.DataFrame:
-    """Read a single TSV member from a zip archive.
+    r"""Read a single TSV member from a zip archive.
 
     Mirrors ``fread(cmd=paste("unzip -p", file), sep="\\t")`` used in the
     CPRD R ETL to stream individual extract files without unzipping to disk.
@@ -106,9 +101,8 @@ def read_zipped_tsv(
     Returns:
         DataFrame with the member's contents.
     """
-    with zipfile.ZipFile(zip_path) as zf:
-        with zf.open(member) as fh:
-            return pd.read_csv(fh, sep="\t", usecols=usecols, **kwargs)
+    with zipfile.ZipFile(zip_path) as zf, zf.open(member) as fh:
+        return pd.read_csv(fh, sep="\t", usecols=usecols, **kwargs)
 
 
 def read_zipped_tsvs(

@@ -6,9 +6,12 @@ helper to left-join Read codes onto a DataFrame by medcode.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def load_medical_map(path: Path | str) -> pd.DataFrame:

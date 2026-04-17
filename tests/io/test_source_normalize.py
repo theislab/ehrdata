@@ -125,10 +125,10 @@ class TestInferIcdVersion:
     def test_mixed_rows(self):
         df = self._make_df([None, "0", None, None], ["E930.0", "E11.9", "V58.67", "I10"])
         result = infer_icd_version(df)
-        assert result.loc[0, "dxver"] == "9"   # E prefix + null → inferred
-        assert result.loc[1, "dxver"] == "0"   # explicit, not overwritten
-        assert result.loc[2, "dxver"] == "9"   # V prefix + null → inferred
-        assert pd.isna(result.loc[3, "dxver"]) # I prefix + null → stays null
+        assert result.loc[0, "dxver"] == "9"  # E prefix + null → inferred
+        assert result.loc[1, "dxver"] == "0"  # explicit, not overwritten
+        assert result.loc[2, "dxver"] == "9"  # V prefix + null → inferred
+        assert pd.isna(result.loc[3, "dxver"])  # I prefix + null → stays null
 
     def test_custom_column_names(self):
         df = pd.DataFrame({"pid": [1], "ver": [None], "code": ["E930.0"]})
@@ -170,28 +170,38 @@ class TestDeduplicate:
 
 class TestSortEvents:
     def test_sorted_by_patient_then_date(self):
-        df = pd.DataFrame({
-            "patient_id": ["2", "1", "1"],
-            "eventdate": pd.to_datetime(["2020-02-01", "2020-03-01", "2020-01-01"]),
-        })
+        df = pd.DataFrame(
+            {
+                "patient_id": ["2", "1", "1"],
+                "eventdate": pd.to_datetime(["2020-02-01", "2020-03-01", "2020-01-01"]),
+            }
+        )
         result = sort_events(df)
         assert list(result["patient_id"]) == ["1", "1", "2"]
-        assert list(result["eventdate"]) == [pd.Timestamp("2020-01-01"), pd.Timestamp("2020-03-01"), pd.Timestamp("2020-02-01")]
+        assert list(result["eventdate"]) == [
+            pd.Timestamp("2020-01-01"),
+            pd.Timestamp("2020-03-01"),
+            pd.Timestamp("2020-02-01"),
+        ]
 
     def test_nat_placed_last(self):
-        df = pd.DataFrame({
-            "patient_id": ["1", "1"],
-            "eventdate": pd.to_datetime([None, "2020-01-01"]),
-        })
+        df = pd.DataFrame(
+            {
+                "patient_id": ["1", "1"],
+                "eventdate": pd.to_datetime([None, "2020-01-01"]),
+            }
+        )
         result = sort_events(df)
         assert result["eventdate"].iloc[0] == pd.Timestamp("2020-01-01")
         assert pd.isna(result["eventdate"].iloc[1])
 
     def test_custom_column_names(self):
-        df = pd.DataFrame({
-            "pid": ["b", "a"],
-            "dt": pd.to_datetime(["2020-02-01", "2020-01-01"]),
-        })
+        df = pd.DataFrame(
+            {
+                "pid": ["b", "a"],
+                "dt": pd.to_datetime(["2020-02-01", "2020-01-01"]),
+            }
+        )
         result = sort_events(df, patient_col="pid", date_col="dt")
         assert result["pid"].iloc[0] == "a"
 
@@ -202,7 +212,7 @@ class TestSortEvents:
 
 
 class TestNormalizeDiagnosis:
-    @pytest.fixture()
+    @pytest.fixture
     def raw_df(self):
         return pd.read_csv(FIXTURE_DIR / "diagnosis.csv")
 
@@ -254,7 +264,7 @@ class TestNormalizeDiagnosis:
 
 
 class TestNormalizeTherapy:
-    @pytest.fixture()
+    @pytest.fixture
     def raw_df(self):
         return pd.read_csv(FIXTURE_DIR / "therapy.csv")
 
@@ -289,7 +299,7 @@ class TestNormalizeTherapy:
 
 
 class TestNormalizeLabtest:
-    @pytest.fixture()
+    @pytest.fixture
     def raw_df(self):
         return pd.read_csv(FIXTURE_DIR / "labtest.csv")
 
@@ -315,7 +325,7 @@ class TestNormalizeLabtest:
 
 
 class TestNormalizeProcedure:
-    @pytest.fixture()
+    @pytest.fixture
     def raw_df(self):
         return pd.read_csv(FIXTURE_DIR / "procedure.csv")
 

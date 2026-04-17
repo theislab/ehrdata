@@ -149,8 +149,9 @@ def build_therapy(
     out["rxcui"] = pd.array([None] * len(out), dtype=object)
     out["ndc11"] = pd.array([None] * len(out), dtype=object)
 
-    out = out[[_PID, "prescription_date", "start_date", "fill_date", "end_date",
-               "refill", "rxcui", "ndc11", "ingredient"]]
+    out = out[
+        [_PID, "prescription_date", "start_date", "fill_date", "end_date", "refill", "rxcui", "ndc11", "ingredient"]
+    ]
     return deduplicate(out)
 
 
@@ -209,12 +210,14 @@ def build_labtest(
     if entity_enttypes is not None:
         out = out[out["enttype"].isin(entity_enttypes)]
 
-    out = out.rename(columns={
-        "patid": _PID,
-        "data2": "value",
-        "data3": "unit",
-        "data4": "valuecat",
-    })
+    out = out.rename(
+        columns={
+            "patid": _PID,
+            "data2": "value",
+            "data3": "unit",
+            "data4": "valuecat",
+        }
+    )
     out[_PID] = coerce_patient_id(out[_PID])
     out["eventdate"] = coerce_date(out["eventdate"], formats=[_CPRD_DATE_FMT])
     out["loinc"] = pd.array([None] * len(out), dtype=object)

@@ -15,7 +15,7 @@ VOCAB_DIR = Path("tests/data/source_vocab")
 
 
 class TestLoadNdcIngredientMap:
-    @pytest.fixture()
+    @pytest.fixture
     def ndc_map(self):
         return load_ndc_ingredient_map(VOCAB_DIR / "ndc_ingredient_map.txt")
 
@@ -49,7 +49,7 @@ class TestLoadNdcIngredientMap:
 
 
 class TestJoinIngredientByNdc:
-    @pytest.fixture()
+    @pytest.fixture
     def ndc_map(self):
         return load_ndc_ingredient_map(VOCAB_DIR / "ndc_ingredient_map.txt")
 
@@ -97,7 +97,7 @@ class TestJoinIngredientByNdc:
 
 
 class TestLoadRxcuiIngredientMap:
-    @pytest.fixture()
+    @pytest.fixture
     def rxcui_map(self):
         return load_rxcui_ingredient_map(VOCAB_DIR / "rxcui_ingredient_map.txt")
 
@@ -122,7 +122,7 @@ class TestLoadRxcuiIngredientMap:
 
 
 class TestJoinIngredientByRxcui:
-    @pytest.fixture()
+    @pytest.fixture
     def rxcui_map(self):
         return load_rxcui_ingredient_map(VOCAB_DIR / "rxcui_ingredient_map.txt")
 

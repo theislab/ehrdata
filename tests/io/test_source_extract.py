@@ -98,11 +98,13 @@ class TestUnnestCodes:
         assert len(result) == 6
 
     def test_deduplicates_identical_long_rows(self):
-        df = pd.DataFrame({
-            "pid": [1, 1],
-            "dx1": ["A01", "A01"],
-            "dx2": ["B02", "B02"],
-        })
+        df = pd.DataFrame(
+            {
+                "pid": [1, 1],
+                "dx1": ["A01", "A01"],
+                "dx2": ["B02", "B02"],
+            }
+        )
         result = unnest_codes(df, id_cols=["pid"], code_cols=["dx1", "dx2"], value_name="dx")
         assert len(result) == 2  # (pid=1,dx=A01) and (pid=1,dx=B02)
 
@@ -128,7 +130,7 @@ class TestUnnestCodes:
 
 
 class TestReadZippedTsv:
-    @pytest.fixture()
+    @pytest.fixture
     def zip_bytes(self, tmp_path):
         content = "patient_id\teventdate\tdx\n1\t2020-01-15\tE11.9\n2\t2020-02-01\tI10\n"
         zdata = _make_zip({"clinical.txt": content})
@@ -157,7 +159,7 @@ class TestReadZippedTsv:
 
 
 class TestReadZippedTsvs:
-    @pytest.fixture()
+    @pytest.fixture
     def zip_bytes(self, tmp_path):
         tsv1 = "patient_id\tdx\n1\tE11.9\n2\tI10\n"
         tsv2 = "patient_id\tdx\n3\tE10.9\n4\tJ45\n"

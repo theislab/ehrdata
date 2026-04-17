@@ -43,12 +43,20 @@ _ENROLID = "enrolid"
 
 # Patinfo columns that exist in MarketScan beyond the canonical three
 _PATINFO_EXTRA_COLS = [
-    "efamid", "year", "region", "msa", "wgtkey",
-    "eeclass", "eestatu", "egeoloc", "emprel", "indstry",
+    "efamid",
+    "year",
+    "region",
+    "msa",
+    "wgtkey",
+    "eeclass",
+    "eestatu",
+    "egeoloc",
+    "emprel",
+    "indstry",
 ]
 
 # All patinfo columns as they appear in MarketScan source tables
-_PATINFO_SRC_COLS = [_ENROLID, "dobyr", "sex"] + _PATINFO_EXTRA_COLS
+_PATINFO_SRC_COLS = [_ENROLID, "dobyr", "sex", *_PATINFO_EXTRA_COLS]
 
 
 # ---------------------------------------------------------------------------
@@ -84,14 +92,10 @@ def build_diagnosis(
         :data:`~ehrdata.io.source.schema.DIAGNOSIS`.
     """
     parts = [
-        _unnest_dx(facility_header, date_col="svcdate",
-                   dx_cols=[f"dx{i}" for i in range(1, 10)]),
-        _unnest_dx(inpatient_admissions, date_col="admdate",
-                   dx_cols=["pdx"] + [f"dx{i}" for i in range(1, 16)]),
-        _unnest_dx(inpatient_services, date_col="svcdate",
-                   dx_cols=["pdx"] + [f"dx{i}" for i in range(1, 5)]),
-        _unnest_dx(outpatient_services, date_col="svcdate",
-                   dx_cols=[f"dx{i}" for i in range(1, 5)]),
+        _unnest_dx(facility_header, date_col="svcdate", dx_cols=[f"dx{i}" for i in range(1, 10)]),
+        _unnest_dx(inpatient_admissions, date_col="admdate", dx_cols=["pdx"] + [f"dx{i}" for i in range(1, 16)]),
+        _unnest_dx(inpatient_services, date_col="svcdate", dx_cols=["pdx"] + [f"dx{i}" for i in range(1, 5)]),
+        _unnest_dx(outpatient_services, date_col="svcdate", dx_cols=[f"dx{i}" for i in range(1, 5)]),
     ]
     df = union_tables(parts)
     df[_PID] = coerce_patient_id(df[_PID])
@@ -106,7 +110,7 @@ def _unnest_dx(src: pd.DataFrame, *, date_col: str, dx_cols: list[str]) -> pd.Da
     """Select, rename, and unnest diagnosis codes from one source table."""
     present_dx = [c for c in dx_cols if c in src.columns]
     dxver_col = ["dxver"] if "dxver" in src.columns else []
-    tmp = src[[_ENROLID, date_col] + dxver_col + present_dx].copy()
+    tmp = src[[_ENROLID, date_col, *dxver_col, *present_dx]].copy()
     tmp = tmp.rename(columns={_ENROLID: _PID, date_col: "eventdate"})
     if "dxver" not in tmp.columns:
         tmp["dxver"] = None
@@ -159,13 +163,25 @@ def build_therapy(
 
     if ndc_map is not None:
         from ehrdata.io.source.vocab.ndc import join_ingredient_by_ndc
+
         df = join_ingredient_by_ndc(df, ndc_map)
     else:
         df["ingredient"] = None
 
     df = deduplicate(df)
-    return df[["patient_id", "prescription_date", "start_date", "fill_date",
-               "end_date", "refill", "rxcui", "ndc11", "ingredient"]]
+    return df[
+        [
+            "patient_id",
+            "prescription_date",
+            "start_date",
+            "fill_date",
+            "end_date",
+            "refill",
+            "rxcui",
+            "ndc11",
+            "ingredient",
+        ]
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -202,14 +218,17 @@ def build_procedure(
         :data:`~ehrdata.io.source.schema.PROCEDURE`.
     """
     parts = [
-        _unnest_proc(facility_header, date_col="svcdate",
-                     proc_cols=[f"proc{i}" for i in range(1, 7)], proctype_col=None),
-        _unnest_proc(inpatient_admissions, date_col="admdate",
-                     proc_cols=["pproc"] + [f"proc{i}" for i in range(1, 16)], proctype_col=None),
-        _unnest_proc(inpatient_services, date_col="svcdate",
-                     proc_cols=["pdx", "proc1"], proctype_col="proctyp"),
-        _unnest_proc(outpatient_services, date_col="svcdate",
-                     proc_cols=["proc1"], proctype_col="proctyp"),
+        _unnest_proc(
+            facility_header, date_col="svcdate", proc_cols=[f"proc{i}" for i in range(1, 7)], proctype_col=None
+        ),
+        _unnest_proc(
+            inpatient_admissions,
+            date_col="admdate",
+            proc_cols=["pproc"] + [f"proc{i}" for i in range(1, 16)],
+            proctype_col=None,
+        ),
+        _unnest_proc(inpatient_services, date_col="svcdate", proc_cols=["pdx", "proc1"], proctype_col="proctyp"),
+        _unnest_proc(outpatient_services, date_col="svcdate", proc_cols=["proc1"], proctype_col="proctyp"),
     ]
     df = union_tables(parts)
     df[_PID] = coerce_patient_id(df[_PID])
@@ -228,7 +247,7 @@ def _unnest_proc(
 ) -> pd.DataFrame:
     """Select, rename, and unnest procedure codes from one source table."""
     present_proc = [c for c in proc_cols if c in src.columns]
-    tmp = src[[_ENROLID, date_col] + present_proc].copy()
+    tmp = src[[_ENROLID, date_col, *present_proc]].copy()
     tmp = tmp.rename(columns={_ENROLID: _PID, date_col: "eventdate"})
     if proctype_col and proctype_col in src.columns:
         tmp["proctype"] = src[proctype_col].values
@@ -264,10 +283,7 @@ def build_patinfo(*source_tables: pd.DataFrame) -> pd.DataFrame:
         present.
     """
     _REQUIRED = [_ENROLID, "dobyr", "sex"]
-    available_extra = [
-        c for c in _PATINFO_EXTRA_COLS
-        if all(c in t.columns for t in source_tables)
-    ]
+    available_extra = [c for c in _PATINFO_EXTRA_COLS if all(c in t.columns for t in source_tables)]
     keep_cols = _REQUIRED + available_extra
 
     parts = [t[[c for c in keep_cols if c in t.columns]].copy() for t in source_tables]

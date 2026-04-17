@@ -33,17 +33,17 @@ VOCAB_DIR = Path("tests/data/source_vocab")
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def ndc_map():
     return load_ndc_ingredient_map(VOCAB_DIR / "ndc_ingredient_map.txt")
 
 
-@pytest.fixture()
+@pytest.fixture
 def rxcui_map():
     return load_rxcui_ingredient_map(VOCAB_DIR / "rxcui_ingredient_map.txt")
 
 
-@pytest.fixture()
+@pytest.fixture
 def loinc_map():
     return load_loinc_map(VOCAB_DIR / "loinc_map.csv")
 
@@ -53,172 +53,195 @@ def loinc_map():
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def facility_header():
-    return pd.DataFrame({
-        "patient_id": ["P001", "P002", "P001"],
-        "dxver":      ["0",    "9",    "0"],
-        "svcdate":    ["2020-01-15", "2020-02-01", "2020-03-10"],
-        "dx1":        ["E11.9", "I10",   "E11.9"],
-        "dx2":        ["I10",   None,    None],
-        "dx3":        [None,    None,    None],
-        "proc1":      ["99213", None,    "99213"],
-        "proc2":      [None,    "93000", None],
-        "proc3":      [None,    None,    None],
-        "svcdate":    ["2020-01-15", "2020-02-01", "2020-03-10"],
-        "cob":        [0.0,     10.0,  0.0],
-        "coins":      [20.0,    0.0,   20.0],
-        "copay":      [30.0,    15.0,  30.0],
-        "dobyr":      [1960,    1970,  1960],
-        "sex":        ["M",     "F",   "M"],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P001", "P002", "P001"],
+            "dxver": ["0", "9", "0"],
+            "svcdate": ["2020-01-15", "2020-02-01", "2020-03-10"],
+            "dx1": ["E11.9", "I10", "E11.9"],
+            "dx2": ["I10", None, None],
+            "dx3": [None, None, None],
+            "proc1": ["99213", None, "99213"],
+            "proc2": [None, "93000", None],
+            "proc3": [None, None, None],
+            "cob": [0.0, 10.0, 0.0],
+            "coins": [20.0, 0.0, 20.0],
+            "copay": [30.0, 15.0, 30.0],
+            "dobyr": [1960, 1970, 1960],
+            "sex": ["M", "F", "M"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def inpatient_admissions():
-    return pd.DataFrame({
-        "patient_id": ["P001", "P003"],
-        "dxver":      ["0",    None],
-        "admdate":    ["2020-04-01", "2020-05-15"],
-        "pdx":        ["J18.9", "E10.9"],
-        "dx1":        ["I10",   None],
-        "dx2":        [None,    None],
-        "pproc":      ["27447", None],
-        "proc1":      [None,    "99232"],
-        "dobyr":      [1960,    1980],
-        "sex":        ["M",     "M"],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P001", "P003"],
+            "dxver": ["0", None],
+            "admdate": ["2020-04-01", "2020-05-15"],
+            "pdx": ["J18.9", "E10.9"],
+            "dx1": ["I10", None],
+            "dx2": [None, None],
+            "pproc": ["27447", None],
+            "proc1": [None, "99232"],
+            "dobyr": [1960, 1980],
+            "sex": ["M", "M"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def inpatient_services():
-    return pd.DataFrame({
-        "patient_id": ["P001", "P002"],
-        "dxver":      ["0",    "0"],
-        "svcdate":    ["2020-04-02", "2020-04-10"],
-        "pdx":        ["J18.9", "K92.1"],
-        "dx1":        ["I10",   None],
-        "dx2":        [None,    None],
-        "proctyp":    ["ICD",   "CPT"],
-        "proc1":      ["99232", "44950"],
-        "cob":        [5.0,     0.0],
-        "coins":      [10.0,    25.0],
-        "copay":      [20.0,    40.0],
-        "dobyr":      [1960,    1970],
-        "sex":        ["M",     "F"],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P001", "P002"],
+            "dxver": ["0", "0"],
+            "svcdate": ["2020-04-02", "2020-04-10"],
+            "pdx": ["J18.9", "K92.1"],
+            "dx1": ["I10", None],
+            "dx2": [None, None],
+            "proctyp": ["ICD", "CPT"],
+            "proc1": ["99232", "44950"],
+            "cob": [5.0, 0.0],
+            "coins": [10.0, 25.0],
+            "copay": [20.0, 40.0],
+            "dobyr": [1960, 1970],
+            "sex": ["M", "F"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def lab_results():
-    return pd.DataFrame({
-        "patient_id": ["P001", "P002", "P003"],
-        "dxver":      [None,   "0",    None],
-        "svcdate":    ["2020-01-20", "2020-02-10", "2020-03-05"],
-        "dx1":        ["V58.67", "E11.9", None],
-        "proctyp":    ["CPT",   "CPT",   "CPT"],
-        "proc1":      ["83036", "83036", None],
-        "result":     ["7.2",   "6.8",   "5.4"],
-        "resltcat":   [None,    None,    "normal"],
-        "resunit":    ["mmol/L", "mmol/L", "mmol/L"],
-        "loinccd":    ["14749-6", "14749-6", "14749-6"],
-        "dobyr":      [1960,    1970,    1980],
-        "sex":        ["M",     "F",     "M"],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P001", "P002", "P003"],
+            "dxver": [None, "0", None],
+            "svcdate": ["2020-01-20", "2020-02-10", "2020-03-05"],
+            "dx1": ["V58.67", "E11.9", None],
+            "proctyp": ["CPT", "CPT", "CPT"],
+            "proc1": ["83036", "83036", None],
+            "result": ["7.2", "6.8", "5.4"],
+            "resltcat": [None, None, "normal"],
+            "resunit": ["mmol/L", "mmol/L", "mmol/L"],
+            "loinccd": ["14749-6", "14749-6", "14749-6"],
+            "dobyr": [1960, 1970, 1980],
+            "sex": ["M", "F", "M"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def outpatient_services():
-    return pd.DataFrame({
-        "patient_id": ["P002", "P003"],
-        "dxver":      [None,   "0"],
-        "svcdate":    ["2020-06-01", "2020-07-01"],
-        "dx1":        ["E10.9", "I10"],
-        "dx2":        [None,    None],
-        "proctyp":    ["CPT",   "CPT"],
-        "proc1":      ["99213", "99214"],
-        "cob":        [0.0,     0.0],
-        "coins":      [15.0,    20.0],
-        "copay":      [25.0,    35.0],
-        "dobyr":      [1970,    1980],
-        "sex":        ["F",     "M"],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P002", "P003"],
+            "dxver": [None, "0"],
+            "svcdate": ["2020-06-01", "2020-07-01"],
+            "dx1": ["E10.9", "I10"],
+            "dx2": [None, None],
+            "proctyp": ["CPT", "CPT"],
+            "proc1": ["99213", "99214"],
+            "cob": [0.0, 0.0],
+            "coins": [15.0, 20.0],
+            "copay": [25.0, 35.0],
+            "dobyr": [1970, 1980],
+            "sex": ["F", "M"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def v_drug():
-    return pd.DataFrame({
-        "patient_id":        ["P001",         "P002",         "P001"],
-        "prescription_date": ["2020-01-10",   "2020-02-05",   "2020-01-10"],
-        "start_date":        ["2020-01-15",   "2020-02-10",   "2020-01-15"],
-        "end_date":          ["2020-04-15",   "2020-05-10",   "2020-04-15"],
-        "rx_cui":            ["723",          "4815",         "723"],   # metformin, insulin glargine
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P001", "P002", "P001"],
+            "prescription_date": ["2020-01-10", "2020-02-05", "2020-01-10"],
+            "start_date": ["2020-01-15", "2020-02-10", "2020-01-15"],
+            "end_date": ["2020-04-15", "2020-05-10", "2020-04-15"],
+            "rx_cui": ["723", "4815", "723"],  # metformin, insulin glargine
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def v_outpatient_drug_claims():
-    return pd.DataFrame({
-        "patient_id": ["P001",         "P003",         "P002"],
-        "svcdate":    ["2020-01-20",   "2020-03-01",   "2020-02-15"],
-        "daysupp":    [30,             90,             30],
-        "refill":     [0,              1,              0],
-        "ndcnum":     ["00071015523",  "00310751030",  "00065063136"],
-        "cob":        [0.0,            5.0,            0.0],
-        "coins":      [10.0,           0.0,            20.0],
-        "copay":      [5.0,            10.0,           15.0],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P001", "P003", "P002"],
+            "svcdate": ["2020-01-20", "2020-03-01", "2020-02-15"],
+            "daysupp": [30, 90, 30],
+            "refill": [0, 1, 0],
+            "ndcnum": ["00071015523", "00310751030", "00065063136"],
+            "cob": [0.0, 5.0, 0.0],
+            "coins": [10.0, 0.0, 20.0],
+            "copay": [5.0, 10.0, 15.0],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def v_observation():
-    return pd.DataFrame({
-        "patient_id":       ["P001",        "P002"],
-        "observation_date": ["2020-01-15",  "2020-02-01"],
-        "std_value":        ["7.2",         "6.8"],
-        "std_uom":          ["mmol/L",      "mmol/L"],
-        "loinc_test_id":    ["14749-6",     "4548-4"],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P001", "P002"],
+            "observation_date": ["2020-01-15", "2020-02-01"],
+            "std_value": ["7.2", "6.8"],
+            "std_uom": ["mmol/L", "mmol/L"],
+            "loinc_test_id": ["14749-6", "4548-4"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def v_habit():
-    return pd.DataFrame({
-        "patient_id":             ["P001", "P001", "P002", "P003"],
-        "mapped_question_answer": ["current smoker", None, "non-smoker", "former smoker"],
-        "encounter_join_id":      [101,    102,    103,    104],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P001", "P001", "P002", "P003"],
+            "mapped_question_answer": ["current smoker", None, "non-smoker", "former smoker"],
+            "encounter_join_id": [101, 102, 103, 104],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def v_encounter():
-    return pd.DataFrame({
-        "encounter_join_id": [101,          102,          103,          104],
-        "encounter_date":    ["2020-01-15", "2020-02-01", "2020-02-10", "2020-03-01"],
-    })
+    return pd.DataFrame(
+        {
+            "encounter_join_id": [101, 102, 103, 104],
+            "encounter_date": ["2020-01-15", "2020-02-01", "2020-02-10", "2020-03-01"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def v_annual_summary_enrollment():
-    return pd.DataFrame({
-        "patient_id": ["P001", "P002", "P003"],
-        "dobyr":      [1960,   1970,   1980],
-        "sex":        ["M",    "F",    "M"],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P001", "P002", "P003"],
+            "dobyr": [1960, 1970, 1980],
+            "sex": ["M", "F", "M"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def v_detail_enrollment():
-    return pd.DataFrame({
-        "patient_id": ["P001",        "P001",        "P002"],
-        "dtstart":    ["2020-01-01",  "2021-01-01",  "2020-01-01"],
-        "dtend":      ["2020-12-31",  "2021-12-31",  "2020-12-31"],
-        "plantyp":    [10,            10,            20],
-        "rx":         ["Y",           "Y",           "N"],
-        "hlthplan":   ["BlueCross",   "BlueCross",   "Aetna"],
-        "dobyr":      [1960,          1960,          1970],
-        "sex":        ["M",           "M",           "F"],
-    })
+    return pd.DataFrame(
+        {
+            "patient_id": ["P001", "P001", "P002"],
+            "dtstart": ["2020-01-01", "2021-01-01", "2020-01-01"],
+            "dtend": ["2020-12-31", "2021-12-31", "2020-12-31"],
+            "plantyp": [10, 10, 20],
+            "rx": ["Y", "Y", "N"],
+            "hlthplan": ["BlueCross", "BlueCross", "Aetna"],
+            "dobyr": [1960, 1960, 1970],
+            "sex": ["M", "M", "F"],
+        }
+    )
 
 
 # ===========================================================================
@@ -319,35 +342,63 @@ class TestIcdVocab:
 
 
 class TestLcedBuildDiagnosis:
-    def test_schema_valid(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_schema_valid(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_diagnosis(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         assert DIAGNOSIS.validate(result) == []
 
-    def test_patient_id_already_named(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_patient_id_already_named(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_diagnosis(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         assert "patient_id" in result.columns
         assert "enrolid" not in result.columns
 
-    def test_no_null_dx_codes(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_no_null_dx_codes(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_diagnosis(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         assert result["dx"].notna().all()
 
-    def test_five_sources_contribute(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_five_sources_contribute(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_diagnosis(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         # P003 only appears in inpatient_admissions and outpatient_services
         assert "P003" in result["patient_id"].values
 
-    def test_v_code_from_lab_results_inferred_icd9(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_v_code_from_lab_results_inferred_icd9(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_diagnosis(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         v_rows = result[(result["patient_id"] == "P001") & (result["dx"] == "V58.67")]
         assert (v_rows["dxver"] == "9").all()
 
-    def test_no_duplicate_rows(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_no_duplicate_rows(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_diagnosis(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         assert not result.duplicated().any()
 
-    def test_sorted_by_patient_then_date(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_sorted_by_patient_then_date(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_diagnosis(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         assert list(result["patient_id"]) == sorted(result["patient_id"])
 
 
@@ -434,21 +485,37 @@ class TestLcedBuildLabtest:
 
 
 class TestLcedBuildProcedure:
-    def test_schema_valid(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_procedure(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_schema_valid(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_procedure(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         assert PROCEDURE.validate(result) == []
 
-    def test_no_null_proc_codes(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_procedure(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_no_null_proc_codes(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_procedure(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         assert result["proc"].notna().all()
 
-    def test_lab_results_source_contributes(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_procedure(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_lab_results_source_contributes(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_procedure(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         # lab_results has proc1=83036 for P001 and P002
         assert "83036" in result["proc"].values
 
-    def test_no_duplicate_rows(self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services):
-        result = build_procedure(facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services)
+    def test_no_duplicate_rows(
+        self, facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+    ):
+        result = build_procedure(
+            facility_header, inpatient_admissions, inpatient_services, lab_results, outpatient_services
+        )
         assert not result.duplicated().any()
 
 
@@ -513,11 +580,15 @@ class TestLcedBuildInsurance:
         result = build_insurance(facility_header, inpatient_services, v_outpatient_drug_claims, outpatient_services)
         assert INSURANCE.validate(result) == []
 
-    def test_patient_id_is_string(self, facility_header, inpatient_services, v_outpatient_drug_claims, outpatient_services):
+    def test_patient_id_is_string(
+        self, facility_header, inpatient_services, v_outpatient_drug_claims, outpatient_services
+    ):
         result = build_insurance(facility_header, inpatient_services, v_outpatient_drug_claims, outpatient_services)
         assert result["patient_id"].dtype == object
 
-    def test_svcdate_is_datetime(self, facility_header, inpatient_services, v_outpatient_drug_claims, outpatient_services):
+    def test_svcdate_is_datetime(
+        self, facility_header, inpatient_services, v_outpatient_drug_claims, outpatient_services
+    ):
         result = build_insurance(facility_header, inpatient_services, v_outpatient_drug_claims, outpatient_services)
         assert pd.api.types.is_datetime64_any_dtype(result["svcdate"])
 

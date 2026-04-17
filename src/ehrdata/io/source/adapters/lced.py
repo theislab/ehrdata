@@ -83,15 +83,11 @@ def build_diagnosis(
         :data:`~ehrdata.io.source.schema.DIAGNOSIS`.
     """
     parts = [
-        _unnest_dx(facility_header,   date_col="svcdate",
-                   dx_cols=[f"dx{i}" for i in range(1, 10)]),
-        _unnest_dx(inpatient_admissions, date_col="admdate",
-                   dx_cols=["pdx"] + [f"dx{i}" for i in range(1, 16)]),
-        _unnest_dx(inpatient_services, date_col="svcdate",
-                   dx_cols=["pdx"] + [f"dx{i}" for i in range(1, 5)]),
-        _unnest_dx(lab_results,       date_col="svcdate", dx_cols=["dx1"]),
-        _unnest_dx(outpatient_services, date_col="svcdate",
-                   dx_cols=[f"dx{i}" for i in range(1, 5)]),
+        _unnest_dx(facility_header, date_col="svcdate", dx_cols=[f"dx{i}" for i in range(1, 10)]),
+        _unnest_dx(inpatient_admissions, date_col="admdate", dx_cols=["pdx"] + [f"dx{i}" for i in range(1, 16)]),
+        _unnest_dx(inpatient_services, date_col="svcdate", dx_cols=["pdx"] + [f"dx{i}" for i in range(1, 5)]),
+        _unnest_dx(lab_results, date_col="svcdate", dx_cols=["dx1"]),
+        _unnest_dx(outpatient_services, date_col="svcdate", dx_cols=[f"dx{i}" for i in range(1, 5)]),
     ]
     df = union_tables(parts)
     df[_PID] = coerce_patient_id(df[_PID])
@@ -106,7 +102,7 @@ def _unnest_dx(src: pd.DataFrame, *, date_col: str, dx_cols: list[str]) -> pd.Da
     """Select and unnest diagnosis codes from one LCED source table."""
     present_dx = [c for c in dx_cols if c in src.columns]
     dxver_cols = ["dxver"] if "dxver" in src.columns else []
-    tmp = src[[_PID, date_col] + dxver_cols + present_dx].copy()
+    tmp = src[[_PID, date_col, *dxver_cols, *present_dx]].copy()
     tmp = tmp.rename(columns={date_col: "eventdate"})
     if "dxver" not in tmp.columns:
         tmp["dxver"] = None
@@ -152,8 +148,19 @@ def build_therapy(
     claims_part = _build_claims_part(v_outpatient_drug_claims, ndc_map=ndc_map)
     df = union_tables([drug_part, claims_part])
     df = deduplicate(df)
-    return df[["patient_id", "prescription_date", "start_date", "fill_date",
-               "end_date", "refill", "rxcui", "ndc11", "ingredient"]]
+    return df[
+        [
+            "patient_id",
+            "prescription_date",
+            "start_date",
+            "fill_date",
+            "end_date",
+            "refill",
+            "rxcui",
+            "ndc11",
+            "ingredient",
+        ]
+    ]
 
 
 def _build_drug_part(src: pd.DataFrame, *, rxcui_map: pd.DataFrame | None) -> pd.DataFrame:
@@ -169,6 +176,7 @@ def _build_drug_part(src: pd.DataFrame, *, rxcui_map: pd.DataFrame | None) -> pd
     df["ndc11"] = None
     if rxcui_map is not None:
         from ehrdata.io.source.vocab.rxnorm import join_ingredient_by_rxcui
+
         df = join_ingredient_by_rxcui(df, rxcui_map)
     else:
         df["ingredient"] = None
@@ -189,6 +197,7 @@ def _build_claims_part(src: pd.DataFrame, *, ndc_map: pd.DataFrame | None) -> pd
     df["ndc11"] = src["ndcnum"].astype(str).str.strip().str.zfill(11)
     if ndc_map is not None:
         from ehrdata.io.source.vocab.ndc import join_ingredient_by_ndc
+
         df = join_ingredient_by_ndc(df, ndc_map)
     else:
         df["ingredient"] = None
@@ -251,8 +260,10 @@ def _build_lab_results_part(src: pd.DataFrame) -> pd.DataFrame:
     df = pd.DataFrame()
     df[_PID] = src[_PID]
     df["eventdate"] = src.get("svcdate")
-    df["value"] = src.get("result", pd.Series(dtype=object, index=src.index)).astype(str).where(
-        src.get("result", pd.Series(dtype=object, index=src.index)).notna(), None
+    df["value"] = (
+        src.get("result", pd.Series(dtype=object, index=src.index))
+        .astype(str)
+        .where(src.get("result", pd.Series(dtype=object, index=src.index)).notna(), None)
     )
     df["valuecat"] = src.get("resltcat", pd.Series(dtype=object, index=src.index))
     df["unit"] = src.get("resunit", pd.Series(dtype=object, index=src.index))
@@ -299,16 +310,18 @@ def build_procedure(
         :data:`~ehrdata.io.source.schema.PROCEDURE`.
     """
     parts = [
-        _unnest_proc(facility_header,    date_col="svcdate",
-                     proc_cols=[f"proc{i}" for i in range(1, 7)], proctype_col=None),
-        _unnest_proc(inpatient_admissions, date_col="admdate",
-                     proc_cols=["pproc"] + [f"proc{i}" for i in range(1, 16)], proctype_col=None),
-        _unnest_proc(inpatient_services,  date_col="svcdate",
-                     proc_cols=["pdx", "proc1"], proctype_col="proctyp"),
-        _unnest_proc(lab_results,         date_col="svcdate",
-                     proc_cols=["proc1"],        proctype_col="proctyp"),
-        _unnest_proc(outpatient_services, date_col="svcdate",
-                     proc_cols=["proc1"],        proctype_col="proctyp"),
+        _unnest_proc(
+            facility_header, date_col="svcdate", proc_cols=[f"proc{i}" for i in range(1, 7)], proctype_col=None
+        ),
+        _unnest_proc(
+            inpatient_admissions,
+            date_col="admdate",
+            proc_cols=["pproc"] + [f"proc{i}" for i in range(1, 16)],
+            proctype_col=None,
+        ),
+        _unnest_proc(inpatient_services, date_col="svcdate", proc_cols=["pdx", "proc1"], proctype_col="proctyp"),
+        _unnest_proc(lab_results, date_col="svcdate", proc_cols=["proc1"], proctype_col="proctyp"),
+        _unnest_proc(outpatient_services, date_col="svcdate", proc_cols=["proc1"], proctype_col="proctyp"),
     ]
     df = union_tables(parts)
     df[_PID] = coerce_patient_id(df[_PID])
@@ -327,7 +340,7 @@ def _unnest_proc(
 ) -> pd.DataFrame:
     """Select and unnest procedure codes from one LCED source table."""
     present_proc = [c for c in proc_cols if c in src.columns]
-    tmp = src[[_PID, date_col] + present_proc].copy()
+    tmp = src[[_PID, date_col, *present_proc]].copy()
     tmp = tmp.rename(columns={date_col: "eventdate"})
     if proctype_col and proctype_col in src.columns:
         tmp["proctype"] = src[proctype_col].values
@@ -373,8 +386,7 @@ def build_habit(
     df["encounter_date"] = coerce_date(df["encounter_date"])
     df = df.drop(columns="encounter_join_id")
     df = deduplicate(df)
-    df = df.sort_values([_PID, "encounter_date", "mapped_question_answer"],
-                        na_position="last").reset_index(drop=True)
+    df = df.sort_values([_PID, "encounter_date", "mapped_question_answer"], na_position="last").reset_index(drop=True)
     return df[[_PID, "encounter_date", "mapped_question_answer"]]
 
 
@@ -401,8 +413,7 @@ def build_patinfo(*source_tables: pd.DataFrame) -> pd.DataFrame:
         Canonical patinfo DataFrame with columns ``patient_id``, ``dobyr``,
         ``sex``.
     """
-    parts = [t[[c for c in ["patient_id", "dobyr", "sex"] if c in t.columns]].copy()
-             for t in source_tables]
+    parts = [t[[c for c in ["patient_id", "dobyr", "sex"] if c in t.columns]].copy() for t in source_tables]
     df = union_tables(parts)
     df[_PID] = coerce_patient_id(df[_PID])
     df["dobyr"] = pd.to_numeric(df["dobyr"], errors="coerce").astype("Int64")
@@ -436,8 +447,10 @@ def build_insurance(
         :data:`~ehrdata.io.source.schema.INSURANCE`.
     """
     _COLS = ["patient_id", "svcdate", "cob", "coins", "copay"]
-    parts = [src[[c for c in _COLS if c in src.columns]].copy()
-             for src in (facility_header, inpatient_services, outpatient_drug_claims, outpatient_services)]
+    parts = [
+        src[[c for c in _COLS if c in src.columns]].copy()
+        for src in (facility_header, inpatient_services, outpatient_drug_claims, outpatient_services)
+    ]
     df = union_tables(parts)
     df[_PID] = coerce_patient_id(df[_PID])
     df["svcdate"] = coerce_date(df["svcdate"])

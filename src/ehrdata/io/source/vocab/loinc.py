@@ -10,9 +10,12 @@ https://loinc.org/downloads/ and pass its path to :func:`load_loinc_map`.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def load_loinc_map(path: Path | str) -> pd.DataFrame:

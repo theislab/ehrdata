@@ -84,7 +84,7 @@ DIAGNOSIS = TableSchema(
     name="diagnosis",
     columns=(
         ColumnSpec("patient_id", "object", nullable=False),
-        ColumnSpec("dxver", "object"),        # "0" = ICD-10, "9" = ICD-9, None = unknown
+        ColumnSpec("dxver", "object"),  # "0" = ICD-10, "9" = ICD-9, None = unknown
         ColumnSpec("eventdate", "datetime64[ns]"),
         ColumnSpec("dx", "object", nullable=False),
     ),
@@ -141,8 +141,8 @@ INSURANCE = TableSchema(
     columns=(
         ColumnSpec("patient_id", "object", nullable=False),
         ColumnSpec("svcdate", "datetime64[ns]"),
-        ColumnSpec("cob", "float64"),       # coordination of benefits amount
-        ColumnSpec("coins", "float64"),     # coinsurance amount
+        ColumnSpec("cob", "float64"),  # coordination of benefits amount
+        ColumnSpec("coins", "float64"),  # coinsurance amount
         ColumnSpec("copay", "float64"),
     ),
 )
@@ -154,7 +154,7 @@ PROVIDER = TableSchema(
         ColumnSpec("dtstart", "datetime64[ns]"),
         ColumnSpec("dtend", "datetime64[ns]"),
         ColumnSpec("plantyp", "object"),
-        ColumnSpec("rx", "object"),         # pharmacy coverage flag
+        ColumnSpec("rx", "object"),  # pharmacy coverage flag
         ColumnSpec("hlthplan", "object"),
     ),
 )
@@ -169,6 +169,5 @@ HABIT = TableSchema(
 )
 
 ALL_SCHEMAS: dict[str, TableSchema] = {
-    s.name: s
-    for s in (DIAGNOSIS, THERAPY, LABTEST, PROCEDURE, PATINFO, INSURANCE, PROVIDER, HABIT)
+    s.name: s for s in (DIAGNOSIS, THERAPY, LABTEST, PROCEDURE, PATINFO, INSURANCE, PROVIDER, HABIT)
 }

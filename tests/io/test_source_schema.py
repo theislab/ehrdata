@@ -12,7 +12,6 @@ from ehrdata.io.source.schema import (
     PROVIDER,
     THERAPY,
     ColumnSpec,
-    TableSchema,
 )
 
 
@@ -53,7 +52,9 @@ class TestTableSchema:
         assert pd.api.types.is_datetime64_any_dtype(df["eventdate"])
 
     def test_validate_valid_dataframe(self):
-        df = pd.DataFrame({"patient_id": ["1"], "dxver": ["0"], "eventdate": pd.to_datetime(["2020-01-01"]), "dx": ["E11.9"]})
+        df = pd.DataFrame(
+            {"patient_id": ["1"], "dxver": ["0"], "eventdate": pd.to_datetime(["2020-01-01"]), "dx": ["E11.9"]}
+        )
         assert DIAGNOSIS.validate(df) == []
 
     def test_validate_missing_column(self):
@@ -68,11 +69,15 @@ class TestTableSchema:
         assert len(errors) == 3
 
     def test_validate_strict_rejects_extra_columns(self):
-        df = pd.DataFrame({
-            "patient_id": ["1"], "dxver": ["0"],
-            "eventdate": pd.to_datetime(["2020-01-01"]),
-            "dx": ["E11.9"], "extra_col": [99],
-        })
+        df = pd.DataFrame(
+            {
+                "patient_id": ["1"],
+                "dxver": ["0"],
+                "eventdate": pd.to_datetime(["2020-01-01"]),
+                "dx": ["E11.9"],
+                "extra_col": [99],
+            }
+        )
         assert DIAGNOSIS.validate(df, strict=False) == []
         errors = DIAGNOSIS.validate(df, strict=True)
         assert len(errors) == 1
@@ -85,7 +90,16 @@ class TestTableSchema:
 
 class TestAllSchemas:
     def test_contains_all_eight_tables(self):
-        assert set(ALL_SCHEMAS.keys()) == {"diagnosis", "therapy", "labtest", "procedure", "patinfo", "insurance", "provider", "habit"}
+        assert set(ALL_SCHEMAS.keys()) == {
+            "diagnosis",
+            "therapy",
+            "labtest",
+            "procedure",
+            "patinfo",
+            "insurance",
+            "provider",
+            "habit",
+        }
 
     def test_all_schemas_start_with_patient_id(self):
         for name, schema in ALL_SCHEMAS.items():
@@ -95,15 +109,31 @@ class TestAllSchemas:
         for name, schema in ALL_SCHEMAS.items():
             assert len(schema.columns) > 0, f"{name} has no columns"
 
-    @pytest.mark.parametrize("schema,expected_cols", [
-        (THERAPY, ["patient_id", "prescription_date", "start_date", "fill_date", "end_date", "refill", "rxcui", "ndc11", "ingredient"]),
-        (LABTEST, ["patient_id", "eventdate", "value", "valuecat", "unit", "loinc"]),
-        (PROCEDURE, ["patient_id", "proctype", "eventdate", "proc"]),
-        (PATINFO, ["patient_id", "dobyr", "sex"]),
-        (INSURANCE, ["patient_id", "svcdate", "cob", "coins", "copay"]),
-        (PROVIDER, ["patient_id", "dtstart", "dtend", "plantyp", "rx", "hlthplan"]),
-        (HABIT, ["patient_id", "encounter_date", "mapped_question_answer"]),
-    ])
+    @pytest.mark.parametrize(
+        ("schema", "expected_cols"),
+        [
+            (
+                THERAPY,
+                [
+                    "patient_id",
+                    "prescription_date",
+                    "start_date",
+                    "fill_date",
+                    "end_date",
+                    "refill",
+                    "rxcui",
+                    "ndc11",
+                    "ingredient",
+                ],
+            ),
+            (LABTEST, ["patient_id", "eventdate", "value", "valuecat", "unit", "loinc"]),
+            (PROCEDURE, ["patient_id", "proctype", "eventdate", "proc"]),
+            (PATINFO, ["patient_id", "dobyr", "sex"]),
+            (INSURANCE, ["patient_id", "svcdate", "cob", "coins", "copay"]),
+            (PROVIDER, ["patient_id", "dtstart", "dtend", "plantyp", "rx", "hlthplan"]),
+            (HABIT, ["patient_id", "encounter_date", "mapped_question_answer"]),
+        ],
+    )
     def test_schema_columns(self, schema, expected_cols):
         assert schema.column_names == expected_cols
 

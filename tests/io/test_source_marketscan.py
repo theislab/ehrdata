@@ -29,191 +29,205 @@ VOCAB_DIR = Path("tests/data/source_vocab")
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def ndc_map():
     return load_ndc_ingredient_map(VOCAB_DIR / "ndc_ingredient_map.txt")
 
 
-@pytest.fixture()
+@pytest.fixture
 def facility_header():
-    return pd.DataFrame({
-        "enrolid": [1001, 1002, 1001],
-        "dxver":   ["0",  "9",  "0"],
-        "svcdate": ["2020-01-15", "2020-02-01", "2020-03-10"],
-        "dx1":     ["E11.9", "I10",  "E11.9"],
-        "dx2":     ["I10",   None,   None],
-        "dx3":     [None,    None,   None],
-        "proc1":   ["99213", None,   "99213"],
-        "proc2":   [None,    "93000", None],
-        "proc3":   [None,    None,   None],
-        "cob":     [0.0,     10.0,   0.0],
-        "coins":   [20.0,    0.0,    20.0],
-        "copay":   [30.0,    15.0,   30.0],
-        "dobyr":   [1960,    1970,   1960],
-        "sex":     ["M",     "F",    "M"],
-        "efamid":  [5001,    5002,   5001],
-        "year":    [2020,    2020,   2020],
-        "region":  ["NE",    "SE",   "NE"],
-        "msa":     [10,      20,     10],
-        "wgtkey":  [1,       2,      1],
-        "eeclass": ["A",     "B",    "A"],
-        "eestatu": ["1",     "2",    "1"],
-        "egeoloc": ["11",    "22",   "11"],
-        "emprel":  ["1",     "2",    "1"],
-        "indstry": ["001",   "002",  "001"],
-    })
+    return pd.DataFrame(
+        {
+            "enrolid": [1001, 1002, 1001],
+            "dxver": ["0", "9", "0"],
+            "svcdate": ["2020-01-15", "2020-02-01", "2020-03-10"],
+            "dx1": ["E11.9", "I10", "E11.9"],
+            "dx2": ["I10", None, None],
+            "dx3": [None, None, None],
+            "proc1": ["99213", None, "99213"],
+            "proc2": [None, "93000", None],
+            "proc3": [None, None, None],
+            "cob": [0.0, 10.0, 0.0],
+            "coins": [20.0, 0.0, 20.0],
+            "copay": [30.0, 15.0, 30.0],
+            "dobyr": [1960, 1970, 1960],
+            "sex": ["M", "F", "M"],
+            "efamid": [5001, 5002, 5001],
+            "year": [2020, 2020, 2020],
+            "region": ["NE", "SE", "NE"],
+            "msa": [10, 20, 10],
+            "wgtkey": [1, 2, 1],
+            "eeclass": ["A", "B", "A"],
+            "eestatu": ["1", "2", "1"],
+            "egeoloc": ["11", "22", "11"],
+            "emprel": ["1", "2", "1"],
+            "indstry": ["001", "002", "001"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def inpatient_admissions():
-    return pd.DataFrame({
-        "enrolid": [1001, 1003],
-        "dxver":   ["0",  None],
-        "admdate": ["2020-04-01", "2020-05-15"],
-        "pdx":     ["J18.9", "E10.9"],
-        "dx1":     ["I10",   None],
-        "dx2":     [None,    None],
-        "pproc":   ["27447", None],
-        "proc1":   [None,    "99232"],
-        "dobyr":   [1960,    1980],
-        "sex":     ["M",     "M"],
-        "efamid":  [5001,    5003],
-        "year":    [2020,    2020],
-        "region":  ["NE",    "MW"],
-        "msa":     [10,      30],
-        "wgtkey":  [1,       3],
-        "eeclass": ["A",     "C"],
-        "eestatu": ["1",     "3"],
-        "egeoloc": ["11",    "33"],
-        "emprel":  ["1",     "3"],
-        "indstry": ["001",   "003"],
-    })
+    return pd.DataFrame(
+        {
+            "enrolid": [1001, 1003],
+            "dxver": ["0", None],
+            "admdate": ["2020-04-01", "2020-05-15"],
+            "pdx": ["J18.9", "E10.9"],
+            "dx1": ["I10", None],
+            "dx2": [None, None],
+            "pproc": ["27447", None],
+            "proc1": [None, "99232"],
+            "dobyr": [1960, 1980],
+            "sex": ["M", "M"],
+            "efamid": [5001, 5003],
+            "year": [2020, 2020],
+            "region": ["NE", "MW"],
+            "msa": [10, 30],
+            "wgtkey": [1, 3],
+            "eeclass": ["A", "C"],
+            "eestatu": ["1", "3"],
+            "egeoloc": ["11", "33"],
+            "emprel": ["1", "3"],
+            "indstry": ["001", "003"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def inpatient_services():
-    return pd.DataFrame({
-        "enrolid": [1001, 1002],
-        "dxver":   ["0",  "0"],
-        "svcdate": ["2020-04-02", "2020-04-10"],
-        "pdx":     ["J18.9", "K92.1"],
-        "dx1":     ["I10",   None],
-        "dx2":     [None,    None],
-        "proctyp": ["ICD",   "CPT"],
-        "proc1":   ["99232", "44950"],
-        "cob":     [5.0,     0.0],
-        "coins":   [10.0,    25.0],
-        "copay":   [20.0,    40.0],
-        "dobyr":   [1960,    1970],
-        "sex":     ["M",     "F"],
-        "efamid":  [5001,    5002],
-        "year":    [2020,    2020],
-        "region":  ["NE",    "SE"],
-        "msa":     [10,      20],
-        "wgtkey":  [1,       2],
-        "eeclass": ["A",     "B"],
-        "eestatu": ["1",     "2"],
-        "egeoloc": ["11",    "22"],
-        "emprel":  ["1",     "2"],
-        "indstry": ["001",   "002"],
-    })
+    return pd.DataFrame(
+        {
+            "enrolid": [1001, 1002],
+            "dxver": ["0", "0"],
+            "svcdate": ["2020-04-02", "2020-04-10"],
+            "pdx": ["J18.9", "K92.1"],
+            "dx1": ["I10", None],
+            "dx2": [None, None],
+            "proctyp": ["ICD", "CPT"],
+            "proc1": ["99232", "44950"],
+            "cob": [5.0, 0.0],
+            "coins": [10.0, 25.0],
+            "copay": [20.0, 40.0],
+            "dobyr": [1960, 1970],
+            "sex": ["M", "F"],
+            "efamid": [5001, 5002],
+            "year": [2020, 2020],
+            "region": ["NE", "SE"],
+            "msa": [10, 20],
+            "wgtkey": [1, 2],
+            "eeclass": ["A", "B"],
+            "eestatu": ["1", "2"],
+            "egeoloc": ["11", "22"],
+            "emprel": ["1", "2"],
+            "indstry": ["001", "002"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def outpatient_services():
-    return pd.DataFrame({
-        "enrolid": [1002, 1003],
-        "dxver":   [None, "0"],
-        "svcdate": ["2020-06-01", "2020-07-01"],
-        "dx1":     ["E10.9", "I10"],
-        "dx2":     [None,    None],
-        "proctyp": ["CPT",   "CPT"],
-        "proc1":   ["99213", "99214"],
-        "cob":     [0.0,     0.0],
-        "coins":   [15.0,    20.0],
-        "copay":   [25.0,    35.0],
-        "dobyr":   [1970,    1980],
-        "sex":     ["F",     "M"],
-        "efamid":  [5002,    5003],
-        "year":    [2020,    2020],
-        "region":  ["SE",    "MW"],
-        "msa":     [20,      30],
-        "wgtkey":  [2,       3],
-        "eeclass": ["B",     "C"],
-        "eestatu": ["2",     "3"],
-        "egeoloc": ["22",    "33"],
-        "emprel":  ["2",     "3"],
-        "indstry": ["002",   "003"],
-    })
+    return pd.DataFrame(
+        {
+            "enrolid": [1002, 1003],
+            "dxver": [None, "0"],
+            "svcdate": ["2020-06-01", "2020-07-01"],
+            "dx1": ["E10.9", "I10"],
+            "dx2": [None, None],
+            "proctyp": ["CPT", "CPT"],
+            "proc1": ["99213", "99214"],
+            "cob": [0.0, 0.0],
+            "coins": [15.0, 20.0],
+            "copay": [25.0, 35.0],
+            "dobyr": [1970, 1980],
+            "sex": ["F", "M"],
+            "efamid": [5002, 5003],
+            "year": [2020, 2020],
+            "region": ["SE", "MW"],
+            "msa": [20, 30],
+            "wgtkey": [2, 3],
+            "eeclass": ["B", "C"],
+            "eestatu": ["2", "3"],
+            "egeoloc": ["22", "33"],
+            "emprel": ["2", "3"],
+            "indstry": ["002", "003"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def outpatient_prescription_drugs():
-    return pd.DataFrame({
-        "enrolid": [1001,         1002,         1001],
-        "svcdate": ["2020-01-20", "2020-02-05", "2020-01-20"],
-        "daysupp": [30,           90,           30],
-        "refill":  [0,            1,            0],
-        "ndcnum":  ["00071015523", "00310751030", "00071015523"],  # metformin, insulin glargine
-        "cob":     [0.0,           5.0,           0.0],
-        "coins":   [10.0,          0.0,           10.0],
-        "copay":   [5.0,           10.0,          5.0],
-        "dobyr":   [1960,          1970,          1960],
-        "sex":     ["M",           "F",           "M"],
-        "efamid":  [5001,          5002,          5001],
-        "year":    [2020,          2020,          2020],
-        "region":  ["NE",          "SE",          "NE"],
-        "msa":     [10,            20,            10],
-        "wgtkey":  [1,             2,             1],
-        "eeclass": ["A",           "B",           "A"],
-        "eestatu": ["1",           "2",           "1"],
-        "egeoloc": ["11",          "22",          "11"],
-        "emprel":  ["1",           "2",           "1"],
-        "indstry": ["001",         "002",         "001"],
-    })
+    return pd.DataFrame(
+        {
+            "enrolid": [1001, 1002, 1001],
+            "svcdate": ["2020-01-20", "2020-02-05", "2020-01-20"],
+            "daysupp": [30, 90, 30],
+            "refill": [0, 1, 0],
+            "ndcnum": ["00071015523", "00310751030", "00071015523"],  # metformin, insulin glargine
+            "cob": [0.0, 5.0, 0.0],
+            "coins": [10.0, 0.0, 10.0],
+            "copay": [5.0, 10.0, 5.0],
+            "dobyr": [1960, 1970, 1960],
+            "sex": ["M", "F", "M"],
+            "efamid": [5001, 5002, 5001],
+            "year": [2020, 2020, 2020],
+            "region": ["NE", "SE", "NE"],
+            "msa": [10, 20, 10],
+            "wgtkey": [1, 2, 1],
+            "eeclass": ["A", "B", "A"],
+            "eestatu": ["1", "2", "1"],
+            "egeoloc": ["11", "22", "11"],
+            "emprel": ["1", "2", "1"],
+            "indstry": ["001", "002", "001"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def enrollment_annual_summary():
-    return pd.DataFrame({
-        "enrolid": [1001, 1002, 1003],
-        "dobyr":   [1960, 1970, 1980],
-        "sex":     ["M",  "F",  "M"],
-        "efamid":  [5001, 5002, 5003],
-        "year":    [2020, 2020, 2020],
-        "region":  ["NE", "SE", "MW"],
-        "msa":     [10,   20,   30],
-        "wgtkey":  [1,    2,    3],
-        "eeclass": ["A",  "B",  "C"],
-        "eestatu": ["1",  "2",  "3"],
-        "egeoloc": ["11", "22", "33"],
-        "emprel":  ["1",  "2",  "3"],
-        "indstry": ["001","002","003"],
-    })
+    return pd.DataFrame(
+        {
+            "enrolid": [1001, 1002, 1003],
+            "dobyr": [1960, 1970, 1980],
+            "sex": ["M", "F", "M"],
+            "efamid": [5001, 5002, 5003],
+            "year": [2020, 2020, 2020],
+            "region": ["NE", "SE", "MW"],
+            "msa": [10, 20, 30],
+            "wgtkey": [1, 2, 3],
+            "eeclass": ["A", "B", "C"],
+            "eestatu": ["1", "2", "3"],
+            "egeoloc": ["11", "22", "33"],
+            "emprel": ["1", "2", "3"],
+            "indstry": ["001", "002", "003"],
+        }
+    )
 
 
-@pytest.fixture()
+@pytest.fixture
 def enrollment_detail():
-    return pd.DataFrame({
-        "enrolid": [1001,         1001,         1002],
-        "dtstart": ["2020-01-01", "2021-01-01", "2020-01-01"],
-        "dtend":   ["2020-12-31", "2021-12-31", "2020-12-31"],
-        "plantyp": [10,           10,           20],
-        "rx":      ["Y",          "Y",          "N"],
-        "hlthplan": ["BlueCross", "BlueCross",  "Aetna"],
-        "dobyr":   [1960,         1960,         1970],
-        "sex":     ["M",          "M",          "F"],
-        "efamid":  [5001,         5001,         5002],
-        "year":    [2020,         2021,         2020],
-        "region":  ["NE",         "NE",         "SE"],
-        "msa":     [10,           10,           20],
-        "wgtkey":  [1,            1,            2],
-        "eeclass": ["A",          "A",          "B"],
-        "eestatu": ["1",          "1",          "2"],
-        "egeoloc": ["11",         "11",         "22"],
-        "emprel":  ["1",          "1",          "2"],
-        "indstry": ["001",        "001",        "002"],
-    })
+    return pd.DataFrame(
+        {
+            "enrolid": [1001, 1001, 1002],
+            "dtstart": ["2020-01-01", "2021-01-01", "2020-01-01"],
+            "dtend": ["2020-12-31", "2021-12-31", "2020-12-31"],
+            "plantyp": [10, 10, 20],
+            "rx": ["Y", "Y", "N"],
+            "hlthplan": ["BlueCross", "BlueCross", "Aetna"],
+            "dobyr": [1960, 1960, 1970],
+            "sex": ["M", "M", "F"],
+            "efamid": [5001, 5001, 5002],
+            "year": [2020, 2021, 2020],
+            "region": ["NE", "NE", "SE"],
+            "msa": [10, 10, 20],
+            "wgtkey": [1, 1, 2],
+            "eeclass": ["A", "A", "B"],
+            "eestatu": ["1", "1", "2"],
+            "egeoloc": ["11", "11", "22"],
+            "emprel": ["1", "1", "2"],
+            "indstry": ["001", "001", "002"],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +244,9 @@ class TestBuildDiagnosis:
         result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         assert result["patient_id"].dtype == object
 
-    def test_eventdate_is_datetime(self, facility_header, inpatient_admissions, inpatient_services, outpatient_services):
+    def test_eventdate_is_datetime(
+        self, facility_header, inpatient_admissions, inpatient_services, outpatient_services
+    ):
         result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         assert pd.api.types.is_datetime64_any_dtype(result["eventdate"])
 
@@ -238,7 +254,9 @@ class TestBuildDiagnosis:
         result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         assert result["dx"].notna().all()
 
-    def test_enrolid_renamed_to_patient_id(self, facility_header, inpatient_admissions, inpatient_services, outpatient_services):
+    def test_enrolid_renamed_to_patient_id(
+        self, facility_header, inpatient_admissions, inpatient_services, outpatient_services
+    ):
         result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         assert "patient_id" in result.columns
         assert "enrolid" not in result.columns
@@ -247,12 +265,16 @@ class TestBuildDiagnosis:
         result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         assert not result.duplicated().any()
 
-    def test_sorted_by_patient_then_date(self, facility_header, inpatient_admissions, inpatient_services, outpatient_services):
+    def test_sorted_by_patient_then_date(
+        self, facility_header, inpatient_admissions, inpatient_services, outpatient_services
+    ):
         result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         patients = list(result["patient_id"])
         assert patients == sorted(patients)
 
-    def test_icd_version_inferred_for_missing(self, facility_header, inpatient_admissions, inpatient_services, outpatient_services):
+    def test_icd_version_inferred_for_missing(
+        self, facility_header, inpatient_admissions, inpatient_services, outpatient_services
+    ):
         # outpatient_services has dxver=None for enrolid=1002 with dx=E10.9
         result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         e10_rows = result[(result["patient_id"] == "1002") & (result["dx"] == "E10.9")]
@@ -266,7 +288,9 @@ class TestBuildDiagnosis:
         assert "E11.9" in patient_1001_dx
         assert "I10" in patient_1001_dx
 
-    def test_all_four_sources_contribute(self, facility_header, inpatient_admissions, inpatient_services, outpatient_services):
+    def test_all_four_sources_contribute(
+        self, facility_header, inpatient_admissions, inpatient_services, outpatient_services
+    ):
         result = build_diagnosis(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         # Patient 1003 only appears in inpatient_admissions and outpatient_services
         assert "1003" in result["patient_id"].values
@@ -348,18 +372,24 @@ class TestBuildProcedure:
         assert "patient_id" in result.columns
         assert "enrolid" not in result.columns
 
-    def test_eventdate_is_datetime(self, facility_header, inpatient_admissions, inpatient_services, outpatient_services):
+    def test_eventdate_is_datetime(
+        self, facility_header, inpatient_admissions, inpatient_services, outpatient_services
+    ):
         result = build_procedure(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         assert pd.api.types.is_datetime64_any_dtype(result["eventdate"])
 
-    def test_proctype_null_for_facility_header(self, facility_header, inpatient_admissions, inpatient_services, outpatient_services):
+    def test_proctype_null_for_facility_header(
+        self, facility_header, inpatient_admissions, inpatient_services, outpatient_services
+    ):
         result = build_procedure(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         # facility_header contributions should have null proctype
         fh_date = pd.Timestamp("2020-01-15")
         fh_rows = result[(result["patient_id"] == "1001") & (result["eventdate"] == fh_date)]
         assert fh_rows["proctype"].isna().all()
 
-    def test_proctype_set_for_outpatient_services(self, facility_header, inpatient_admissions, inpatient_services, outpatient_services):
+    def test_proctype_set_for_outpatient_services(
+        self, facility_header, inpatient_admissions, inpatient_services, outpatient_services
+    ):
         result = build_procedure(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         op_rows = result[result["patient_id"] == "1002"]
         cpt_rows = op_rows[op_rows["proctype"] == "CPT"]
@@ -369,7 +399,9 @@ class TestBuildProcedure:
         result = build_procedure(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         assert not result.duplicated().any()
 
-    def test_sorted_by_patient_then_date(self, facility_header, inpatient_admissions, inpatient_services, outpatient_services):
+    def test_sorted_by_patient_then_date(
+        self, facility_header, inpatient_admissions, inpatient_services, outpatient_services
+    ):
         result = build_procedure(facility_header, inpatient_admissions, inpatient_services, outpatient_services)
         patients = list(result["patient_id"])
         assert patients == sorted(patients)
@@ -412,7 +444,8 @@ class TestBuildPatinfo:
     def test_all_patients_present(self, enrollment_annual_summary, facility_header):
         result = build_patinfo(enrollment_annual_summary, facility_header)
         pids = set(result["patient_id"].tolist())
-        assert "1001" in pids and "1002" in pids
+        assert "1001" in pids
+        assert "1002" in pids
 
 
 # ---------------------------------------------------------------------------
@@ -421,26 +454,46 @@ class TestBuildPatinfo:
 
 
 class TestBuildInsurance:
-    def test_schema_valid(self, facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services):
-        result = build_insurance(facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services)
+    def test_schema_valid(
+        self, facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services
+    ):
+        result = build_insurance(
+            facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services
+        )
         assert INSURANCE.validate(result) == []
 
-    def test_enrolid_renamed(self, facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services):
-        result = build_insurance(facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services)
+    def test_enrolid_renamed(
+        self, facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services
+    ):
+        result = build_insurance(
+            facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services
+        )
         assert "patient_id" in result.columns
         assert "enrolid" not in result.columns
 
-    def test_svcdate_is_datetime(self, facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services):
-        result = build_insurance(facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services)
+    def test_svcdate_is_datetime(
+        self, facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services
+    ):
+        result = build_insurance(
+            facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services
+        )
         assert pd.api.types.is_datetime64_any_dtype(result["svcdate"])
 
-    def test_cob_coins_copay_numeric(self, facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services):
-        result = build_insurance(facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services)
+    def test_cob_coins_copay_numeric(
+        self, facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services
+    ):
+        result = build_insurance(
+            facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services
+        )
         for col in ("cob", "coins", "copay"):
             assert pd.api.types.is_float_dtype(result[col])
 
-    def test_no_duplicates(self, facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services):
-        result = build_insurance(facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services)
+    def test_no_duplicates(
+        self, facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services
+    ):
+        result = build_insurance(
+            facility_header, inpatient_services, outpatient_prescription_drugs, outpatient_services
+        )
         assert not result.duplicated().any()
 
 
