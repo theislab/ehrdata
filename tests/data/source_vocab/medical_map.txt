@@ -1,0 +1,6 @@
+medcode	readcode	desc
+100	A10..00	Ischaemic heart disease
+200	C10..00	Diabetes mellitus
+300	E12..00	Obesity
+400	F45..00	Dementia
+500	44J3.00	HbA1c measurement

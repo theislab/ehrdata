@@ -1,4 +1,4 @@
-from . import omop
+from . import omop, source
 from .csv import read_csv
 from .h5ad import read_h5ad, write_h5ad
 from .pandas import from_pandas, to_pandas

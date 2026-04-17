@@ -7,22 +7,25 @@ orphan: true
 The easiest way to get familiar with ehrdata is to follow along with our tutorials.
 Many are also designed to work seamlessly in Binder, a free cloud computing platform.
 
-**The notebooks can be followed in this order:**
-
-1. **[Getting Started](getting_started)** - Learn the basics of the `EHRData` data structure
-2. **[Real Dataset Example: PhysioNet 2019](real_dataset_example_physionet2019)** - Work with a public clinical dataset
-3. **[OMOP Introduction](omop_intro)** - Learn how to read OMOP data into `EHRData`
-4. **[OMOP Machine Learning](omop_ml)** - Quickstart to ML workflows based on an OMOP dataset
-5. **[Interactive Visualization](interactive_visualization)** - Explore your data interactively with Vitessce
-6. **[Advanced: Data Management with LaminDB](lamindb)** - Store, share, and track datasets in the cloud
+## Quick start
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 3
 
 getting_started
-real_dataset_example_physionet2019
-omop_intro
+omop_tables_tutorial
+tutorial_time_series_with_pypots
 omop_ml
-interactive_visualization
-lamindb
+physionet2012
+```
+
+## Data Sources
+
+```{toctree}
+:maxdepth: 3
+
+source_cprd_overview
+source_loinc_mapping
+source_icd_mapping
+source_lced_cohort
 ```
