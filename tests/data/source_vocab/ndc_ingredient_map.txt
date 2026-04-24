@@ -1,0 +1,11 @@
+ndc11,rxcui,ingredient
+57894015012,1100079,abiraterone
+55111028130,311296,levofloxacin
+00065063136,208601,dexamethasone/neomycin/polymyxin b
+51079081920,197446,carisoprodol
+00071015523,723,metformin
+00310751030,4815,insulin glargine
+00088221905,41493,pioglitazone
+50458058530,321064,risperidone
+00006074331,41126,sitagliptin
+00169750612,274332,semaglutide

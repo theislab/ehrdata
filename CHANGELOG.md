@@ -8,113 +8,16 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.2.0]
-
-### Fixed
- - Assigning `.X` to a view of an X-less {class}`~ehrdata.EHRData` (e.g. one created with `layers=` only) no longer raises `TypeError: 'NoneType' object does not support item assignment`. The view is now materialised before the assignment, consistent with how AnnData handles other field modifications on views. ([#233](https://github.com/theislab/ehrdata/pull/233)) @eroell
-
-### Modified
- - {func}`~ehrdata.infer_feature_types` considers integers from 0, ..., n as numeric. It further provides a new argument `binary_as`, to steer if columns 0/1 should be considered numeric or categorical. ([#231](https://github.com/theislab/ehrdata/pull/231)) @eroell
-
-## [0.1.2]
+## [Unreleased]
 
 ### Added
- - {func}`~ehrdata.io.from_pandas` with `format='long'` provides a new keyword argument `fill_time_gaps` that fills missing timegaps in the common case of integer time steps from 0 to n_timesteps ([#229](https://github.com/theislab/ehrdata/pull/229)) @eroell
-
-### Modified
- - {func}`~ehrdata.dt.mimic_2` column `censor_flg` switched to lifeline's convention with 1=event, 0=censored, before this dataset loader function had them vice versa since the dataset provides them as such originally. ([#227](https://github.com/theislab/ehrdata/pull/227)) @sueoglu
-
-### Fixed
- - {func}`~ehrdata.io.from_pandas` with `format='long'` misordered entries in `.X`/`.layers` with `.obs` if the input df was not sorted for the obs id keys, which is now fixed. ([#228](https://github.com/theislab/ehrdata/pull/228)) @eroell
-
-### Documentation
- - Documentation style polishing ([#223](https://github.com/theislab/ehrdata/pull/223)) @zethson
-
-## [0.1.1]
-
-### Added
- - {func}`~ehrdata.io.omop.setup_connection` can read `.parquet` files. ([#217](https://github.com/theislab/ehrdata/pull/217)) @eroell
-
-### Fixed
- - Sliceing of `EHRData` objects fixed when the backing object is an `AnnData`. ([#218](https://github.com/theislab/ehrdata/pull/218)) @eroell
-
-### Maintenance
- - More concise messages in {func}`~ehrdata.infer_feature_types`. ([#215](https://github.com/theislab/ehrdata/pull/215)) @zethson
-
-
-## [0.1.0]
-
-### Added
- - {func}`~ehrdata.move_to_obs` and {func}`~ehrdata.move_to_x` are new helpers for conveniently moving variables from central 2D arrays to the `.obs` field, and vice versa. ([#199](https://github.com/theislab/ehrdata/pull/201)) @eroell
-  - {func}`~ehrdata.dt.physionet2019` as another out-of-the-box, conveniently available dataset with 40'000 ICU stays from the Physionet 2019 challenge. ([#204](https://github.com/theislab/ehrdata/pull/204)) @eroell
- - `time_precision` parameter (`"date"` or `"datetime"`) to {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` for finer temporal granularity control. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
-
-### Fixed
-- {func}`~ehrdata.io.read_h5ad` fixed issues when `backed=True`. ([#199](https://github.com/theislab/ehrdata/pull/199)) @eroell
-- {func}`~ehrdata.io.read_h5ad` fixed bug when `.X` is `None` and `harmonize_missing_features` is `True`. ([#206](https://github.com/theislab/ehrdata/pull/206)) @eroell
-- {func}`~ehrdata.io.omop.setup_obs` with `observation_table="person_visit_occurrence"` now supports multiple visits per patient, creating one row per visit with unique observation IDs, instead of failing with xarray conversion errors with non-unique indices. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
-- OMOP time interval boundaries now use half-open intervals `[start, end)` to prevent duplicate measurements at interval boundaries. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
-
-### Maintenance
-- Support Python3.14 ([#194](https://github.com/theislab/ehrdata/pull/194)) @Zethson
-- Address `FutureWarning`s across multiple places ([#200](https://github.com/theislab/ehrdata/pull/200)) @eroell
-- Enhanced tutorial structure ([#208](https://github.com/theislab/ehrdata/pull/208)) @eroell
-
-### Modified
-- Dataset generator function `ed.dt.ehrdata_blobs` now takes `n_cat_var` and `n_categories` arguments to generate categorical (integer encoded) time series data ([#207](https://github.com/theislab/ehrdata/pull/207)) @sueoglu
-- If `enrich_var_with_feature_info=True` in {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables`, `data_table_concept_ids` not included within the concept table are now mapped from their respective alternate `concept_id` included in the concept_relationship table to retrieve the available feature information. ([#205](https://github.com/theislab/ehrdata/pull/205)) @KilianDahm
-- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with use of `"person"` now checks `birth_datetime` for meaningful behaviour and error messages. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
-- {func}`~ehrdata.integrations.vitessce.gen_default_config` provides convenience to generate a config directly from an `EHRData` object, and should be used instead of the previous `ehrdata.integrations.vitessce.gen_config`. ([#211](https://github.com/theislab/ehrdata/pull/211)) @eroell
-
-## [0.0.10]
-
-{class}`~ehrdata.EHRData` drops the `.R` field, and now supports 3D data storage in any slot of `.layers`. See the {doc}`tutorials/getting_started` tutorial for an introduction to this behaviour. In the future, `.X` will be enabled soon for 3D data storage as well.
-
-### Maintenance
-- Enhanced {doc}`tutorials/getting_started` ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
-- Move from zarr<3 to zarr>=3 ([#185](https://github.com/theislab/ehrdata/pull/185)) @eroell
-
-### Fixed
-
-### Modified
-- `EHRData` drops the `.R` field in favor of using `.layers` for any 3D data arrays ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
-- `EHRData`'s shape property will always return a 3 dimensional shape. If an `EHRData` object has flat arrays only, the third dimension will be 1. ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
-- The following functions now take a `layer` argument: {func}`~ehrdata.io.read_csv`, {func}`~ehrdata.io.from_pandas`, {func}`~ehrdata.io.to_pandas`, {func}`~ehrdata.io.omop.setup_variables`, {func}`~ehrdata.io.omop.setup_interval_variables`, {func}`~ehrdata.dt.ehrdata_blobs`, {func}`~ehrdata.dt.physionet2012`. If it is let to its default, `None`, the `.X` field of `EHRData` is used. Since `.X` is 2D in this release, in cases with 3D data, the `layer` argument needs to be used. ([#184](https://github.com/theislab/ehrdata/pull/184)) @eroell
-- {func}`~ehrdata.io.write_zarr` now writes an `EHRData` specific store encoding, with `anndata` as a substore. This change allows to use `AnnData` with its change to consolidated Zarr metadata, and better isolates `AnnData`'s io. ([#185](https://github.com/theislab/ehrdata/pull/185)) @eroell
-- {func}`~ehrdata.io.read_zarr` is adapted to read the new store encoding, and can also deal with `AnnData` stores. ([#185](https://github.com/theislab/ehrdata/pull/185)) @eroell
-
-
-## [0.0.9]
-
-### Maintenance
-- Use custom logger & remove pydata sparse ([#176](https://github.com/theislab/ehrdata/pull/176)) @Zethson
-- Replace figshare with scverse S3 ([#177](https://github.com/theislab/ehrdata/pull/177)) @Zethson
-- Update template to v0.6.0 ([#166](https://github.com/theislab/ehrdata/pull/166)) @Zethson
-
-### Fixed
-- Fix order of `var` created in `ed.io.omop.setup_variables` and `ed.io.omop.setup_interval_variables` ([#179](https://github.com/theislab/ehrdata/pull/179)) @eroell
-
-### Modified
-- Rename `ed.pl.vitessce.gen_config` to `ed.integrations.vitessce.gen_config` ([#181](https://github.com/theislab/ehrdata/pull/181)) @eroell
-- Rename `ed.tl.omop.EHRDataset` to `ed.integrations.torch.OMOPEHRDataset` ([#181](https://github.com/theislab/ehrdata/pull/181)) @eroell
-
-
-## [0.0.8]
-
-### Fixed
-- Update duckdb imports for future ([#157](https://github.com/theislab/ehrdata/pull/157)) @eroell
-
-### Maintenance
-- Private subset method for `EHRData` ([#160](https://github.com/theislab/ehrdata/pull/160)) @eroell
-- Remove `omop` package dependency ([#160](https://github.com/theislab/ehrdata/pull/160)) @eroell
-
-## [0.0.7]
-
-### Fixed
-- Fix tests and Getting Started Notebook ([#155](https://github.com/theislab/ehrdata/pull/155)) @eroell
-
-### Maintenance
-- Update duckdb imports for future ([#155](https://github.com/theislab/ehrdata/pull/155)) @eroell
+- {func}`~ehrdata.io.source.to_ehrdata` converts canonical source tables (diagnosis, therapy, lab test, procedure) into an {class}`~ehrdata.EHRData` object
+- `ehrdata.io.source.adapters.marketscan` — adapter for IBM MarketScan commercial claims (diagnosis, therapy, procedure, patinfo, insurance, provider)
+- `ehrdata.io.source.adapters.lced` — adapter for IBM LCED linked claims-EMR data (diagnosis, therapy, lab test, habit, patinfo)
+- `ehrdata.io.source.adapters.cprd` — adapter for CPRD GOLD UK primary-care data (diagnosis, therapy, lab test, patinfo); supports Read code and prodcode vocabulary translation
+- `ehrdata.io.source.vocab` — vocabulary loaders for NDC→ingredient, RxCUI→ingredient, LOINC, Read code, and prodcode mappings
+- Source reference documentation for MarketScan, LCED, and CPRD GOLD (`docs/sources/`)
+- Tutorial notebooks: CPRD overview, LOINC mapping, ICD mapping, LCED cohort study (`docs/tutorials/`)
 
 ## [0.0.6]
 

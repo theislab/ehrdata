@@ -1,0 +1,4 @@
+patid	eventdate	medcode	enttype	data1	data2	data3	data4	data5	data6	data7	constype	consid
+P001	10/09/2019	500	7	=	6.5	%	normal			1	C020
+P002	20/10/2020	500	7	=	140	mmol/L	high			1	C021
+P003	01/03/2018	500	7	<	5.0	mmol/L	normal			1	C022
