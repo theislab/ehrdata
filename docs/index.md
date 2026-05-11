@@ -15,6 +15,14 @@ references.md
 ```
 
 ```{toctree}
+:caption: 'Data Sources'
+:hidden: true
+:maxdepth: 2
+
+sources/index
+```
+
+```{toctree}
 :caption: 'Gallery'
 :hidden: true
 :maxdepth: 3

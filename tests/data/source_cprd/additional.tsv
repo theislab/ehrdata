@@ -1,0 +1,4 @@
+patid	enttype	adid	data1	data2	data3	data4	data5	data6	data7
+P001	4	A1	=	7.2	mmol/L	normal	0	0	0
+P002	4	A3	>	9.1	mmol/L	high	0	0	0
+P003	5	A4	=	52	mmol/mol	normal	0	0	0

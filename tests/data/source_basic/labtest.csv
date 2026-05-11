@@ -1,0 +1,5 @@
+patient_id,eventdate,value,valuecat,unit,loinc
+1,2020-01-15,7.2,,mmol/L,14749-6
+2,2020-02-01,,high,mg/dL,2345-7
+1,2020-01-20,6.8,,mmol/L,14749-6
+2,2020-02-01,,high,mg/dL,2345-7

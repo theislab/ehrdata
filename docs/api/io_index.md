@@ -5,8 +5,6 @@
     :no-index:
 ```
 
-## General I/O
-
 ```{eval-rst}
 .. autosummary::
     :toctree: io
@@ -19,19 +17,10 @@
     io.write_zarr
     io.from_pandas
     io.to_pandas
-
-```
-
-## OMOP CDM
-
-```{eval-rst}
-.. autosummary::
-    :toctree: io
-    :nosignatures:
-
     io.omop.setup_connection
     io.omop.setup_obs
     io.omop.setup_variables
     io.omop.setup_interval_variables
+    io.source.to_ehrdata
 
 ```

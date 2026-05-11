@@ -1,0 +1,4 @@
+prodcode	drugsubstance	strength	formulation	route	bnfcode
+PROD1	metformin	500mg	tablet	Oral	02020100
+PROD2	insulin glargine	100IU/mL	injection	Subcutaneous	03010000
+PROD3	atorvastatin	10mg	tablet	Oral	04050000
