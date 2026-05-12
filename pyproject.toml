@@ -72,7 +72,6 @@ optional-dependencies.lamin = [
 optional-dependencies.test = [
   "coverage>=7.10",
   "dask",
-  "lamindb>=2.1",
   "pytest",
   "pytest-cov",
   "torch",
