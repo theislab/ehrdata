@@ -41,7 +41,13 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
-  "ehrdata[lamin,torch]",            # do not include vitessce[all] in doc: https://github.com/keller-mark/esbuild-py/issues/19
+  # Do not include vitessce[all] in doc: https://github.com/keller-mark/esbuild-py/issues/19.
+  # Do not include ehrdata[lamin] in doc: every lamindb release through 2.4.2 caps
+  # anndata<=0.12.10 (via lamindb-core[full]), which conflicts with ehrdata's
+  # anndata>=0.12.13 pin. Notebooks aren't executed (nb_execution_mode = "off"), and
+  # the only references to lamindb in conf.py are an intersphinx URL and a qualname
+  # override, neither of which needs the package installed.
+  "ehrdata[torch]",
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
@@ -66,7 +72,7 @@ optional-dependencies.lamin = [
 optional-dependencies.test = [
   "coverage>=7.10",
   "dask",
-  "lamindb",
+  "lamindb>=2.1",
   "pytest",
   "pytest-cov",
   "torch",

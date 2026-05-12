@@ -33,9 +33,15 @@ def skip_member_handler(
 
 def setup(app: Sphinx) -> None:
     """Setup lamindb for CI."""
-    import lamindb as ln
-
-    with suppress(RuntimeError):
-        ln.setup.init(storage="/tmp/lamindb")
+    try:
+        import lamindb as ln
+    except ImportError:
+        # lamindb is currently incompatible with anndata>=0.12.13 (lamindb<=2.4.2
+        # caps anndata<=0.12.10), so it is excluded from the doc extras. Skip the
+        # CI bootstrap when it isn't installed.
+        pass
+    else:
+        with suppress(RuntimeError):
+            ln.setup.init(storage="/tmp/lamindb")
 
     app.connect("autodoc-skip-member", skip_member_handler)
