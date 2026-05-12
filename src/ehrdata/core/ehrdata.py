@@ -377,11 +377,7 @@ class EHRData(AnnData):
         # If a 3D X grows n_t beyond a previously trivial tem (length 1), refresh
         # tem to match. Mirrors the layers __setitem__ behaviour. Guarded by a
         # _tem check because during __init__ the X setter runs before tem is set.
-        if (
-            hasattr(self, "_tem")
-            and len(self.tem) == 1
-            and _get_array_3d_dim(value) > 1
-        ):
+        if hasattr(self, "_tem") and len(self.tem) == 1 and _get_array_3d_dim(value) > 1:
             self.tem = pd.DataFrame(index=pd.RangeIndex(new_n_t).astype(str))
 
     @property
