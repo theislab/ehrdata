@@ -326,6 +326,20 @@ def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
     edata_view.obsp["obsp_entry"] = np.array([[1, 2], [3, 4]])
 
 
+def test_ehrdata_view_X_scalar_broadcast(X_numpy_32, X_numpy_322):
+    """Assigning a scalar (or any value without `.shape`) to a view's X.
+
+    `edata[:, [col]].X = 1` is a valid AnnData broadcast assignment.`.
+    """
+    edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
+
+    edata[:, [0]].X = 1
+    assert np.all(edata.X[:, 0] == 1)
+
+    edata[:, [1]].X = [10, 20, 30]
+    assert np.array_equal(edata.X[:, 1], [10, 20, 30])
+
+
 def test_assign_X_to_layers_only(X_numpy_32, X_numpy_322):
     """EHRData created with layers only: assigning X should work and preserve layers/n_t."""
     edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})

@@ -134,8 +134,13 @@ class AlignedMappingProperty3D(AlignedMappingProperty):
 
 
 def _get_array_3d_dim(X: XDataType | None) -> int:
-    """Get the 3rd dimension of an array."""
-    if X is not None and len(X.shape) == 3:
+    """Get the 3rd dimension of an array.
+
+    Returns 1 for anything that isn't a 3D array (including scalars, lists, and any
+    other value without a ``.shape`` attribute), so this can safely be called on
+    arbitrary values passed to the ``.X`` setter (e.g. broadcast scalars).
+    """
+    if X is not None and hasattr(X, "shape") and len(X.shape) == 3:
         return X.shape[2]
 
     else:
@@ -202,10 +207,7 @@ class EHRData(AnnData):
     _t: pd.DataFrame | None
     _n_t: int
 
-    # Use keyword arguments so this works across the 0.12.x dataclass-field re-ordering:
-    # 0.12.6-0.12.11 require `(name, cls)`; 0.12.12+ make `name` optional (populated by
-    # `__set_name__`) and only require `cls`. Passing both by keyword satisfies both.
-    layers: AlignedMappingProperty3D = AlignedMappingProperty3D(name="layers", cls=Layers3D)
+    layers: AlignedMappingProperty3D = AlignedMappingProperty3D(Layers3D)
 
     def __init__(
         self,
