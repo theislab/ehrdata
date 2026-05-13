@@ -23,7 +23,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  "anndata>=0.12.13",
+  "anndata>=0.12.6",
   "duckdb",
   "fast-array-utils[sparse]",
   "filelock",
@@ -41,13 +41,7 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
-  # Do not include vitessce[all] in doc: https://github.com/keller-mark/esbuild-py/issues/19.
-  # Do not include ehrdata[lamin] in doc: every lamindb release through 2.4.2 caps
-  # anndata<=0.12.10 (via lamindb-core[full]), which conflicts with ehrdata's
-  # anndata>=0.12.13 pin. Notebooks aren't executed (nb_execution_mode = "off"), and
-  # the only references to lamindb in conf.py are an intersphinx URL and a qualname
-  # override, neither of which needs the package installed.
-  "ehrdata[torch]",
+  "ehrdata[lamin,torch]",            # do not include vitessce[all] in doc: https://github.com/keller-mark/esbuild-py/issues/19
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
@@ -72,6 +66,10 @@ optional-dependencies.lamin = [
 optional-dependencies.test = [
   "coverage>=7.10",
   "dask",
+  # No lamindb wheel/sdist is available for Python 3.14; pinning >=2.1 also prevents
+  # uv from backtracking to ancient lamindb 0.50.x (universal_pathlib==0.1.0, which
+  # imports `_PosixFlavour` removed in Python 3.12).
+  "lamindb>=2.1; python_version<'3.14'",
   "pytest",
   "pytest-cov",
   "torch",
