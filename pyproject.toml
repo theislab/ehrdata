@@ -75,6 +75,14 @@ optional-dependencies.test = [
   "torch",
   "vitessce[all]>=3.4",
 ]
+# Trunk-only test extras: same as `test` minus integration deps (lamindb, torch, vitessce).
+# Used by the `core` matrix variant of hatch-test to keep ehrdata compatible with the latest, unconstrained anndata since this is critical
+optional-dependencies.test-core = [
+  "coverage>=7.10",
+  "dask",
+  "pytest",
+  "pytest-cov",
+]
 optional-dependencies.torch = [
   "torch",
 ]
@@ -94,7 +102,15 @@ envs.docs.scripts.build = "sphinx-build -M html docs docs/_build {args}"
 envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.hatch-test.features = [ "test" ]
-envs.hatch-test.matrix = [ { python = [ "3.12", "3.14" ] } ]
+envs.hatch-test.matrix = [
+  # Standard matrix: run the full integration-aware test extras on both supported
+  { python = [ "3.12", "3.14" ] },
+  # Integration-free "core" lane
+  { python = [ "3.14" ], variant = [ "core" ] },
+]
+envs.hatch-test.overrides.matrix.variant.set-features = [
+  { value = "test-core", if = [ "core" ] },
+]
 
 [tool.ruff]
 line-length = 120
