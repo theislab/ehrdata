@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.2.1]
+
+### Fixed
+ - Compatibility with `anndata>=0.12.13` ([#240](https://github.com/theislab/ehrdata/pull/240)) @eroell
+
 ## [0.2.0]
 
 ### Fixed
