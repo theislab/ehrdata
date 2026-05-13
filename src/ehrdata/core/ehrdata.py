@@ -207,7 +207,10 @@ class EHRData(AnnData):
     _t: pd.DataFrame | None
     _n_t: int
 
-    layers: AlignedMappingProperty3D = AlignedMappingProperty3D(Layers3D)
+    # Use keyword arguments so this works across the 0.12.x dataclass-field re-ordering:
+    # 0.12.6-0.12.11 require `(name, cls)`; 0.12.12+ make `name` optional (populated by
+    # `__set_name__`) and only require `cls`. Passing both by keyword satisfies both.
+    layers: AlignedMappingProperty3D = AlignedMappingProperty3D(name="layers", cls=Layers3D)
 
     def __init__(
         self,
