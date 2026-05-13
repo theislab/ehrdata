@@ -82,7 +82,11 @@ class Layers3D(AlignedActual3D, Layers):
 class AlignedView3D(AlignedView):
     """AlignedView for 3D data."""
 
-    def __getitem__(self, key: str) -> Value:
+    def __getitem__(self, key: str | None) -> Value:
+        # The None key represents .X under anndata's "Unify X and layers" change.
+        # Defer to the base class so its None-handling (including is_none_backed) applies.
+        if key is None:
+            return super().__getitem__(key)
         # this is a hack to allow __getitem to work for 2D and 3D data
         subset_idx = self.subset_idx[:2] if self.parent_mapping[key].ndim == 2 else self.subset_idx
         return as_view(
@@ -130,8 +134,13 @@ class AlignedMappingProperty3D(AlignedMappingProperty):
 
 
 def _get_array_3d_dim(X: XDataType | None) -> int:
-    """Get the 3rd dimension of an array."""
-    if X is not None and len(X.shape) == 3:
+    """Get the 3rd dimension of an array.
+
+    Returns 1 for anything that isn't a 3D array (including scalars, lists, and any
+    other value without a ``.shape`` attribute), so this can safely be called on
+    arbitrary values passed to the ``.X`` setter (e.g. broadcast scalars).
+    """
+    if X is not None and hasattr(X, "shape") and len(X.shape) == 3:
         return X.shape[2]
 
     else:
@@ -198,7 +207,10 @@ class EHRData(AnnData):
     _t: pd.DataFrame | None
     _n_t: int
 
-    layers: AlignedMappingProperty3D = AlignedMappingProperty3D("layers", Layers3D)
+    # Use keyword arguments so this works across the 0.12.x dataclass-field re-ordering:
+    # 0.12.6-0.12.11 require `(name, cls)`; 0.12.12+ make `name` optional (populated by
+    # `__set_name__`) and only require `cls`. Passing both by keyword satisfies both.
+    layers: AlignedMappingProperty3D = AlignedMappingProperty3D(name="layers", cls=Layers3D)
 
     def __init__(
         self,
@@ -212,7 +224,6 @@ class EHRData(AnnData):
         varm: np.ndarray | Mapping[str, Sequence[Any]] | None = None,
         layers: Mapping[str, np.ndarray] | None = None,
         raw: Mapping[str, Any] | None = None,
-        dtype: np.dtype | type | str | None = None,
         shape: tuple[int, int] | None = None,
         filename: PathLike[str] | str | None = None,
         filemode: Literal["r", "r+"] | None = None,
@@ -235,7 +246,6 @@ class EHRData(AnnData):
             varm=varm,
             layers=layers,
             raw=raw,
-            dtype=dtype,
             shape=shape,
             filename=filename,
             filemode=filemode,
@@ -360,13 +370,23 @@ class EHRData(AnnData):
         if self.is_view and self._adata_ref is not None and self._adata_ref._X is None:
             self._init_as_actual(self.copy())
 
+        # Validate that a 3D X's trailing axis is consistent with the existing n_t,
+        # mirroring `AlignedActual3D.__setitem__` for non-X layers.
+        _validate_array_3d(self, value)
+        new_n_t = max(self.n_t, _get_array_3d_dim(value))
+
         # this is a bit hacky, but anndata checks its own shape to match the shape of X
-        n_t = self.n_t
         self._n_t = None  # type: ignore
 
         super(EHRData, self.__class__).X.fset(self, value)
 
-        self._n_t = n_t
+        self._n_t = new_n_t
+
+        # If a 3D X grows n_t beyond a previously trivial tem (length 1), refresh
+        # tem to match. Mirrors the layers __setitem__ behaviour. Guarded by a
+        # _tem check because during __init__ the X setter runs before tem is set.
+        if hasattr(self, "_tem") and len(self.tem) == 1 and _get_array_3d_dim(value) > 1:
+            self.tem = pd.DataFrame(index=pd.RangeIndex(new_n_t).astype(str))
 
     @property
     def shape(self) -> tuple[int, int] | tuple[int, int, int]:
