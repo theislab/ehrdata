@@ -108,8 +108,17 @@ def infer_feature_types(
 
     X = edata.X if layer is None else edata.layers[layer]
 
+    if X is None:
+        # X not set, fall back to first available layer
+        first_layer = next(iter(edata.layers))
+        X = edata.layers[first_layer]
+
     if issparse(X):
         X = to_dense(X)
+
+    if X.ndim == 3:
+        n_obs, n_vars, n_t = X.shape
+        X = X.transpose(0, 2, 1).reshape(n_obs * n_t, n_vars)
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
 
