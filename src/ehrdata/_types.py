@@ -5,7 +5,8 @@ import scipy
 import scipy.sparse as sp
 
 # from anndata.abc import CSCDataset, CSRDataset
-from anndata.compat import CupyArray, CupySparseMatrix, DaskArray, H5Array, H5Group, ZarrArray, ZarrGroup
+from anndata.compat import CupyArray, CupySparseMatrix, H5Array, H5Group, ZarrArray, ZarrGroup
+from dask.array import Array as DaskArray
 from fast_array_utils.conv import to_dense
 from numpy import ma
 
