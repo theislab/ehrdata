@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING, Literal
 
+from importlib.util import find_spec
+
 import numpy as np
 import scipy
 import scipy.sparse as sp
@@ -8,8 +10,10 @@ import scipy.sparse as sp
 from anndata.compat import CupyArray, CupySparseMatrix, H5Array, H5Group, ZarrArray, ZarrGroup
 
 if TYPE_CHECKING:
-    # can only see .core.Array
+    # can only see core.Array
     from dask.array.core import Array as DaskArray
+elif find_spec("dask"):
+    from dask.array import Array as DaskArray
 else:
     DaskArray = type("Array", (), {"__module__": "dask.array"})
 
