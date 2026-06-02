@@ -130,7 +130,7 @@ pygments_style = "default"
 nitpick_ignore = [
     ("py:class", "pathlib._local.Path"),
     ("py:class", "types.EllipsisType"),
-    ("py:data", "types.EllipsisType")
+    ("py:data", "types.EllipsisType"),
     # TODO: remove once https://github.com/sphinx-doc/sphinx/pull/13508 is released
     ("py:class", "ehrdata._types.TypeAliasType"),
     # typing.Union fails in tutorials/tutorial_time_series_with_pypots
