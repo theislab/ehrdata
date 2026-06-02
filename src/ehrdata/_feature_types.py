@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from functools import wraps
 from typing import TYPE_CHECKING, Literal
 
@@ -110,8 +111,14 @@ def infer_feature_types(
 
     if X is None:
         # X not set, fall back to first available layer
-        first_layer = next(iter(edata.layers))
+        first_layer = sorted(edata.layers)[0]
         X = edata.layers[first_layer]
+        warnings.warn(
+            f"No layer specified and `edata.X` is None. Falling back to layer '{first_layer}' for feature type inference. "
+            f"To be explicit, pass `layer='{first_layer}'` or the desired layer name.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     if issparse(X):
         X = to_dense(X)
