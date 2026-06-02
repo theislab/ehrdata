@@ -1,6 +1,5 @@
-from typing import TYPE_CHECKING, Literal
-
 from importlib.util import find_spec
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import scipy
