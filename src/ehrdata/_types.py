@@ -8,7 +8,8 @@ import scipy.sparse as sp
 from anndata.compat import CupyArray, CupySparseMatrix, H5Array, H5Group, ZarrArray, ZarrGroup
 
 if TYPE_CHECKING:
-    from dask.array import Array as DaskArray
+    # can only see .core.Array
+    from dask.array.core import Array as DaskArray
 else:
     DaskArray = type("Array", (), {"__module__": "dask.array"})
 
