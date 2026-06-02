@@ -146,8 +146,6 @@ nitpick_ignore = [
     ("py:class", "zarr.core.Array"),
     ("py:class", "zarr.core.buffer.core.Buffer"),
     ("py:class", "ehrdata._compat.ZappyArray"),
-    ("py:class", "dask.array.core.Array"),
-    # ("py:class", "dask.array.Array"),
     ("py:class", "anndata.compat.CupyArray"),
     ("py:class", "anndata.compat.CupySparseMatrix"),
     ("py:class", "sparse.numba_backend._coo.core.COO"),
