@@ -20,6 +20,11 @@ COMPRESSION_FORMATS_LIST = list(get_args(COMPRESSION_FORMATS))
 RAW_FORMATS = Literal["csv", "txt", "parquet", "h5ad", "zarr"]
 RAW_FORMATS_LIST = list(get_args(RAW_FORMATS))
 
+# Defaults for download retries. Overridable via environment variables so that e.g. CI can fail fast
+# (EHRDATA_DOWNLOAD_MAX_RETRIES=1) instead of waiting through the full exponential backoff.
+DEFAULT_MAX_RETRIES = int(os.environ.get("EHRDATA_DOWNLOAD_MAX_RETRIES", "5"))
+DEFAULT_RETRY_DELAY = int(os.environ.get("EHRDATA_DOWNLOAD_RETRY_DELAY", "10"))
+
 
 def _download(
     url: str,
@@ -31,8 +36,8 @@ def _download(
     *,
     overwrite: bool = False,
     timeout: int = 60,
-    max_retries: int = 5,
-    retry_delay: int = 10,
+    max_retries: int | None = None,
+    retry_delay: int | None = None,
 ) -> None | Path:  # pragma: no cover
     """Downloads a file irrespective of format.
 
@@ -45,9 +50,13 @@ def _download(
         block_size: Block size for downloads in bytes.
         overwrite: Whether to overwrite existing files.
         timeout: Request timeout in seconds.
-        max_retries: Maximum number of download retries.
-        retry_delay: Delay between retries in seconds.
+        max_retries: Maximum number of download retries. Defaults to the ``EHRDATA_DOWNLOAD_MAX_RETRIES``
+            environment variable if set, otherwise 5.
+        retry_delay: Base delay between retries in seconds (grows exponentially). Defaults to the
+            ``EHRDATA_DOWNLOAD_RETRY_DELAY`` environment variable if set, otherwise 10.
     """
+    max_retries = max(1, DEFAULT_MAX_RETRIES if max_retries is None else max_retries)
+    retry_delay = DEFAULT_RETRY_DELAY if retry_delay is None else retry_delay
 
     def _sanitize_filename(filename: str) -> str:
         if os.name == "nt":
@@ -133,7 +142,7 @@ def _download(
 
             except (OSError, RequestException) as e:
                 retry_count += 1
-                if retry_count <= max_retries:
+                if retry_count < max_retries:
                     # Exponential backoff: base delay * 2^(attempt-1)
                     backoff_delay = retry_delay * (2 ** (retry_count - 1))
                     logger.warning(
@@ -141,6 +150,7 @@ def _download(
                     )
                     time.sleep(backoff_delay)
                 else:
+                    # Final attempt failed: surface the error instead of silently returning a missing path.
                     logger.error(f"Download failed after {max_retries} attempts: {e!s}")
                     if Path(temp_filename).exists():
                         Path(temp_filename).unlink(missing_ok=True)
