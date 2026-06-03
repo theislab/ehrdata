@@ -20,6 +20,11 @@ COMPRESSION_FORMATS_LIST = list(get_args(COMPRESSION_FORMATS))
 RAW_FORMATS = Literal["csv", "txt", "parquet", "h5ad", "zarr"]
 RAW_FORMATS_LIST = list(get_args(RAW_FORMATS))
 
+# Retry defaults. CI can override these via environment variables to fail fast instead of waiting through
+# the full exponential backoff; regular users never need to set them.
+DEFAULT_MAX_RETRIES = max(1, int(os.environ.get("EHRDATA_DOWNLOAD_MAX_RETRIES", "5")))
+DEFAULT_RETRY_DELAY = int(os.environ.get("EHRDATA_DOWNLOAD_RETRY_DELAY", "10"))
+
 
 def _download(
     url: str,
@@ -31,8 +36,8 @@ def _download(
     *,
     overwrite: bool = False,
     timeout: int = 60,
-    max_retries: int = 5,
-    retry_delay: int = 10,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    retry_delay: int = DEFAULT_RETRY_DELAY,
 ) -> None | Path:  # pragma: no cover
     """Downloads a file irrespective of format.
 
@@ -45,8 +50,8 @@ def _download(
         block_size: Block size for downloads in bytes.
         overwrite: Whether to overwrite existing files.
         timeout: Request timeout in seconds.
-        max_retries: Maximum number of download retries.
-        retry_delay: Delay between retries in seconds.
+        max_retries: Maximum number of download attempts before giving up. Defaults to 5.
+        retry_delay: Base delay in seconds between attempts (grows exponentially). Defaults to 10.
     """
 
     def _sanitize_filename(filename: str) -> str:
@@ -133,7 +138,7 @@ def _download(
 
             except (OSError, RequestException) as e:
                 retry_count += 1
-                if retry_count <= max_retries:
+                if retry_count < max_retries:
                     # Exponential backoff: base delay * 2^(attempt-1)
                     backoff_delay = retry_delay * (2 ** (retry_count - 1))
                     logger.warning(
@@ -141,6 +146,7 @@ def _download(
                     )
                     time.sleep(backoff_delay)
                 else:
+                    # Final attempt failed: surface the error instead of silently returning a missing path.
                     logger.error(f"Download failed after {max_retries} attempts: {e!s}")
                     if Path(temp_filename).exists():
                         Path(temp_filename).unlink(missing_ok=True)
