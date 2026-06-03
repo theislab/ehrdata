@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning][].
 ## [Unreleased]
 
 ### Fixed
- - Dataset downloads no longer fail silently: the final retry in {func}`~ehrdata.dt` downloads now raises instead of returning a path that was never downloaded, so unreachable hosts (e.g. physionet.org) surface a clear error instead of a downstream `FileNotFoundError`. Retries are configurable via the `EHRDATA_DOWNLOAD_MAX_RETRIES` / `EHRDATA_DOWNLOAD_RETRY_DELAY` environment variables, and CI now caches downloaded datasets so flaky upstream hosts don't break the test and notebook workflows. ([#250](https://github.com/theislab/ehrdata/pull/250)) @eroell
+ - Dataset downloads in `ehrdata.dt` no longer fail silently: the final retry now raises instead of returning a path that was never downloaded, so unreachable hosts (e.g. physionet.org) surface a clear error instead of a downstream `FileNotFoundError`. Retries are configurable via the `EHRDATA_DOWNLOAD_MAX_RETRIES` / `EHRDATA_DOWNLOAD_RETRY_DELAY` environment variables, and CI now caches downloaded datasets so flaky upstream hosts don't break the test and notebook workflows. ([#250](https://github.com/theislab/ehrdata/pull/250)) @eroell
 
 ## [0.2.1]
 
