@@ -81,6 +81,7 @@ source_suffix = {
 
 intersphinx_mapping = {
     "anndata": ("https://anndata.readthedocs.io/en/stable", None),
+    "dask": ("https://docs.dask.org/en/stable/", None),
     "fsspec": ("https://filesystem-spec.readthedocs.io/en/stable", None),
     "h5py": ("https://docs.h5py.org/en/latest", None),
     "lamin": ("https://docs.lamin.ai", None),
@@ -129,6 +130,7 @@ pygments_style = "default"
 nitpick_ignore = [
     ("py:class", "pathlib._local.Path"),
     ("py:class", "types.EllipsisType"),
+    ("py:data", "types.EllipsisType"),
     # TODO: remove once https://github.com/sphinx-doc/sphinx/pull/13508 is released
     ("py:class", "ehrdata._types.TypeAliasType"),
     # typing.Union fails in tutorials/tutorial_time_series_with_pypots
@@ -144,7 +146,6 @@ nitpick_ignore = [
     ("py:class", "zarr.core.Array"),
     ("py:class", "zarr.core.buffer.core.Buffer"),
     ("py:class", "ehrdata._compat.ZappyArray"),
-    ("py:class", "dask.array.core.Array"),
     ("py:class", "anndata.compat.CupyArray"),
     ("py:class", "anndata.compat.CupySparseMatrix"),
     ("py:class", "sparse.numba_backend._coo.core.COO"),
