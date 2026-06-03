@@ -1,11 +1,21 @@
-from typing import Literal
+from importlib.util import find_spec
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import scipy
 import scipy.sparse as sp
 
 # from anndata.abc import CSCDataset, CSRDataset
-from anndata.compat import CupyArray, CupySparseMatrix, DaskArray, H5Array, H5Group, ZarrArray, ZarrGroup
+from anndata.compat import CupyArray, CupySparseMatrix, H5Array, H5Group, ZarrArray, ZarrGroup
+
+if TYPE_CHECKING:
+    # can only see core.Array
+    from dask.array.core import Array as DaskArray
+elif find_spec("dask"):
+    from dask.array import Array as DaskArray
+else:
+    DaskArray = type("Array", (), {"__module__": "dask.array"})
+
 from fast_array_utils.conv import to_dense
 from numpy import ma
 
