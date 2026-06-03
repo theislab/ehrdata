@@ -332,9 +332,10 @@ def omop_connection_multiple_visit_occurrences():
 
 
 @pytest.fixture
-def omop_connection_mimic_iv(tmp_path):
+def omop_connection_mimic_iv():
     con = duckdb.connect(":memory:")
-    mimic_iv_omop(data_path=tmp_path, backend_handle=con)
+    # Use the default ehrapy_data/ path (shared with test_dt) so the already-seeded CI cache covers it; tmp_path would re-download from physionet every run.
+    mimic_iv_omop(backend_handle=con)
     yield con
     con.close()
 

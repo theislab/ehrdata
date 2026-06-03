@@ -77,12 +77,29 @@ jobs:
         if: matrix.env.python == '3.14'
         run: |
           uvx hatch run hatch-test.py3.14:uv pip freeze
+      # Restore example datasets (downloaded from physionet.org etc.) from a previous run, so flaky/blocked upstream hosts don't break CI.
+      # The key is static so the cache is reused across runs; bump the version when a dataset URL changes.
+      - name: Restore datasets cache
+        id: data-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ehrapy_data
+          key: ehrapy-data-tests-v1
       - name: run tests using hatch
         env:
           MPLBACKEND: agg
           PLATFORM: ${{ matrix.os }}
           DISPLAY: :42
+          EHRDATA_DOWNLOAD_MAX_RETRIES: "5"
+          EHRDATA_DOWNLOAD_RETRY_DELAY: "10"
         run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto
+      # Only persist the cache after a green run that had to download (cache miss), so a partial/failed download is never saved under the (immutable) key.
+      - name: Save datasets cache
+        if: steps.data-cache.outputs.cache-hit != 'true' && success()
+        uses: actions/cache/save@v4
+        with:
+          path: ehrapy_data
+          key: ehrapy-data-tests-v1
       - name: generate coverage report
         run: |
           # See https://coverage.readthedocs.io/en/latest/config.html#run-patch

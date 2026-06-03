@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning][].
 ### Modified
  - Dataset downloads now use [pooch](https://www.fatiando.org/pooch/) instead of a custom `requests`-based downloader, aligning with the scverse ecosystem and providing caching out of the box. ([#244](https://github.com/theislab/ehrdata/issues/244)) @eroell
 
+### Fixed
+ - CI now caches downloaded datasets used by `ehrdata.dt` so flaky upstream hosts (e.g. physionet.org) don't break the test and notebook workflows. ([#250](https://github.com/theislab/ehrdata/pull/250)) @eroell
+
 ## [0.2.1]
 
 ### Fixed
