@@ -27,8 +27,9 @@ dependencies = [
   "duckdb",
   "fast-array-utils[sparse]",
   "filelock",
-  "requests",
+  "pooch",
   "rich",
+  "tqdm",
   "xarray",
   "zarr>=3",
 ]
