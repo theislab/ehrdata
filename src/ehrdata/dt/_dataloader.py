@@ -9,7 +9,6 @@ from typing import Literal, get_args
 from urllib.parse import urlparse
 
 import pooch
-from filelock import FileLock
 
 from ehrdata._logger import logger
 
@@ -32,8 +31,6 @@ def _download(
     *,
     overwrite: bool = False,
     timeout: int = 60,
-    max_retries: int = 5,
-    retry_delay: int = 10,
 ) -> None | Path:  # pragma: no cover
     """Downloads a file irrespective of format.
 
@@ -49,10 +46,7 @@ def _download(
         block_size: Block size for downloads in bytes.
         overwrite: Whether to overwrite existing files.
         timeout: Request timeout in seconds.
-        max_retries: Unused; retained for backwards compatibility. Retries are handled by pooch.
-        retry_delay: Unused; retained for backwards compatibility. Retries are handled by pooch.
     """
-    del max_retries, retry_delay  # Retained for backwards compatibility; pooch handles retries internally.
 
     def _sanitize_filename(filename: str) -> str:
         if os.name == "nt":
@@ -95,34 +89,29 @@ def _download(
         msg = f"Unknown file format: {file_ending}"
         raise RuntimeError(msg)
 
-    lock_path = f"{path_to_check}.lock"
-    with FileLock(lock_path, timeout=600):
-        try:
-            if path_to_check.exists():
-                warning = f"File {path_to_check} already exists!"
-                if not overwrite:
-                    return path_to_check
-                logger.warning(f"{warning} Overwriting...")
-                # pooch does not re-fetch an existing file when no hash is given, so remove it to force a download.
-                if raw_data_output_path.exists():
-                    raw_data_output_path.unlink()
-
-            pooch.retrieve(
-                url=url,
-                known_hash=None,
-                fname=output_filename,
-                path=str(download_dir),
-                downloader=pooch.HTTPDownloader(
-                    progressbar=True,
-                    chunk_size=block_size,
-                    timeout=timeout,
-                    headers={"User-Agent": "ehrdata/1.0.0 (https://github.com/theislab/ehrdata)"},
-                ),
-            )
-
-            if file_ending in COMPRESSION_FORMATS_LIST:
-                shutil.unpack_archive(raw_data_output_path, output_path)
-
+    if path_to_check.exists():
+        warning = f"File {path_to_check} already exists!"
+        if not overwrite:
             return path_to_check
-        finally:
-            Path(lock_path).unlink(missing_ok=True)
+        logger.warning(f"{warning} Overwriting...")
+        # pooch does not re-fetch an existing file when no hash is given, so remove it to force a download.
+        if raw_data_output_path.exists():
+            raw_data_output_path.unlink()
+
+    pooch.retrieve(
+        url=url,
+        known_hash=None,
+        fname=output_filename,
+        path=str(download_dir),
+        downloader=pooch.HTTPDownloader(
+            progressbar=True,
+            chunk_size=block_size,
+            timeout=timeout,
+            headers={"User-Agent": "ehrdata/1.0.0 (https://github.com/theislab/ehrdata)"},
+        ),
+    )
+
+    if file_ending in COMPRESSION_FORMATS_LIST:
+        shutil.unpack_archive(raw_data_output_path, output_path)
+
+    return path_to_check

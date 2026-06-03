@@ -26,7 +26,6 @@ dependencies = [
   "anndata>=0.12.6",
   "duckdb",
   "fast-array-utils[sparse]",
-  "filelock",
   "pooch",
   "rich",
   "tqdm",
