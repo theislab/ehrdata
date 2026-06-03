@@ -334,8 +334,8 @@ def omop_connection_multiple_visit_occurrences():
 @pytest.fixture
 def omop_connection_mimic_iv():
     con = duckdb.connect(":memory:")
-    # Stable, gitignored path under ehrapy_data/ so CI's dataset cache covers it (tmp_path would re-download from physionet every run), in a dedicated subdir to avoid racing with test_dt's default-path download under pytest-xdist.
-    mimic_iv_omop(data_path=Path("ehrapy_data/mimic_iv_omop_fixture"), backend_handle=con)
+    # Use the default ehrapy_data/ path (shared with test_dt) so the already-seeded CI cache covers it; tmp_path would re-download from physionet every run.
+    mimic_iv_omop(backend_handle=con)
     yield con
     con.close()
 
