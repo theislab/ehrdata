@@ -20,9 +20,9 @@ COMPRESSION_FORMATS_LIST = list(get_args(COMPRESSION_FORMATS))
 RAW_FORMATS = Literal["csv", "txt", "parquet", "h5ad", "zarr"]
 RAW_FORMATS_LIST = list(get_args(RAW_FORMATS))
 
-# Defaults for download retries. Overridable via environment variables so that e.g. CI can fail fast
-# (EHRDATA_DOWNLOAD_MAX_RETRIES=1) instead of waiting through the full exponential backoff.
-DEFAULT_MAX_RETRIES = int(os.environ.get("EHRDATA_DOWNLOAD_MAX_RETRIES", "5"))
+# Retry defaults. CI can override these via environment variables to fail fast instead of waiting through
+# the full exponential backoff; regular users never need to set them.
+DEFAULT_MAX_RETRIES = max(1, int(os.environ.get("EHRDATA_DOWNLOAD_MAX_RETRIES", "5")))
 DEFAULT_RETRY_DELAY = int(os.environ.get("EHRDATA_DOWNLOAD_RETRY_DELAY", "10"))
 
 
@@ -36,8 +36,8 @@ def _download(
     *,
     overwrite: bool = False,
     timeout: int = 60,
-    max_retries: int | None = None,
-    retry_delay: int | None = None,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    retry_delay: int = DEFAULT_RETRY_DELAY,
 ) -> None | Path:  # pragma: no cover
     """Downloads a file irrespective of format.
 
@@ -50,13 +50,9 @@ def _download(
         block_size: Block size for downloads in bytes.
         overwrite: Whether to overwrite existing files.
         timeout: Request timeout in seconds.
-        max_retries: Maximum number of download retries. Defaults to the ``EHRDATA_DOWNLOAD_MAX_RETRIES``
-            environment variable if set, otherwise 5.
-        retry_delay: Base delay between retries in seconds (grows exponentially). Defaults to the
-            ``EHRDATA_DOWNLOAD_RETRY_DELAY`` environment variable if set, otherwise 10.
+        max_retries: Maximum number of download attempts before giving up. Defaults to 5.
+        retry_delay: Base delay in seconds between attempts (grows exponentially). Defaults to 10.
     """
-    max_retries = max(1, DEFAULT_MAX_RETRIES if max_retries is None else max_retries)
-    retry_delay = DEFAULT_RETRY_DELAY if retry_delay is None else retry_delay
 
     def _sanitize_filename(filename: str) -> str:
         if os.name == "nt":

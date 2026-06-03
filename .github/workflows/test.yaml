@@ -78,7 +78,6 @@ jobs:
         run: |
           uvx hatch run hatch-test.py3.14:uv pip freeze
       # Restore example datasets (downloaded from physionet.org etc.) from a previous run, so flaky/blocked upstream hosts don't break CI.
-      # ehrdata's _download() skips the network when the files already exist.
       # The key is static so the cache is reused across runs; bump the version when a dataset URL changes.
       - name: Restore datasets cache
         id: data-cache
@@ -91,7 +90,6 @@ jobs:
           MPLBACKEND: agg
           PLATFORM: ${{ matrix.os }}
           DISPLAY: :42
-          # On a cache miss, fail fast instead of waiting through the full exponential backoff; just re-run the workflow until a run catches physionet in a reachable window and seeds the cache.
           EHRDATA_DOWNLOAD_MAX_RETRIES: "2"
           EHRDATA_DOWNLOAD_RETRY_DELAY: "5"
         run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto
