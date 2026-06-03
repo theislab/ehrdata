@@ -99,8 +99,10 @@ def test_feature_type_inference_layer(sample_dataset, request):
 )
 def test_feature_type_inference_3D(sample_dataset, request):
     data, target_types = request.getfixturevalue(sample_dataset)
-    data = pd.DataFrame(data)
-    tem_layer = data.values.reshape(2, -1, 2)
+
+    data = pd.DataFrame(data)  # (4, 11)
+    arr = data.values  # (4, 11)
+    tem_layer = np.stack([arr[:2], arr[2:]], axis=2)  # (2,11,2)
     edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: tem_layer})
     infer_feature_types(edata, layer=DEFAULT_TEM_LAYER_NAME)
 
