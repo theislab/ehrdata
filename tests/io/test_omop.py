@@ -1739,6 +1739,9 @@ def test_multiple_visit_occurrences_for_single_patient_datetime_specific(omop_co
     )
 
 
+# Shares the default mimic-iv download path with test_mimic_iv_omop (tests/dt/test_dt.py); same xdist group so the
+# two don't download/extract concurrently on a cold cache.
+@pytest.mark.xdist_group(name="dataset_mimic_iv_omop")
 def test_mimic_iv_omop_visit_measurement_validation(omop_connection_mimic_iv):
     """Validation test using real MIMIC-IV OMOP data.
 

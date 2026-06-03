@@ -178,6 +178,10 @@ ini_options.xfail_strict = true
 ini_options.addopts = [
   "--import-mode=importlib", # allow using test files with same name
 ]
+# Provided by pytest-xdist (CI only); registered here so runs without xdist don't warn about an unknown marker.
+ini_options.markers = [
+  "xdist_group: run tests sharing a dataset download path on the same xdist worker (needs --dist loadgroup)",
+]
 
 [tool.coverage]
 run.omit = [

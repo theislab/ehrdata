@@ -90,7 +90,9 @@ jobs:
           MPLBACKEND: agg
           PLATFORM: ${{ matrix.os }}
           DISPLAY: :42
-        run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto
+        # --dist loadgroup so tests sharing a dataset download path (marked with @pytest.mark.xdist_group) run on the
+        # same worker and don't download/extract the same dataset concurrently on a cold cache.
+        run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto --dist loadgroup
       # Only persist the cache after a green run that had to download (cache miss), so a partial/failed download is never saved under the (immutable) key.
       - name: Save datasets cache
         if: steps.data-cache.outputs.cache-hit != 'true' && success()
