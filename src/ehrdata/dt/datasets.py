@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 
-from ehrdata._logger import logger
 from ehrdata.core.constants import DEFAULT_DATA_PATH, DEFAULT_TEM_LAYER_NAME
 from ehrdata.dt._dataloader import _download
 from ehrdata.io import read_csv, read_h5ad
@@ -301,8 +300,6 @@ def _setup_eunomia_datasets(
     )
 
     if nested_omop_tables_folder:
-        if len(list((data_path / nested_omop_tables_folder).glob("*.csv"))) > 0:
-            logger.info(f"Moving files from {data_path / nested_omop_tables_folder} to {data_path}")
         for file_path in (data_path / nested_omop_tables_folder).glob("*.csv"):
             shutil.move(file_path, data_path)
 
@@ -856,6 +853,13 @@ def _create_edata_from_physionet_long_format(
 
     xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
 
+    # persons whose dynamic measurements all fall outside the observation window are dropped from the long->xarray
+    # pivot; reindex to every person in obs (in obs order) so the layer stays aligned with obs and missing persons
+    # are padded with missing values instead of producing a shape mismatch
+    xa = xa.reindex(
+        RecordID=obs.index.values,
+        fill_value=np.nan,
+    )
     # since NaNs are dropped, it can happen that a Parameter is completely dropped when it has no values for the subset of persons considered
     # to provide a full set of Parameters everytime, we reindex to add the missing Parameters back in, just with missing values
     xa = xa.reindex(

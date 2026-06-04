@@ -4,13 +4,18 @@ import logging
 import os
 import shutil
 import tempfile
+import warnings
 from pathlib import Path, PurePath
 from typing import Literal, get_args
 from urllib.parse import urlparse
 
-import pooch
-
 from ehrdata._logger import logger
+
+# pooch imports `tqdm.auto` at module load. In a Jupyter kernel without ipywidgets, that emits a one-time
+# "IProgress not found" warning. We render a plain-text progress bar, so import pooch with that warning silenced.
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", message="IProgress not found")
+    import pooch
 
 # pooch is quite chatty by default; only surface warnings and above.
 pooch.get_logger().setLevel(logging.WARNING)

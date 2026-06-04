@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
  - CI now caches downloaded datasets used by `ehrdata.dt` so flaky upstream hosts (e.g. physionet.org) don't break the test and notebook workflows. ([#250](https://github.com/theislab/ehrdata/pull/250)) @eroell
+ - {func}`~ehrdata.dt.physionet2019` no longer raises a shape mismatch on the full dataset: persons whose dynamic measurements all fall outside the observation window are now padded with missing values instead of being dropped from the time series tensor. ([#244](https://github.com/theislab/ehrdata/issues/244)) @eroell
 
 ## [0.2.1]
 
