@@ -10,8 +10,9 @@ import zarr
 
 import ehrdata as ed
 from ehrdata._logger import logger
-from ehrdata.core.constants import EHRDATA_ZARR_ENCODING_VERSION
+from ehrdata.core.constants import EHRDATA_DEFAULT_FORMAT_VERSION, EHRDATA_ENCODING_TYPE
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
+from ehrdata.io._ondisk import decode_init_dict, encode_for_disk
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -74,6 +75,8 @@ def read_zarr(
         err = f"Unkown encoding-type '{f.attrs['encoding-type']}'."
         raise ValueError(err)
 
+    # Restore the versioned on-disk layout (e.g. move format-v2 3D arrays from obsm back to layers).
+    dictionary_for_init = decode_init_dict(dictionary_for_init)
     edata = EHRData(**dictionary_for_init)
 
     if harmonize_missing_values:
@@ -109,8 +112,15 @@ def write_zarr(
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
-    To write to a `.zarr` file, `X`, and `layers` cannot be written as `object` dtype.
-    If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
+    The recommended store name extension is `.ehrdata.zarr`. To write to a `.zarr` store, `X`, and
+    `layers` cannot be written as `object` dtype. If any of these fields is of `object` dtype, this
+    function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a
+    `str` dtype.
+
+    The data is written in the ehrdata v2 on-disk format: since EHRData stores time-series as 3D arrays
+    in `X`/`layers` but anndata only guarantees 2D arrays there, any 3D arrays are relocated into
+    `.obsm`, and :func:`~ehrdata.io.read_zarr` restores them automatically. Stores written by older
+    ehrdata versions (3D arrays directly in `X`/`layers`) remain readable.
 
     Args:
         edata: Central data object.
@@ -121,14 +131,14 @@ def write_zarr(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_2()
-        >>> ed.io.write_zarr("mimic_2.zarr", edata)
+        >>> ed.io.write_zarr("mimic_2.ehrdata.zarr", edata)
     """
     filename = Path(filename)
     edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
 
     store = zarr.open_group(filename, mode="a", use_consolidated=False, zarr_format=3)
 
-    adata = ad.AnnData(edata)
+    adata = encode_for_disk(edata)
 
     if convert_strings_to_categoricals:
         adata.strings_to_categoricals(adata.obs)
@@ -171,5 +181,7 @@ def write_zarr(
 
     ad.io.write_elem(store, "tem", edata.tem)
 
-    store.attrs["encoding-version"] = EHRDATA_ZARR_ENCODING_VERSION
-    store.attrs["encoding-type"] = "ehrdata"
+    # Stamp the ehrdata format version on the store for discoverability. Reading does not depend on it:
+    # the v2 layout is self-describing through the reserved obsm keys.
+    store.attrs["encoding-type"] = EHRDATA_ENCODING_TYPE
+    store.attrs["encoding-version"] = str(EHRDATA_DEFAULT_FORMAT_VERSION)

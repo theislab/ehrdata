@@ -7,10 +7,35 @@ import anndata as ad
 import h5py
 
 from ehrdata._logger import logger
+from ehrdata.core.constants import (
+    EHRDATA_DEFAULT_FORMAT_VERSION,
+    EHRDATA_ENCODING_TYPE,
+    EHRDATA_OBSM_3D_LAYER_PREFIX,
+    EHRDATA_OBSM_3D_X_KEY,
+)
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
+from ehrdata.io._ondisk import decode_init_dict, encode_for_disk
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
+
+
+def _restore_3d_from_obsm_backed(edata: EHRData) -> None:
+    """Restore format-v2 3D arrays from obsm back into layers for a backed read.
+
+    The v2 layout is self-describing via the reserved obsm keys. Backed reads only support updates to X,
+    so a 3D X cannot be safely restored here and is left in obsm with a warning; 3D layers (the common
+    time-series case) are restored.
+    """
+    for obsm_key in [k for k in edata.obsm if k.startswith(EHRDATA_OBSM_3D_LAYER_PREFIX)]:
+        edata.layers[obsm_key.removeprefix(EHRDATA_OBSM_3D_LAYER_PREFIX)] = edata.obsm[obsm_key]
+        del edata.obsm[obsm_key]
+
+    if EHRDATA_OBSM_3D_X_KEY in edata.obsm:
+        logger.warning(
+            "This file stores a 3D X in obsm (ehrdata format v2). Restoring it to X is not supported in "
+            "backed mode; it remains accessible under obsm. Read without backed=... to restore X."
+        )
 
 
 def read_h5ad(
@@ -62,6 +87,8 @@ def read_h5ad(
                 {k: ad.io.read_elem(f[k]) for k, _ in dict(f).items() if not k.startswith("raw.")}
             )
 
+        # Restore the versioned on-disk layout (e.g. move format-v2 3D arrays from obsm back to layers).
+        dictionary_for_init = decode_init_dict(dictionary_for_init)
         edata = EHRData(**dictionary_for_init)
 
     else:
@@ -74,6 +101,8 @@ def read_h5ad(
             tem = ad.io.read_elem(f["tem"]) if "tem" in f else None
 
             edata = EHRData.from_adata(adata, tem=tem)
+
+        _restore_3d_from_obsm_backed(edata)
 
     if harmonize_missing_values:
         if edata.X is not None:
@@ -99,14 +128,19 @@ def write_h5ad(
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to an hdf5 file.
 
-    It is possible to either write an :class:`~ehrdata.EHRData` object to an `.h5ad` or a compressed `.gzip` or `lzf` file.
-    To write to an h5ad file, `X` and `layers` cannot be written as `object` dtype.
-    If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype;
-    if this fails, the field will be casted to a string dtype.
+    The recommended file extension is `.h5ed` (mirroring anndata's `.h5ad`). To write the file, `X` and
+    `layers` cannot be written as `object` dtype. If any of these fields is of `object` dtype, this
+    function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a
+    string dtype.
+
+    The data is written in the ehrdata v2 on-disk format: since EHRData stores time-series as 3D arrays
+    in `X`/`layers` but anndata only guarantees 2D arrays there, any 3D arrays are relocated into
+    `.obsm`, and :func:`~ehrdata.io.read_h5ad` restores them automatically. Files written by older
+    ehrdata versions (3D arrays directly in `X`/`layers`) remain readable.
 
     Args:
-        filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
         edata: Central data object.
+        filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
         compression: Optional file compression.
             Setting compression to 'gzip' can save disk space but will slow down writing and subsequent reading.
         compression_opts: See http://docs.h5py.org/en/latest/high/dataset.html.
@@ -114,16 +148,20 @@ def write_h5ad(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_2()
-        >>> ed.io.write_h5ad("mimic_2.h5ad", edata)
+        >>> ed.io.write_h5ad("mimic_2.h5ed", edata)
     """
     filename = Path(filename)
 
     edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
 
-    ad.AnnData(edata).write_h5ad(
+    encode_for_disk(edata).write_h5ad(
         filename,
         compression=compression,
         compression_opts=compression_opts,
     )
     with h5py.File(filename, "a") as f:
         ad.io.write_elem(f, "tem", edata.tem)
+        # Stamp the ehrdata format version for discoverability, namespaced so it does not clash with
+        # anndata's own root encoding-type/-version attrs. Reading does not depend on these.
+        f.attrs["ehrdata-encoding-type"] = EHRDATA_ENCODING_TYPE
+        f.attrs["ehrdata-encoding-version"] = str(EHRDATA_DEFAULT_FORMAT_VERSION)
