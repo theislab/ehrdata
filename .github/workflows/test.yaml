@@ -84,22 +84,22 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ehrapy_data
-          key: ehrapy-data-tests-v1
+          key: ehrapy-data-tests-v2
       - name: run tests using hatch
         env:
           MPLBACKEND: agg
           PLATFORM: ${{ matrix.os }}
           DISPLAY: :42
-          EHRDATA_DOWNLOAD_MAX_RETRIES: "5"
-          EHRDATA_DOWNLOAD_RETRY_DELAY: "10"
-        run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto
+        # --dist loadgroup so tests sharing a dataset download path (marked with @pytest.mark.xdist_group) run on the
+        # same worker and don't download/extract the same dataset concurrently on a cold cache.
+        run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto --dist loadgroup
       # Only persist the cache after a green run that had to download (cache miss), so a partial/failed download is never saved under the (immutable) key.
       - name: Save datasets cache
         if: steps.data-cache.outputs.cache-hit != 'true' && success()
         uses: actions/cache/save@v4
         with:
           path: ehrapy_data
-          key: ehrapy-data-tests-v1
+          key: ehrapy-data-tests-v2
       - name: generate coverage report
         run: |
           # See https://coverage.readthedocs.io/en/latest/config.html#run-patch

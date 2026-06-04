@@ -11,7 +11,12 @@ and this project adheres to [Semantic Versioning][].
 ## [Unreleased]
 
 ### Fixed
- - Dataset downloads in `ehrdata.dt` no longer fail silently: the final retry now raises instead of returning a path that was never downloaded, so unreachable hosts (e.g. physionet.org) surface a clear error instead of a downstream `FileNotFoundError`. Retries are configurable via the `EHRDATA_DOWNLOAD_MAX_RETRIES` / `EHRDATA_DOWNLOAD_RETRY_DELAY` environment variables, and CI now caches downloaded datasets so flaky upstream hosts don't break the test and notebook workflows. ([#250](https://github.com/theislab/ehrdata/pull/250)) @eroell
+- {func}`~ehrdata.infer_feature_types` can handle `EHRData` objects with `X` as `None`. ([#246](https://github.com/theislab/ehrdata/pull/246)) @sueoglu
+ - {func}`~ehrdata.dt.physionet2019` no longer raises a shape mismatch on the full dataset: persons whose dynamic measurements all fall outside the observation window are now padded with missing values instead of being dropped from the time series tensor. ([#251](https://github.com/theislab/ehrdata/issues/251)) @eroell
+
+### Maintenance
+ - CI now caches downloaded datasets used by `ehrdata.dt` to reduce flaky upstream hosts (e.g. physionet.org) breaking the test and notebook workflows. ([#250](https://github.com/theislab/ehrdata/pull/250)) @eroell
+ - Dataset downloads now use [pooch](https://www.fatiando.org/pooch/) instead of a custom `requests`-based downloader, aligning with the scverse ecosystem and providing caching out of the box. ([#251](https://github.com/theislab/ehrdata/issues/251)) @eroell
 
 ## [0.2.1]
 

@@ -51,6 +51,7 @@ def duckdb_connection():
     con.close()
 
 
+@pytest.mark.xdist_group(name="dataset_mimic_iv_omop")
 def test_mimic_iv_omop():
     duckdb_connection = duckdb.connect()
     ed.dt.mimic_iv_omop(backend_handle=duckdb_connection)
@@ -78,6 +79,7 @@ def test_synthea27nj_omop():
     duckdb_connection.close()
 
 
+@pytest.mark.xdist_group(name="dataset_physionet2012")
 def test_physionet2012():
     edata = ed.dt.physionet2012(layer=DEFAULT_TEM_LAYER_NAME)
     assert edata.shape == (11988, 37, 48)
@@ -113,6 +115,7 @@ def test_physionet2012():
     assert np.isclose(edata[edata.obs.index.get_loc("152871"), "HR", 28].layers[DEFAULT_TEM_LAYER_NAME].item(), 68)
 
 
+@pytest.mark.xdist_group(name="dataset_physionet2012")
 def test_physionet2012_arguments():
     edata = ed.dt.physionet2012(
         layer=DEFAULT_TEM_LAYER_NAME,
@@ -129,6 +132,7 @@ def test_physionet2012_arguments():
     assert edata.var.shape == (37, 1)
 
 
+@pytest.mark.xdist_group(name="dataset_physionet2019")
 def test_physionet2019():
     edata = ed.dt.physionet2019(layer=DEFAULT_TEM_LAYER_NAME, n_samples=10)
     assert edata.shape == (10, 35, 48)
@@ -152,6 +156,7 @@ def test_physionet2019():
     )
 
 
+@pytest.mark.xdist_group(name="dataset_physionet2019")
 def test_physionet2019_arguments():
     edata = ed.dt.physionet2019(
         layer=DEFAULT_TEM_LAYER_NAME,
