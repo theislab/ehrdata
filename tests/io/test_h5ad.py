@@ -174,3 +174,36 @@ def test_write_read_h5ad_basic(edata_name, request, tmp_path):
     for key in edata.uns:
         assert key in edata_read.uns
         assert np.array_equal(edata.uns[key], edata_read.uns[key])
+
+
+def test_write_h5ad_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
+    # ehrdata writes the v2 layout: 3D arrays move into .obsm so anndata's 2D-only spec is respected.
+    path = tmp_path / "edata_333.h5ed"
+    write_h5ad(edata_333.copy(), path)
+
+    with h5py.File(path, "r") as f:
+        assert "__ehrdata_layer_3d__:tem_data" in f["obsm"]
+        assert "tem_data" not in f["layers"]
+        assert f.attrs["ehrdata-encoding-type"] == "ehrdata"
+        assert f.attrs["ehrdata-encoding-version"] == "2"
+
+    edata_read = read_h5ad(path)
+    _assert_shape_matches(edata_read, (3, 3, 3))
+    for key in edata_333.layers:
+        assert np.array_equal(edata_333.layers[key], edata_read.layers[key])
+    # the relocation must be invisible to the user-facing object
+    assert not any(k.startswith("__ehrdata_") for k in edata_read.obsm)
+
+
+def test_read_h5ad_legacy_v1_with_3d_in_layers(edata_333, tmp_path):
+    # legacy v1 files store 3D arrays directly in layers, with no reserved obsm keys; they must still
+    # read correctly via the self-describing layout (no reserved keys -> nothing to relocate).
+    path = tmp_path / "legacy_v1.h5ad"
+    ad.AnnData(edata_333.copy()).write_h5ad(path)
+    with h5py.File(path, "a") as f:
+        ad.io.write_elem(f, "tem", edata_333.tem)
+
+    edata_read = read_h5ad(path)
+    _assert_shape_matches(edata_read, (3, 3, 3))
+    assert "tem_data" in edata_read.layers
+    assert np.array_equal(edata_333.layers["tem_data"], edata_read.layers["tem_data"])

@@ -11,7 +11,7 @@ from tests.conftest import (
     _check_aligned_anndata_parts_equal,
 )
 
-from ehrdata.core.constants import EHRDATA_ZARR_ENCODING_VERSION
+from ehrdata.core.constants import EHRDATA_DEFAULT_FORMAT_VERSION
 from ehrdata.io import read_zarr, write_zarr
 
 TEST_PATH_ZARR = TEST_DATA_PATH / "toy_zarr"
@@ -75,7 +75,8 @@ def test_read_zarr_basic_with_tem(harmonize_missing_values, cast_variables_to_fl
     # check the store is an ehrdata zarr store
     store = zarr.open(TEST_PATH_ZARR / "edata_basic_with_tem.zarr")
     assert store.attrs["encoding-type"] == "ehrdata"
-    assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
+    # legacy committed fixture: written with the old "0.0.1" encoding-version, still readable
+    assert store.attrs["encoding-version"] == "0.0.1"
 
 
 @pytest.mark.parametrize("harmonize_missing_values", [False, True])
@@ -98,7 +99,8 @@ def test_read_zarr_sparse_with_tem(harmonize_missing_values, cast_variables_to_f
     # check the store is an ehrdata zarr store
     store = zarr.open(TEST_PATH_ZARR / "edata_sparse_with_tem.zarr")
     assert store.attrs["encoding-type"] == "ehrdata"
-    assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
+    # legacy committed fixture: written with the old "0.0.1" encoding-version, still readable
+    assert store.attrs["encoding-version"] == "0.0.1"
 
 
 @pytest.mark.parametrize(
@@ -131,7 +133,7 @@ def test_write_read_zarr_basic(edata_name, chunks, request, tmp_path):
     # check the test file is an ehrdata zarr store
     store = zarr.open(store_path)
     assert store.attrs["encoding-type"] == "ehrdata"
-    assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
+    assert store.attrs["encoding-version"] == str(EHRDATA_DEFAULT_FORMAT_VERSION)
 
     # check success of convert_strings_to_categoricals
     if "obs_col_2" in edata_read.obs.columns:
@@ -149,3 +151,23 @@ def test_write_zarr_chunks_error(edata_333, tmp_path):
         write_zarr(edata_333, tmp_path / "test.zarr", chunks=1000)
     with pytest.raises(NotImplementedError):
         write_zarr(edata_333, tmp_path / "test.zarr", chunks="foobar")
+
+
+def test_write_zarr_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
+    import numpy as np
+
+    # ehrdata writes the v2 layout: 3D arrays move into .obsm so anndata's 2D-only spec is respected.
+    path = tmp_path / "edata_333.ehrdata.zarr"
+    write_zarr(edata_333.copy(), path)
+
+    store = zarr.open(path)
+    assert "__ehrdata_layer_3d__:tem_data" in store["anndata"]["obsm"]
+    assert "tem_data" not in store["anndata"]["layers"]
+    assert store.attrs["encoding-type"] == "ehrdata"
+    assert store.attrs["encoding-version"] == str(EHRDATA_DEFAULT_FORMAT_VERSION)
+
+    edata_read = read_zarr(path)
+    _assert_shape_matches(edata_read, (3, 3, 3))
+    for key in edata_333.layers:
+        assert np.array_equal(edata_333.layers[key], edata_read.layers[key])
+    assert not any(k.startswith("__ehrdata_") for k in edata_read.obsm)
