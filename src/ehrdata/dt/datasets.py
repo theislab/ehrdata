@@ -853,9 +853,8 @@ def _create_edata_from_physionet_long_format(
 
     xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
 
-    # persons whose dynamic measurements all fall outside the observation window are dropped from the long->xarray
-    # pivot; reindex to every person in obs (in obs order) so the layer stays aligned with obs and missing persons
-    # are padded with missing values instead of producing a shape mismatch
+    # persons whose dynamic measurements all fall outside the observation window are dropped from the long->xarray  pivot;
+    # reindex to every person in obs (in obs order) so the layer stays aligned with obs and missing persons are padded with missing values instead of producing a shape mismatch
     xa = xa.reindex(
         RecordID=obs.index.values,
         fill_value=np.nan,

@@ -51,8 +51,6 @@ def duckdb_connection():
     con.close()
 
 
-# Same default download path as the omop_connection_mimic_iv fixture (tests/io/test_omop.py); group onto one xdist
-# worker so they don't download/extract concurrently on a cold cache.
 @pytest.mark.xdist_group(name="dataset_mimic_iv_omop")
 def test_mimic_iv_omop():
     duckdb_connection = duckdb.connect()

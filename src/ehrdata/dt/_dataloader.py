@@ -11,13 +11,10 @@ from urllib.parse import urlparse
 
 from ehrdata._logger import logger
 
-# pooch imports `tqdm.auto` at module load. In a Jupyter kernel without ipywidgets, that emits a one-time
-# "IProgress not found" warning. We render a plain-text progress bar, so import pooch with that warning silenced.
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message="IProgress not found")
     import pooch
 
-# pooch is quite chatty by default; only surface warnings and above.
 pooch.get_logger().setLevel(logging.WARNING)
 
 COMPRESSION_FORMATS = Literal["tar.gz", "gztar", "zip", "tar", "gz", "bz", "xz"]
