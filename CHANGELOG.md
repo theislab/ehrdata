@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning][].
 - {func}`~ehrdata.infer_feature_types` can handle `EHRData` objects with `X` as `None`. ([#246](https://github.com/theislab/ehrdata/pull/246)) @sueoglu
  - {func}`~ehrdata.dt.physionet2019` no longer raises a shape mismatch on the full dataset: persons whose dynamic measurements all fall outside the observation window are now padded with missing values instead of being dropped from the time series tensor. ([#251](https://github.com/theislab/ehrdata/issues/251)) @eroell
  - {func}`~ehrdata.harmonize_missing_values` no longer logs a warning for each numeric layer when it has nothing to harmonize; reading a fully numeric dataset is now quiet. @eroell
+ - {func}`~ehrdata.io.read_zarr` no longer raises `AttributeError` when reading a store whose `X` is `None` (e.g. an `EHRData` with only a 3D time-series layer); harmonization now skips a `None` `X`, matching {func}`~ehrdata.io.read_h5ed`. @eroell
 
 ### Maintenance
  - ehrdata is now compatible with anndata 0.13 (unified `X`/`layers` storage, `IndexManager` view indices, index type aliases moved to `anndata.typing`, and the stricter 2D-only `X`/`layers` on-disk rule) while remaining compatible with anndata `<0.13`. CI gains an integration-free `core-anndata-min` lane (pinned to `anndata<0.13`) and a pre-release lane to catch upstream breakage early. @eroell

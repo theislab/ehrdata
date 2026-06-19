@@ -24,24 +24,25 @@ from anndata._core.views import (
     as_view,
 )
 
-try:
-    # anndata >= 0.13 moved the index type aliases from `compat` to `typing`.
+# anndata 0.13 compatibility (ehrdata supports anndata <0.13 and >=0.13). The 0.13 changes adapted to:
+#   * `.X` is unified into `layers[None]`, so iterating `.layers` yields a `None` key, `isbacked`
+#     delegates to the layers store, and `adata.X = v` routes through `layers[None] = v`.
+#   * normalised view indices (`_oidx`/`_vidx`) are wrapped in `anndata.compat.IndexManager`.
+#   * the `Index`/`Index1D` type aliases moved from `anndata.compat` to `anndata.typing`.
+# Sites below say "anndata 0.13" and point here rather than restating this.
+
+try:  # anndata 0.13: aliases moved to anndata.typing
     from anndata.typing import Index as ADIndex
     from anndata.typing import Index1D
 except ImportError:
-    # anndata <= 0.12
     from anndata.compat import Index as ADIndex
     from anndata.compat import Index1D
 
-try:
-    # anndata >= 0.13 wraps normalised view indices (`_oidx`/`_vidx`) in an `IndexManager` (array-api /
-    # multi-device aware) instead of a plain numpy array. `np.asarray()` materialises the underlying
-    # index; see `_subset`.
+try:  # anndata 0.13: view indices wrapped in IndexManager (materialised in _subset)
     from anndata.compat import IndexManager as _IndexManager
 
     _INDEX_MANAGER_TYPES: tuple[type, ...] = (_IndexManager,)
-except ImportError:
-    # anndata <= 0.12 has no IndexManager; `isinstance(x, ())` is always False, so nothing is converted.
+except ImportError:  # <0.13 has no IndexManager; isinstance(x, ()) is always False, so nothing converts
     _INDEX_MANAGER_TYPES = ()
 
 if TYPE_CHECKING:
@@ -56,8 +57,8 @@ T = TypeVar("T", bound=AlignedMapping)
 
 
 def _validate_layers_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
-    # `n_t` is transiently None while the X setter is running (see `EHRData.X`); validation is skipped
-    # in that state, and the caller recomputes `_n_t` from `value` immediately afterwards.
+    # `n_t` is transiently None while the X setter runs (see EHRData.X); skip validation then, the
+    # caller recomputes `_n_t` immediately afterwards.
     if obj.n_t is not None and obj.n_t > 1 and _get_layers_3d_dim(value) != obj.n_t:
         msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
         raise ValueError(msg)
@@ -71,9 +72,8 @@ def _validate_array_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None
 
 
 def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
-    # anndata >=0.13 wraps normalised view indices in `IndexManager`, which is not `Iterable`;
-    # materialise those to numpy arrays so the `np.ix_` branches below select by index combination
-    # (outer product) rather than collapsing to coordinate pairs.
+    # anndata 0.13: IndexManager isn't Iterable — materialise it so the np.ix_ branches below select by
+    # index combination (outer product), not coordinate pairs.
     if isinstance(subset_idx, tuple):
         subset_idx = tuple(np.asarray(x) if isinstance(x, _INDEX_MANAGER_TYPES) else x for x in subset_idx)
     # Select as combination of indexes, not coordinates
@@ -93,10 +93,8 @@ class AlignedActual3D(AlignedActual):
     """AlignedActual for 3D data."""
 
     def __setitem__(self, key: str | None, value: Value) -> None:
-        # The None key is anndata's unified `.X` slot (anndata >=0.13 routes `adata.X = value`
-        # through `layers[None] = value`). Its 3D validation, n_t bookkeeping and tem refresh are
-        # owned by the EHRData.X setter, so here we just store it (deferring to the base class, which
-        # also runs anndata's own on-disk 2D-spec warning). Mirrors AlignedView3D.__getitem__.
+        # anndata 0.13: key None is the unified `.X` slot; its 3D/n_t/tem bookkeeping is owned by the
+        # EHRData.X setter, so just store it (the base class also runs anndata's 2D-spec warning).
         if key is None:
             super().__setitem__(key, value)
             return
@@ -116,8 +114,7 @@ class AlignedView3D(AlignedView):
     """AlignedView for 3D data."""
 
     def __getitem__(self, key: str | None) -> Value:
-        # The None key is anndata's unified `.X` slot (anndata >=0.13 stores X as `layers[None]`); it
-        # is None when X is unset.
+        # anndata 0.13: key None is the unified `.X` slot, None when X is unset.
         elem = self.parent_mapping[key]
         if elem is None:
             return None
@@ -134,10 +131,8 @@ class LayersView3D(AlignedView3D, LayersBase):
 
     def __init__(self, parent_mapping: LayersBase, parent_view: AnnData, subset_idx: Any) -> None:
         super().__init__(parent_mapping, parent_view, subset_idx)
-        # anndata >=0.13 unified `.X` into `layers[None]`, so `AnnData.isbacked` (and therefore any
-        # `.X` access) delegates to `layers.isbacked`. anndata's own `LayersView` sets this in its
-        # `__init__`; mirror it so 3D layer views expose `isbacked` too. anndata <0.13 has no such
-        # attribute on `Layers`, so only propagate it when present.
+        # anndata 0.13: X delegates `isbacked` to the layers store, so mirror anndata's own LayersView
+        # and expose it on 3D layer views too (absent on <0.13, hence the guard).
         if hasattr(parent_mapping, "isbacked"):
             self.isbacked = parent_mapping.isbacked
 
@@ -360,13 +355,9 @@ class EHRData(AnnData):
             if tem is not None:
                 instance.tem = tem
 
-            # Ensure an EHRData reconstructed from a backed AnnData reports `edata.isbacked == True`,
-            # so X is read from the backing file rather than from memory. `_init_as_actual(X=adata.X, …)`
-            # materialises the backed X, which on its own would mark the object as in-memory.
-            # - anndata >=0.13 stores X as `layers[None]` and derives `isbacked` from the layers store,
-            #   so the backed X must be absent from that store (it is read from disk on access).
-            # - anndata <=0.12 instead keys `isbacked` off the raw `_X` slot being None.
-            # Each assignment below is a harmless no-op on the other anndata version.
+            # Make a backed-reconstructed EHRData report `isbacked == True` so X is read from disk.
+            # `isbacked` requires the materialised X to be absent: from the layers store on anndata 0.13
+            # (X is `layers[None]`) and from the `_X` slot on <0.13. Each line no-ops on the other.
             if adata.isbacked:
                 instance._layers.pop(None, None)
                 instance._X = None
@@ -410,11 +401,9 @@ class EHRData(AnnData):
 
     @X.setter
     def X(self, value):
-        # When this is a view whose parent has no X, AnnData's setter tries to write into None and
-        # raises TypeError. Materialise the view first so the assignment lands on a real object,
-        # matching the behaviour for other fields (obs, var, …) on X-less views. `_adata_ref` is the
-        # actual (non-view) parent, so reading `.X` is cheap and works across anndata versions (0.13
-        # removed the `_X` attribute, storing X as `layers[None]`).
+        # On a view whose parent has no X, AnnData's setter writes into None and raises TypeError.
+        # Materialise the view first so the assignment lands on a real object, as for obs/var on
+        # X-less views. Read `.X` (not `_X`, removed in anndata 0.13) off the non-view parent.
         if self.is_view and self._adata_ref is not None and self._adata_ref.X is None:
             self._init_as_actual(self.copy())
 

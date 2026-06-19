@@ -8,9 +8,8 @@ from typing import TYPE_CHECKING, Any, Literal
 import anndata as ad
 import zarr
 
-import ehrdata as ed
-from ehrdata._logger import logger
-from ehrdata.core.constants import EHRDATA_DEFAULT_FORMAT_VERSION, EHRDATA_ENCODING_TYPE
+from ehrdata._feature_types import _harmonize_on_read
+from ehrdata.core.constants import EHRDATA_ENCODING_TYPE, EHRDATA_ONDISK_VERSION
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
 from ehrdata.io._ondisk import decode_init_dict, encode_for_disk
 
@@ -75,17 +74,12 @@ def read_zarr(
         err = f"Unkown encoding-type '{f.attrs['encoding-type']}'."
         raise ValueError(err)
 
-    # Restore the versioned on-disk layout (e.g. move format-v2 3D arrays from obsm back to layers).
+    # Move any relocated 3D arrays from obsm back into X/layers (see ehrdata.io._ondisk).
     dictionary_for_init = decode_init_dict(dictionary_for_init)
     edata = EHRData(**dictionary_for_init)
 
     if harmonize_missing_values:
-        ed.harmonize_missing_values(edata)
-        logger.info("Harmonizing missing values of X")
-
-        for key in edata.layers:
-            ed.harmonize_missing_values(edata, layer=key)
-            logger.info(f"Harmonizing missing values of layer {key}")
+        _harmonize_on_read(edata)
 
     if cast_variables_to_float:
         _cast_variables_to_float(edata)
@@ -115,12 +109,8 @@ def write_zarr(
     The recommended store name extension is `.ehrdata.zarr`. To write to a `.zarr` store, `X`, and
     `layers` cannot be written as `object` dtype. If any of these fields is of `object` dtype, this
     function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a
-    `str` dtype.
-
-    The data is written in the ehrdata v2 on-disk format: since EHRData stores time-series as 3D arrays
-    in `X`/`layers` but anndata only guarantees 2D arrays there, any 3D arrays are relocated into
-    `.obsm`, and :func:`~ehrdata.io.read_zarr` restores them automatically. Stores written by older
-    ehrdata versions (3D arrays directly in `X`/`layers`) remain readable.
+    `str` dtype. 3D arrays are relocated into `.obsm` on write and restored by
+    :func:`~ehrdata.io.read_zarr` on read (see :mod:`ehrdata.io._ondisk`).
 
     Args:
         edata: Central data object.
@@ -166,9 +156,8 @@ def write_zarr(
                 dataset_kwargs = {"shards": (2**16,), "chunks": (2**8,), **dataset_kwargs}
             func(g, k, elem, dataset_kwargs=dataset_kwargs)
 
-        # Write the AnnData under the "anndata" key of `group` (mirroring the `chunks="auto"` path's
-        # `write_elem(store, "anndata", adata)`). anndata >=0.13 rejects writing with key "/" into a
-        # non-root subgroup, so we dispatch from the root store with an explicit key instead.
+        # anndata 0.13 rejects writing with key "/" into a non-root subgroup, so dispatch from the
+        # root store under the "anndata" key (matching the chunks="auto" write_elem path).
         return ad.experimental.write_dispatched(group, "anndata", adata, callback=callback)
 
     if chunks == "auto":
@@ -183,7 +172,6 @@ def write_zarr(
 
     ad.io.write_elem(store, "tem", edata.tem)
 
-    # Stamp the ehrdata format version on the store for discoverability. Reading does not depend on it:
-    # the v2 layout is self-describing through the reserved obsm keys.
+    # Identify the store as ehrdata (read_zarr dispatches on encoding-type; the version is informational).
     store.attrs["encoding-type"] = EHRDATA_ENCODING_TYPE
-    store.attrs["encoding-version"] = str(EHRDATA_DEFAULT_FORMAT_VERSION)
+    store.attrs["encoding-version"] = str(EHRDATA_ONDISK_VERSION)

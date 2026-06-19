@@ -4,11 +4,9 @@ from functools import singledispatch
 import numpy as np
 import pandas as pd
 
-try:
-    # anndata >= 0.13 moved the index type aliases from `compat` to `typing`.
+try:  # anndata 0.13: aliases moved to anndata.typing (see ehrdata.core.ehrdata)
     from anndata.typing import Index
 except ImportError:
-    # anndata <= 0.12
     from anndata.compat import Index
 
 

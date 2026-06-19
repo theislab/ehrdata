@@ -7,35 +7,30 @@ from typing import TYPE_CHECKING, Literal
 import anndata as ad
 import h5py
 
+from ehrdata._feature_types import _harmonize_on_read
 from ehrdata._logger import logger
-from ehrdata.core.constants import (
-    EHRDATA_DEFAULT_FORMAT_VERSION,
-    EHRDATA_ENCODING_TYPE,
-    EHRDATA_OBSM_3D_LAYER_PREFIX,
-    EHRDATA_OBSM_3D_X_KEY,
-)
+from ehrdata.core.constants import EHRDATA_ENCODING_TYPE, EHRDATA_OBSM_3D_X_KEY, EHRDATA_ONDISK_VERSION
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
-from ehrdata.io._ondisk import decode_init_dict, encode_for_disk
+from ehrdata.io._ondisk import _layer_for_obsm_key, decode_init_dict, encode_for_disk
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
 def _restore_3d_from_obsm_backed(edata: EHRData) -> None:
-    """Restore format-v2 3D arrays from obsm back into layers for a backed read.
+    """Restore relocated 3D layers from obsm for a backed read.
 
-    The v2 layout is self-describing via the reserved obsm keys. Backed reads only support updates to X,
-    so a 3D X cannot be safely restored here and is left in obsm with a warning; 3D layers (the common
-    time-series case) are restored.
+    Backed reads only support updates to X, so a relocated 3D X cannot be restored here and is left in
+    obsm with a warning; 3D layers (the common time-series case) are restored.
     """
-    for obsm_key in [k for k in edata.obsm if k.startswith(EHRDATA_OBSM_3D_LAYER_PREFIX)]:
-        edata.layers[obsm_key.removeprefix(EHRDATA_OBSM_3D_LAYER_PREFIX)] = edata.obsm[obsm_key]
+    for obsm_key in [k for k in edata.obsm if _layer_for_obsm_key(k) is not None]:
+        edata.layers[_layer_for_obsm_key(obsm_key)] = edata.obsm[obsm_key]
         del edata.obsm[obsm_key]
 
     if EHRDATA_OBSM_3D_X_KEY in edata.obsm:
         logger.warning(
-            "This file stores a 3D X in obsm (ehrdata format v2). Restoring it to X is not supported in "
-            "backed mode; it remains accessible under obsm. Read without backed=... to restore X."
+            "This file stores a 3D X in obsm. Restoring it to X is not supported in backed mode; it "
+            "remains accessible under obsm. Read without backed=... to restore X."
         )
 
 
@@ -50,7 +45,8 @@ def read_h5ed(
 
     Also reads plain anndata `.h5ad` files. 3D arrays are restored to `X`/`layers` whether they were
     relocated into `.obsm` (ehrdata v2 format) or stored directly in `X`/`layers` (legacy ehrdata files
-    or anndata files that still contain higher-dimensional arrays).
+    or anndata files that still contain higher-dimensional arrays). A file storing a 3D `X` (rather than
+    3D layers) can only be read on anndata >=0.13, which permits a >2D `X` in memory.
 
     Args:
         filename: Path to the file or directory to read.
@@ -73,7 +69,6 @@ def read_h5ed(
         >>> ed.io.write_h5ed(edata, "mimic_2.h5ed")
         >>> edata_2 = ed.io.read_h5ed("mimic_2.h5ed")
     """
-    import ehrdata as ed
     from ehrdata import EHRData
 
     if backed and harmonize_missing_values:
@@ -92,7 +87,7 @@ def read_h5ed(
                 {k: ad.io.read_elem(f[k]) for k, _ in dict(f).items() if not k.startswith("raw.")}
             )
 
-        # Restore the versioned on-disk layout (e.g. move format-v2 3D arrays from obsm back to layers).
+        # Move any relocated 3D arrays from obsm back into X/layers (see ehrdata.io._ondisk).
         dictionary_for_init = decode_init_dict(dictionary_for_init)
         edata = EHRData(**dictionary_for_init)
 
@@ -110,13 +105,7 @@ def read_h5ed(
         _restore_3d_from_obsm_backed(edata)
 
     if harmonize_missing_values:
-        if edata.X is not None:
-            ed.harmonize_missing_values(edata)
-            logger.info("Harmonizing missing values of X")
-
-        for key in edata.layers:
-            ed.harmonize_missing_values(edata, layer=key)
-            logger.info(f"Harmonizing missing values of layer {key}")
+        _harmonize_on_read(edata)
 
     if cast_variables_to_float:
         _cast_variables_to_float(edata)
@@ -136,13 +125,8 @@ def write_h5ed(
     `.h5ed` is the ehrdata on-disk format, marking it distinct from anndata's `.h5ad`. To write the
     file, `X` and `layers` cannot be written as `object` dtype. If any of these fields is of `object`
     dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be
-    casted to a string dtype.
-
-    The data is written in the ehrdata v2 on-disk format: since EHRData stores time-series as 3D arrays
-    in `X`/`layers` but anndata only guarantees 2D arrays there, any 3D arrays are relocated into
-    `.obsm` (under reserved `_ed_ondisk_*` keys) and dropped from `X`/`layers`;
-    :func:`~ehrdata.io.read_h5ed` restores them automatically. Files written by older ehrdata versions
-    (3D arrays directly in `X`/`layers`) remain readable.
+    casted to a string dtype. 3D arrays are relocated into `.obsm` on write and restored by
+    :func:`~ehrdata.io.read_h5ed` on read (see :mod:`ehrdata.io._ondisk`).
 
     Args:
         edata: Central data object.
@@ -167,10 +151,9 @@ def write_h5ed(
     )
     with h5py.File(filename, "a") as f:
         ad.io.write_elem(f, "tem", edata.tem)
-        # Stamp the ehrdata format version for discoverability, namespaced so it does not clash with
-        # anndata's own root encoding-type/-version attrs. Reading does not depend on these.
+        # Identify the file as ehrdata, namespaced to not clash with anndata's own encoding attrs.
         f.attrs["ehrdata-encoding-type"] = EHRDATA_ENCODING_TYPE
-        f.attrs["ehrdata-encoding-version"] = str(EHRDATA_DEFAULT_FORMAT_VERSION)
+        f.attrs["ehrdata-encoding-version"] = str(EHRDATA_ONDISK_VERSION)
 
 
 def read_h5ad(

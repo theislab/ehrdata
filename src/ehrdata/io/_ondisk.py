@@ -1,10 +1,10 @@
-"""Translate :class:`~ehrdata.EHRData` to and from its versioned on-disk layout.
+"""Translate :class:`~ehrdata.EHRData` to and from its on-disk layout.
 
 EHRData keeps time-series as 3D arrays in ``X``/``layers``, but anndata only guarantees 2D arrays
-there. On write (format v2) these helpers move 3D arrays into ``.obsm`` under reserved keys, and on
-read they move them back, so the same logic is shared by the h5ad and zarr readers/writers. The layout
-is self-describing: a file with the reserved ``.obsm`` keys is v2, one without them is the legacy v1
-layout (3D already in ``X``/``layers``). See :mod:`ehrdata.core.constants` for the version definitions.
+there. On write, 3D arrays are relocated into ``.obsm`` under reserved keys and restored on read, so
+the same logic is shared by the h5ed and zarr readers/writers. The layout is self-describing: a file
+with the reserved ``.obsm`` keys uses the relocated layout, one without them is the legacy layout (3D
+directly in ``X``/``layers``). See :mod:`ehrdata.core.constants` for the version and reserved keys.
 """
 
 from __future__ import annotations
@@ -13,26 +13,31 @@ from typing import TYPE_CHECKING, Any
 
 import anndata as ad
 
-from ehrdata.core.constants import (
-    EHRDATA_OBSM_3D_LAYER_PREFIX,
-    EHRDATA_OBSM_3D_X_KEY,
-)
+from ehrdata.core.constants import EHRDATA_OBSM_3D_LAYER_PREFIX, EHRDATA_OBSM_3D_X_KEY
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
 def _is_3d(arr: Any) -> bool:
-    """Return whether ``arr`` is a 3D array. Safe to call on anything, including ``None``."""
+    """Whether ``arr`` is a 3D array. Safe to call on anything, including ``None``."""
     return arr is not None and hasattr(arr, "shape") and len(arr.shape) == 3
 
 
-def encode_for_disk(edata: EHRData) -> ad.AnnData:
-    """Build an :class:`~anndata.AnnData` laid out in the current ehrdata on-disk format (v2).
+def _obsm_key_for_layer(name: str) -> str:
+    """Reserved ``.obsm`` key that holds the 3D layer ``name`` on disk."""
+    return f"{EHRDATA_OBSM_3D_LAYER_PREFIX}{name}"
 
-    Every 3D array in ``X``/``layers`` is relocated into ``.obsm`` under a reserved key so the result
-    satisfies anndata's 2D-only spec for ``X``/``layers``. The relocation is self-describing via the
-    reserved keys, so no extra bookkeeping is written. The ``.tem`` field is written separately by the
+
+def _layer_for_obsm_key(key: str) -> str | None:
+    """Layer name for a reserved 3D-layer ``.obsm`` key, or ``None`` if ``key`` is not one."""
+    return key.removeprefix(EHRDATA_OBSM_3D_LAYER_PREFIX) if key.startswith(EHRDATA_OBSM_3D_LAYER_PREFIX) else None
+
+
+def encode_for_disk(edata: EHRData) -> ad.AnnData:
+    """Build an :class:`~anndata.AnnData` with 3D ``X``/``layers`` relocated into reserved ``.obsm`` keys.
+
+    The result satisfies anndata's 2D-only ``X``/``layers`` spec. ``.tem`` is written separately by the
     callers and is not part of the returned object.
     """
     obsm = dict(edata.obsm)
@@ -44,8 +49,10 @@ def encode_for_disk(edata: EHRData) -> ad.AnnData:
         X = None
 
     for key, value in edata.layers.items():
+        if key is None:  # anndata 0.13: the unified `.X` slot, already handled above
+            continue
         if _is_3d(value):
-            obsm[f"{EHRDATA_OBSM_3D_LAYER_PREFIX}{key}"] = value
+            obsm[_obsm_key_for_layer(key)] = value
         else:
             layers[key] = value
 
@@ -64,11 +71,9 @@ def encode_for_disk(edata: EHRData) -> ad.AnnData:
 
 
 def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:
-    """Restore the in-memory EHRData layout from a dict of init kwargs read from disk.
+    """Restore relocated 3D arrays from ``.obsm`` back into ``X``/``layers`` in a dict of init kwargs.
 
-    For the v2 layout, moves the relocated 3D arrays from ``obsm`` (reserved keys) back into
-    ``X``/``layers``. Files without the reserved keys (legacy v1 ehrdata files, or plain anndata) are
-    returned unchanged, so the dict can be passed straight to ``EHRData(**init)``.
+    Files without the reserved keys (legacy ehrdata files or plain anndata) are returned unchanged.
     """
     obsm = dict(init.get("obsm") or {})
     layers = dict(init.get("layers") or {})
@@ -77,8 +82,8 @@ def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:
     if EHRDATA_OBSM_3D_X_KEY in obsm:
         init["X"] = obsm.pop(EHRDATA_OBSM_3D_X_KEY)
         relocated = True
-    for key in [k for k in obsm if k.startswith(EHRDATA_OBSM_3D_LAYER_PREFIX)]:
-        layers[key.removeprefix(EHRDATA_OBSM_3D_LAYER_PREFIX)] = obsm.pop(key)
+    for key in [k for k in obsm if _layer_for_obsm_key(k) is not None]:
+        layers[_layer_for_obsm_key(key)] = obsm.pop(key)
         relocated = True
 
     if relocated:

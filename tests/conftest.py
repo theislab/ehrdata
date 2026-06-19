@@ -14,6 +14,24 @@ from ehrdata.dt import mimic_iv_omop
 from ehrdata.io.omop import setup_connection
 
 
+def _anndata_allows_nd_x() -> bool:
+    """Whether anndata permits a >2D ``X`` in memory (anndata >=0.13); anndata <0.13 rejects it."""
+    import warnings
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ad.AnnData(np.zeros((1, 1, 1), dtype=float))
+    except ValueError:
+        return False
+    return True
+
+
+# A 3D ``X`` (vs a 3D layer) only exists where anndata allows >2D ``X`` in memory; <0.13 raises at
+# construction, so 3D-``X`` tests are skipped there.
+_ANNDATA_ALLOWS_ND_X = _anndata_allows_nd_x()
+
+
 def _assert_shape_matches(
     edata: EHRData,
     shape: tuple[int, int, int],

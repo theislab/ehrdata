@@ -6,6 +6,7 @@ import pytest
 import scipy as sp
 from scipy.sparse import issparse
 from tests.conftest import (
+    _ANNDATA_ALLOWS_ND_X,
     TEST_DATA_PATH,
     _assert_dtype_object_array_with_missing_values_equal,
     _assert_io_read,
@@ -17,31 +18,12 @@ from ehrdata.io import read_h5ed, write_h5ed
 TEST_PATH_H5AD = TEST_DATA_PATH / "toy_h5ad"
 
 
-def _anndata_allows_nd_x() -> bool:
-    """Whether anndata permits a >2D ``X`` in memory (anndata >=0.13); anndata <0.13 rejects it."""
-    import warnings
-
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            ad.AnnData(np.zeros((1, 1, 1), dtype=float))
-    except ValueError:
-        # anndata <0.13 raises "X needs to be 2-dimensional, not 3-dimensional".
-        return False
-    return True
-
-
-# A 3D `X` (as opposed to a 3D layer) can only exist on anndata versions that allow >2D `X` in memory;
-# anndata <0.13 raises at construction, so the 3D-`X` relocation tests are skipped there.
-_ANNDATA_ALLOWS_ND_X = _anndata_allows_nd_x()
-
-
 # TODO: tests with X as None, tests with R as None?
 @pytest.mark.parametrize(
     ("backed", "harmonize_missing_values", "cast_variables_to_float"),
     [(False, False, False), (False, False, True), (False, True, False), (True, False, False)],
 )
-def test_read_h5ad_basic(backed, harmonize_missing_values, cast_variables_to_float):
+def test_read_h5ed_basic(backed, harmonize_missing_values, cast_variables_to_float):
     edata = read_h5ed(
         filename=TEST_PATH_H5AD / "adata_basic.h5ad",
         backed=backed,
@@ -57,7 +39,7 @@ def test_read_h5ad_basic(backed, harmonize_missing_values, cast_variables_to_flo
     ("backed", "harmonize_missing_values", "cast_variables_to_float"),
     [(False, False, False), (False, False, True), (False, True, False), (False, True, True), (True, False, False)],
 )
-def test_read_h5ad_basic_with_tem(backed, harmonize_missing_values, cast_variables_to_float):
+def test_read_h5ed_basic_with_tem(backed, harmonize_missing_values, cast_variables_to_float):
     edata = read_h5ed(
         filename=TEST_PATH_H5AD / "edata_basic_with_tem.h5ad",
         backed=backed,
@@ -88,7 +70,7 @@ def test_read_h5ad_basic_with_tem(backed, harmonize_missing_values, cast_variabl
         (True, False, False, ad._core.sparse_dataset._CSRDataset),
     ],
 )
-def test_read_h5ad_sparse_with_tem(backed, harmonize_missing_values, cast_variables_to_float, expected_type):
+def test_read_h5ed_sparse_with_tem(backed, harmonize_missing_values, cast_variables_to_float, expected_type):
     edata = read_h5ed(
         filename=TEST_PATH_H5AD / "edata_sparse_with_tem.h5ad",
         backed=backed,
@@ -106,7 +88,7 @@ def test_read_h5ad_sparse_with_tem(backed, harmonize_missing_values, cast_variab
     assert issparse(edata.layers["other_layer"])
 
 
-def test_read_h5ad_backed_harmonize_missing_values_error():
+def test_read_h5ed_backed_harmonize_missing_values_error():
     with pytest.raises(ValueError):
         read_h5ed(
             filename=TEST_PATH_H5AD / "edata_basic_with_tem.h5ad",
@@ -122,12 +104,12 @@ def test_read_h5ad_backed_harmonize_missing_values_error():
 
 
 @pytest.mark.parametrize("edata_name", ["edata_333", "edata_basic_with_tem_full", "edata_nonnumeric_missing_330"])
-def test_write_h5ad_basic(edata_name, request, tmp_path):
+def test_write_h5ed_basic(edata_name, request, tmp_path):
     edata = request.getfixturevalue(edata_name)
 
-    write_h5ed(edata, f"{tmp_path}/{edata_name}.h5ad")
+    write_h5ed(edata, f"{tmp_path}/{edata_name}.h5ed")
 
-    with h5py.File(f"{tmp_path}/{edata_name}.h5ad", "r") as h5ad_file:
+    with h5py.File(f"{tmp_path}/{edata_name}.h5ed", "r") as h5ad_file:
         # Note that R is not included in the list because it is just a value of the .layers field
         assert set(dict(h5ad_file).keys()) == {
             "X",
@@ -164,10 +146,10 @@ def test_write_h5ad_basic(edata_name, request, tmp_path):
 
 
 @pytest.mark.parametrize("edata_name", ["edata_333", "edata_basic_with_tem_full", "edata_nonnumeric_missing_330"])
-def test_write_read_h5ad_basic(edata_name, request, tmp_path):
+def test_write_read_h5ed_basic(edata_name, request, tmp_path):
     edata = request.getfixturevalue(edata_name)
-    write_h5ed(edata.copy(), f"{tmp_path}/{edata_name}.h5ad")
-    edata_read = read_h5ed(f"{tmp_path}/{edata_name}.h5ad")
+    write_h5ed(edata.copy(), f"{tmp_path}/{edata_name}.h5ed")
+    edata_read = read_h5ed(f"{tmp_path}/{edata_name}.h5ed")
 
     assert edata.shape == edata_read.shape
 
@@ -195,7 +177,7 @@ def test_write_read_h5ad_basic(edata_name, request, tmp_path):
         assert np.array_equal(edata.uns[key], edata_read.uns[key])
 
 
-def test_write_h5ad_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
+def test_write_h5ed_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
     # ehrdata writes the v2 layout: 3D arrays move into .obsm so anndata's 2D-only spec is respected.
     path = tmp_path / "edata_333.h5ed"
     write_h5ed(edata_333.copy(), path)
@@ -214,7 +196,7 @@ def test_write_h5ad_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
     assert not any(k.startswith("_ed_ondisk_") for k in edata_read.obsm)
 
 
-def test_read_h5ad_legacy_v1_with_3d_in_layers(edata_333, tmp_path):
+def test_read_h5ed_legacy_v1_with_3d_in_layers(edata_333, tmp_path):
     # legacy v1 files store 3D arrays directly in layers, with no reserved obsm keys; they must still
     # read correctly via the self-describing layout (no reserved keys -> nothing to relocate).
     path = tmp_path / "legacy_v1.h5ad"
@@ -251,11 +233,15 @@ def test_write_read_h5ed_3d_X_relocated_to_obsm(tmp_path):
         assert "_ed_ondisk_X" in f["obsm"]
         # the 3D array must not remain in the 2D-only X slot
         assert "X" not in dict(f)
+        # the unified-X None key must not leak in as a relocated "layer" (anndata 0.13)
+        assert not any(k.startswith("_ed_ondisk_layers_") for k in f["obsm"])
 
     edata_read = read_h5ed(path)
     assert edata_read.shape == (2, 3, 4)
     assert np.array_equal(np.asarray(edata_read.X), X3)
     assert not any(k.startswith("_ed_ondisk_") for k in edata_read.obsm)
+    # no spurious layer (e.g. a "None"-named one) was created from the unified-X key
+    assert [k for k in edata_read.layers if k is not None] == []
 
 
 @pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")

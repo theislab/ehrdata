@@ -333,3 +333,20 @@ def harmonize_missing_values(
         edata.layers[layer] = df.values.reshape(X.shape)
 
     return edata if copy else None
+
+
+def _harmonize_on_read(edata: EHRData) -> None:
+    """Harmonize ``X`` (if present) and every user-facing layer after a read.
+
+    Shared by the h5ed and zarr readers. Skips ``X`` when it is ``None`` and skips anndata 0.13's
+    unified-``X`` ``None`` layer key, which would otherwise re-harmonize ``X`` a second time.
+    """
+    if edata.X is not None:
+        harmonize_missing_values(edata)
+        logger.info("Harmonizing missing values of X")
+
+    for key in edata.layers:
+        if key is None:
+            continue
+        harmonize_missing_values(edata, layer=key)
+        logger.info(f"Harmonizing missing values of layer {key}")

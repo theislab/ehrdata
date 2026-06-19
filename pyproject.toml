@@ -103,26 +103,19 @@ envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.hatch-test.features = [ "test" ]
 envs.hatch-test.matrix = [
-  # Standard matrix: run the full integration-aware test extras on both supported
+  # Full integration-aware suite on both supported Pythons.
   { python = [ "3.12", "3.14" ] },
-  # Integration-free "core" lane against the latest (unconstrained) anndata
+  # Integration-free "core" lanes against, in turn: latest anndata, the last anndata <0.13, and the
+  # latest anndata pre-release (the "pre" name flags it in CI). See the dependency pins below.
   { python = [ "3.14" ], variant = [ "core" ] },
-  # Integration-free "core" lane pinned to the last anndata before the 0.13 "2D X/layers on disk" /
-  # X-unification changes, to keep ehrdata working on older anndata.
   { python = [ "3.12" ], variant = [ "core-anndata-min" ] },
-  # Integration-free "core" lane against the latest anndata pre-release (e.g. 0.13 release
-  # candidates), to validate ehrdata against upcoming anndata early. The env name contains "pre" so
-  # CI flags it. Only anndata is taken from pre-releases (see the dependency override below); the rest
-  # of the stack stays on stable releases so unrelated upstream pre-release churn does not mask the
-  # anndata signal.
   { python = [ "3.14" ], variant = [ "core-pre" ] },
 ]
 envs.hatch-test.overrides.matrix.variant.set-features = [
   { value = "test-core", if = [ "core", "core-anndata-min", "core-pre" ] },
 ]
-# Pin anndata per lane: `core-anndata-min` to the last pre-0.13 release; `core-pre` to the latest
-# anndata pre-release. The explicit pre-release in the specifier makes both uv and pip allow
-# pre-releases for anndata only, leaving every other dependency on its latest stable release.
+# The explicit pre-release in `core-pre` makes uv and pip allow pre-releases for anndata only; every
+# other dependency stays on its latest stable release.
 envs.hatch-test.overrides.matrix.variant.dependencies = [
   { value = "anndata<0.13", if = [ "core-anndata-min" ] },
   { value = "anndata>=0.13.0rc1", if = [ "core-pre" ] },
