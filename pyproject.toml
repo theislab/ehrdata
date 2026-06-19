@@ -114,17 +114,17 @@ envs.hatch-test.matrix = [
   # candidates), to catch upstream breakage early. The env name contains "pre" so CI flags it.
   { python = [ "3.14" ], variant = [ "core-pre" ] },
 ]
-envs.hatch-test.overrides.matrix.variant.set-features = [
-  { value = "test-core", if = [ "core", "core-anndata-min", "core-pre" ] },
-]
 # Pin anndata for the `core-anndata-min` lane.
 envs.hatch-test.overrides.matrix.variant.dependencies = [
   { value = "anndata<0.13", if = [ "core-anndata-min" ] },
 ]
 # Allow pre-release resolution for the `core-pre` lane (covers both the uv and pip installers).
 envs.hatch-test.overrides.matrix.variant.env-vars = [
-  { key = "UV_PRERELEASE", value = "allow", if = [ "core-pre" ] },
-  { key = "PIP_PRE", value = "1", if = [ "core-pre" ] },
+  { value = "allow", key = "UV_PRERELEASE", if = [ "core-pre" ] },
+  { value = "1", key = "PIP_PRE", if = [ "core-pre" ] },
+]
+envs.hatch-test.overrides.matrix.variant.set-features = [
+  { value = "test-core", if = [ "core", "core-anndata-min", "core-pre" ] },
 ]
 
 [tool.ruff]
