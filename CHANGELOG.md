@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning][].
 ## [Unreleased]
 
 ### Added
- - {func}`~ehrdata.io.read_h5ed` and {func}`~ehrdata.io.write_h5ed` are the new primary HDF5 I/O functions: `.h5ed` is now ehrdata's on-disk format, marking it distinct from anndata's `.h5ad`. {func}`~ehrdata.io.read_h5ad` and {func}`~ehrdata.io.write_h5ad` remain as deprecated aliases. @eroell
+ - {func}`~ehrdata.io.read_h5ed` and {func}`~ehrdata.io.write_h5ed` are the new primary HDF5 I/O functions: `.h5ed` is now ehrdata's on-disk format, marking it distinct from anndata's `.h5ad`. `read_h5ad` and `write_h5ad` remain as deprecated aliases. @eroell
  - {func}`~ehrdata.io.write_h5ed` and {func}`~ehrdata.io.write_zarr` now write the ehrdata v2 on-disk format. Because AnnData only guarantees 2D arrays in `X`/`layers` (see [scverse/anndata#2430](https://github.com/scverse/anndata/issues/2430)), 3D arrays are relocated into `.obsm` (under reserved `_ed_ondisk_X` / `_ed_ondisk_layers_<name>` keys) and dropped from `X`/`layers` on write, then restored on read. The layout is self-describing, so files written by older ehrdata versions and anndata files that store 3D arrays directly in `X`/`layers` remain readable. The recommended file extensions are now `.h5ed` and `.ehrdata.zarr`. @eroell
 
 ### Fixed
@@ -71,8 +71,8 @@ and this project adheres to [Semantic Versioning][].
  - `time_precision` parameter (`"date"` or `"datetime"`) to {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` for finer temporal granularity control. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
 
 ### Fixed
-- {func}`~ehrdata.io.read_h5ad` fixed issues when `backed=True`. ([#199](https://github.com/theislab/ehrdata/pull/199)) @eroell
-- {func}`~ehrdata.io.read_h5ad` fixed bug when `.X` is `None` and `harmonize_missing_features` is `True`. ([#206](https://github.com/theislab/ehrdata/pull/206)) @eroell
+- `read_h5ad` fixed issues when `backed=True`. ([#199](https://github.com/theislab/ehrdata/pull/199)) @eroell
+- `read_h5ad` fixed bug when `.X` is `None` and `harmonize_missing_features` is `True`. ([#206](https://github.com/theislab/ehrdata/pull/206)) @eroell
 - {func}`~ehrdata.io.omop.setup_obs` with `observation_table="person_visit_occurrence"` now supports multiple visits per patient, creating one row per visit with unique observation IDs, instead of failing with xarray conversion errors with non-unique indices. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
 - OMOP time interval boundaries now use half-open intervals `[start, end)` to prevent duplicate measurements at interval boundaries. ([#210](https://github.com/theislab/ehrdata/pull/210)) @eroell
 
@@ -144,9 +144,9 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 - {func}`~ehrdata.io.read_csv` Reads a csv file ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
-- {func}`~ehrdata.io.read_h5ad` Reads an h5ad file ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
+- `read_h5ad` Reads an h5ad file ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
 - {func}`~ehrdata.io.read_zarr` Reads a zarr file ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
-- {func}`~ehrdata.io.write_h5ad` Writes an h5ad file ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
+- `write_h5ad` Writes an h5ad file ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
 - {func}`~ehrdata.io.write_zarr` Writes a zarr file ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
 - {func}`~ehrdata.io.from_pandas` Transform a given {class}`~pandas.DataFrame` into an {class}`~ehrdata.EHRData` object ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
 - {func}`~ehrdata.io.to_pandas` Transform an {class}`~ehrdata.EHRData` object into a {class}`~pandas.DataFrame` ([#136](https://github.com/theislab/ehrdata/pull/136)) @eroell
