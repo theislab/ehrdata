@@ -99,8 +99,8 @@ envs.default.installer = "uv"
 envs.default.features = [ "dev" ]
 envs.docs.features = [ "doc" ]
 envs.docs.scripts.build = "sphinx-build -M html docs docs/_build {args}"
-envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
+envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.hatch-test.features = [ "test" ]
 envs.hatch-test.matrix = [
   # Standard matrix: run the full integration-aware test extras on both supported
@@ -189,7 +189,6 @@ lint.pydocstyle.convention = "google"
 
 [tool.pytest]
 ini_options.testpaths = [ "tests" ]
-ini_options.xfail_strict = true
 ini_options.addopts = [
   "--import-mode=importlib", # allow using test files with same name
 ]
@@ -197,6 +196,7 @@ ini_options.addopts = [
 ini_options.markers = [
   "xdist_group: run tests sharing a dataset download path on the same xdist worker (needs --dist loadgroup)",
 ]
+ini_options.xfail_strict = true
 
 [tool.coverage]
 run.omit = [
