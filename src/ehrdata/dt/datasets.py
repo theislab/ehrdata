@@ -9,7 +9,7 @@ import pandas as pd
 
 from ehrdata.core.constants import DEFAULT_DATA_PATH, DEFAULT_TEM_LAYER_NAME
 from ehrdata.dt._dataloader import _download
-from ehrdata.io import read_csv, read_h5ad
+from ehrdata.io import read_csv, read_h5ed
 from ehrdata.io.omop import setup_connection
 from ehrdata.io.omop._queries import _generate_timedeltas
 
@@ -955,7 +955,7 @@ def mimic_2_preprocessed() -> EHRData:
         output_filename="mimic_2_preprocessed.h5ad",
         raw_format="h5ad",
     )
-    edata = read_h5ad(
+    edata = read_h5ed(
         filename=f"{DEFAULT_DATA_PATH}/mimic_2_preprocessed.h5ad",
     )
 

@@ -33,8 +33,9 @@ EHRDATA_DEFAULT_FORMAT_VERSION = EHRDATA_FORMAT_V2
 EHRDATA_ENCODING_TYPE = "ehrdata"
 
 # Reserved `.obsm` keys used by format v2 to relocate 3D arrays out of `X`/`layers` and back on read.
-EHRDATA_OBSM_3D_X_KEY = "__ehrdata_X_3d__"
-EHRDATA_OBSM_3D_LAYER_PREFIX = "__ehrdata_layer_3d__:"
+# `X` is stored under `_ed_ondisk_X`; a layer named `<name>` under `_ed_ondisk_layers_<name>`.
+EHRDATA_OBSM_3D_X_KEY = "_ed_ondisk_X"
+EHRDATA_OBSM_3D_LAYER_PREFIX = "_ed_ondisk_layers_"
 
 # Recommended on-disk file extensions, mirroring anndata's `.h5ad`/`.zarr`.
 EHRDATA_H5_SUFFIX = ".h5ed"

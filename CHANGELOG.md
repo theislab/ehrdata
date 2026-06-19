@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning][].
 ## [Unreleased]
 
 ### Added
- - {func}`~ehrdata.io.write_h5ad` and {func}`~ehrdata.io.write_zarr` now write the ehrdata v2 on-disk format. Because AnnData only guarantees 2D arrays in `X`/`layers` (see [scverse/anndata#2430](https://github.com/scverse/anndata/issues/2430)), 3D arrays are relocated into `.obsm` on disk and restored to `X`/`layers` on read. The layout is self-describing, so files written by older ehrdata versions (3D arrays directly in `X`/`layers`) remain readable. The recommended file extensions are now `.h5ed` and `.ehrdata.zarr`. @eroell
+ - {func}`~ehrdata.io.read_h5ed` and {func}`~ehrdata.io.write_h5ed` are the new primary HDF5 I/O functions: `.h5ed` is now ehrdata's on-disk format, marking it distinct from anndata's `.h5ad`. {func}`~ehrdata.io.read_h5ad` and {func}`~ehrdata.io.write_h5ad` remain as deprecated aliases. @eroell
+ - {func}`~ehrdata.io.write_h5ed` and {func}`~ehrdata.io.write_zarr` now write the ehrdata v2 on-disk format. Because AnnData only guarantees 2D arrays in `X`/`layers` (see [scverse/anndata#2430](https://github.com/scverse/anndata/issues/2430)), 3D arrays are relocated into `.obsm` (under reserved `_ed_ondisk_X` / `_ed_ondisk_layers_<name>` keys) and dropped from `X`/`layers` on write, then restored on read. The layout is self-describing, so files written by older ehrdata versions and anndata files that store 3D arrays directly in `X`/`layers` remain readable. The recommended file extensions are now `.h5ed` and `.ehrdata.zarr`. @eroell
 
 ### Fixed
 - {func}`~ehrdata.infer_feature_types` can handle `EHRData` objects with `X` as `None`. ([#246](https://github.com/theislab/ehrdata/pull/246)) @sueoglu
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning][].
  - {func}`~ehrdata.harmonize_missing_values` no longer logs a warning for each numeric layer when it has nothing to harmonize; reading a fully numeric dataset is now quiet. @eroell
 
 ### Maintenance
+ - ehrdata is now compatible with anndata 0.13 (unified `X`/`layers` storage, `IndexManager` view indices, index type aliases moved to `anndata.typing`, and the stricter 2D-only `X`/`layers` on-disk rule) while remaining compatible with anndata `<0.13`. CI gains an integration-free `core-anndata-min` lane (pinned to `anndata<0.13`) and a pre-release lane to catch upstream breakage early. @eroell
  - CI now caches downloaded datasets used by `ehrdata.dt` to reduce flaky upstream hosts (e.g. physionet.org) breaking the test and notebook workflows. ([#250](https://github.com/theislab/ehrdata/pull/250)) @eroell
  - Dataset downloads now use [pooch](https://www.fatiando.org/pooch/) instead of a custom `requests`-based downloader, aligning with the scverse ecosystem and providing caching out of the box. ([#251](https://github.com/theislab/ehrdata/issues/251)) @eroell
 

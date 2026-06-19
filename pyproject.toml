@@ -105,11 +105,26 @@ envs.hatch-test.features = [ "test" ]
 envs.hatch-test.matrix = [
   # Standard matrix: run the full integration-aware test extras on both supported
   { python = [ "3.12", "3.14" ] },
-  # Integration-free "core" lane
+  # Integration-free "core" lane against the latest (unconstrained) anndata
   { python = [ "3.14" ], variant = [ "core" ] },
+  # Integration-free "core" lane pinned to the last anndata before the 0.13 "2D X/layers on disk" /
+  # X-unification changes, to keep ehrdata working on older anndata.
+  { python = [ "3.12" ], variant = [ "core-anndata-min" ] },
+  # Integration-free "core" lane against pre-release dependencies (e.g. anndata 0.13 release
+  # candidates), to catch upstream breakage early. The env name contains "pre" so CI flags it.
+  { python = [ "3.14" ], variant = [ "core-pre" ] },
 ]
 envs.hatch-test.overrides.matrix.variant.set-features = [
-  { value = "test-core", if = [ "core" ] },
+  { value = "test-core", if = [ "core", "core-anndata-min", "core-pre" ] },
+]
+# Pin anndata for the `core-anndata-min` lane.
+envs.hatch-test.overrides.matrix.variant.dependencies = [
+  { value = "anndata<0.13", if = [ "core-anndata-min" ] },
+]
+# Allow pre-release resolution for the `core-pre` lane (covers both the uv and pip installers).
+envs.hatch-test.overrides.matrix.variant.env-vars = [
+  { key = "UV_PRERELEASE", value = "allow", if = [ "core-pre" ] },
+  { key = "PIP_PRE", value = "1", if = [ "core-pre" ] },
 ]
 
 [tool.ruff]

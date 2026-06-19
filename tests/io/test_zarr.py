@@ -161,7 +161,7 @@ def test_write_zarr_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
     write_zarr(edata_333.copy(), path)
 
     store = zarr.open(path)
-    assert "__ehrdata_layer_3d__:tem_data" in store["anndata"]["obsm"]
+    assert "_ed_ondisk_layers_tem_data" in store["anndata"]["obsm"]
     assert "tem_data" not in store["anndata"]["layers"]
     assert store.attrs["encoding-type"] == "ehrdata"
     assert store.attrs["encoding-version"] == str(EHRDATA_DEFAULT_FORMAT_VERSION)
@@ -170,4 +170,4 @@ def test_write_zarr_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
     _assert_shape_matches(edata_read, (3, 3, 3))
     for key in edata_333.layers:
         assert np.array_equal(edata_333.layers[key], edata_read.layers[key])
-    assert not any(k.startswith("__ehrdata_") for k in edata_read.obsm)
+    assert not any(k.startswith("_ed_ondisk_") for k in edata_read.obsm)

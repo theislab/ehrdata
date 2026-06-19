@@ -166,13 +166,15 @@ def write_zarr(
                 dataset_kwargs = {"shards": (2**16,), "chunks": (2**8,), **dataset_kwargs}
             func(g, k, elem, dataset_kwargs=dataset_kwargs)
 
-        return ad.experimental.write_dispatched(group, "/", adata, callback=callback)
+        # Write the AnnData under the "anndata" key of `group` (mirroring the `chunks="auto"` path's
+        # `write_elem(store, "anndata", adata)`). anndata >=0.13 rejects writing with key "/" into a
+        # non-root subgroup, so we dispatch from the root store with an explicit key instead.
+        return ad.experimental.write_dispatched(group, "anndata", adata, callback=callback)
 
     if chunks == "auto":
         ad.io.write_elem(store, "anndata", adata)
     elif chunks == "ehrdata_auto":
-        anndata_group = store.create_group("anndata")
-        write_sharded(anndata_group, adata)
+        write_sharded(store, adata)
     else:
         err = (
             f"chunks={chunks} is not implemented. Currently, only chunks='auto' and chunks='ehrdata_auto' is supported."

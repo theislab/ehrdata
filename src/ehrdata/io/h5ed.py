@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -38,14 +39,18 @@ def _restore_3d_from_obsm_backed(edata: EHRData) -> None:
         )
 
 
-def read_h5ad(
+def read_h5ed(
     filename: Path | str,
     *,
     backed: Literal["r", "r+"] | bool | None = None,
     harmonize_missing_values: bool = True,
     cast_variables_to_float: bool = True,
 ) -> EHRData:
-    """Read a hdf5 (h5ad) file into an :class:`~ehrdata.EHRData` object.
+    """Read an ehrdata hdf5 file (`.h5ed`) into an :class:`~ehrdata.EHRData` object.
+
+    Also reads plain anndata `.h5ad` files. 3D arrays are restored to `X`/`layers` whether they were
+    relocated into `.obsm` (ehrdata v2 format) or stored directly in `X`/`layers` (legacy ehrdata files
+    or anndata files that still contain higher-dimensional arrays).
 
     Args:
         filename: Path to the file or directory to read.
@@ -54,7 +59,7 @@ def read_h5ad(
             Currently, backed only support updates to `X`.
             That means any changes to other slots like obs will not be written to disk in backed mode.
             If you would like save changes made to these slots of a backed EHRData,
-            write them to a new file (see :func:`~ehrdata.io.write_h5ad`).
+            write them to a new file (see :func:`~ehrdata.io.write_h5ed`).
         harmonize_missing_values: Whether to call `ehrdata.harmonize_missing_values` on all detected layers.
             Cannot be called if `backed`.
         cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`.
@@ -65,8 +70,8 @@ def read_h5ad(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_2()
-        >>> ed.io.write_h5ad("mimic_2.h5ad", edata)
-        >>> edata_2 = ed.io.read_h5ad("mimic_2.h5ad")
+        >>> ed.io.write_h5ed(edata, "mimic_2.h5ed")
+        >>> edata_2 = ed.io.read_h5ed("mimic_2.h5ed")
     """
     import ehrdata as ed
     from ehrdata import EHRData
@@ -119,24 +124,25 @@ def read_h5ad(
     return edata
 
 
-def write_h5ad(
+def write_h5ed(
     edata: EHRData,
     filename: str | Path,
     *,
     compression: Literal["gzip", "lzf"] | None = None,
     compression_opts: int | None = None,
 ) -> None:
-    """Write :class:`~ehrdata.EHRData` objects to an hdf5 file.
+    """Write :class:`~ehrdata.EHRData` objects to an ehrdata hdf5 file (`.h5ed`).
 
-    The recommended file extension is `.h5ed` (mirroring anndata's `.h5ad`). To write the file, `X` and
-    `layers` cannot be written as `object` dtype. If any of these fields is of `object` dtype, this
-    function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a
-    string dtype.
+    `.h5ed` is the ehrdata on-disk format, marking it distinct from anndata's `.h5ad`. To write the
+    file, `X` and `layers` cannot be written as `object` dtype. If any of these fields is of `object`
+    dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be
+    casted to a string dtype.
 
     The data is written in the ehrdata v2 on-disk format: since EHRData stores time-series as 3D arrays
     in `X`/`layers` but anndata only guarantees 2D arrays there, any 3D arrays are relocated into
-    `.obsm`, and :func:`~ehrdata.io.read_h5ad` restores them automatically. Files written by older
-    ehrdata versions (3D arrays directly in `X`/`layers`) remain readable.
+    `.obsm` (under reserved `_ed_ondisk_*` keys) and dropped from `X`/`layers`;
+    :func:`~ehrdata.io.read_h5ed` restores them automatically. Files written by older ehrdata versions
+    (3D arrays directly in `X`/`layers`) remain readable.
 
     Args:
         edata: Central data object.
@@ -148,7 +154,7 @@ def write_h5ad(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_2()
-        >>> ed.io.write_h5ad("mimic_2.h5ed", edata)
+        >>> ed.io.write_h5ed(edata, "mimic_2.h5ed")
     """
     filename = Path(filename)
 
@@ -165,3 +171,48 @@ def write_h5ad(
         # anndata's own root encoding-type/-version attrs. Reading does not depend on these.
         f.attrs["ehrdata-encoding-type"] = EHRDATA_ENCODING_TYPE
         f.attrs["ehrdata-encoding-version"] = str(EHRDATA_DEFAULT_FORMAT_VERSION)
+
+
+def read_h5ad(
+    filename: Path | str,
+    *,
+    backed: Literal["r", "r+"] | bool | None = None,
+    harmonize_missing_values: bool = True,
+    cast_variables_to_float: bool = True,
+) -> EHRData:
+    """Deprecated alias for :func:`read_h5ed`.
+
+    ehrdata's on-disk format is now `.h5ed`; use :func:`~ehrdata.io.read_h5ed` instead.
+    """
+    warnings.warn(
+        "`ehrdata.io.read_h5ad` is deprecated and will be removed in a future release; "
+        "use `ehrdata.io.read_h5ed` instead (ehrdata's on-disk format is `.h5ed`).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return read_h5ed(
+        filename,
+        backed=backed,
+        harmonize_missing_values=harmonize_missing_values,
+        cast_variables_to_float=cast_variables_to_float,
+    )
+
+
+def write_h5ad(
+    edata: EHRData,
+    filename: str | Path,
+    *,
+    compression: Literal["gzip", "lzf"] | None = None,
+    compression_opts: int | None = None,
+) -> None:
+    """Deprecated alias for :func:`write_h5ed`.
+
+    ehrdata's on-disk format is now `.h5ed`; use :func:`~ehrdata.io.write_h5ed` instead.
+    """
+    warnings.warn(
+        "`ehrdata.io.write_h5ad` is deprecated and will be removed in a future release; "
+        "use `ehrdata.io.write_h5ed` instead (ehrdata's on-disk format is `.h5ed`).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    write_h5ed(edata, filename, compression=compression, compression_opts=compression_opts)

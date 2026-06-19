@@ -7,6 +7,12 @@ from tests.conftest import _assert_shape_matches
 from ehrdata import EHRData
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 
+# anndata >=0.13 unifies `.X` into `layers[None]`, which changes view `.X`-assignment semantics:
+# <0.13 broadcasts a view's `.X = value` back into the parent; >=0.13 initialises the view as an actual
+# object and leaves the parent unchanged. Detect the mode by feature (the `None` layers key) rather than
+# by version string, since pre-releases and editable dev builds report misleading versions.
+_ANNDATA_X_UNIFIED = None in set(ad.AnnData(np.zeros((1, 1), dtype=float)).layers.keys())
+
 
 def _assert_fields_are_view(edata: EHRData):
     assert edata.is_view
@@ -326,18 +332,34 @@ def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
     edata_view.obsp["obsp_entry"] = np.array([[1, 2], [3, 4]])
 
 
+@pytest.mark.filterwarnings("ignore:.*nitializing view as actual.*:anndata._core.views.ImplicitModificationWarning")
+@pytest.mark.filterwarnings("ignore:.*Modifying.*view.*:anndata._core.views.ImplicitModificationWarning")
 def test_ehrdata_view_X_scalar_broadcast(X_numpy_32, X_numpy_322):
-    """Assigning a scalar (or any value without `.shape`) to a view's X.
+    """Assigning a scalar (or any value without `.shape`) to a view's X is a valid broadcast.
 
-    `edata[:, [col]].X = 1` is a valid AnnData broadcast assignment.`.
+    The resulting semantics depend on the anndata version (see ``_ANNDATA_X_UNIFIED``):
+    anndata >=0.13 initialises the view as an actual object holding the broadcast values and leaves the
+    parent unchanged, while anndata <0.13 writes the broadcast back into the parent.
     """
     edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
 
-    edata[:, [0]].X = 1
-    assert np.all(edata.X[:, 0] == 1)
+    view = edata[:, [0]]
+    view.X = 1
+    if _ANNDATA_X_UNIFIED:
+        assert not view.is_view
+        assert np.all(np.asarray(view.X)[:, 0] == 1)
+        assert np.array_equal(edata.X, X_numpy_32)  # parent unchanged
+    else:
+        assert np.all(np.asarray(edata.X)[:, 0] == 1)  # broadcast into the parent
 
-    edata[:, [1]].X = [10, 20, 30]
-    assert np.array_equal(edata.X[:, 1], [10, 20, 30])
+    view = edata[:, [1]]
+    view.X = [10, 20, 30]
+    if _ANNDATA_X_UNIFIED:
+        assert not view.is_view
+        assert np.array_equal(np.asarray(view.X)[:, 0], [10, 20, 30])
+        assert np.array_equal(edata.X[:, 1], X_numpy_32[:, 1])  # parent unchanged
+    else:
+        assert np.array_equal(np.asarray(edata.X)[:, 1], [10, 20, 30])
 
 
 def test_assign_X_to_layers_only(X_numpy_32, X_numpy_322):

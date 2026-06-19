@@ -3,7 +3,13 @@ from functools import singledispatch
 
 import numpy as np
 import pandas as pd
-from anndata.compat import Index
+
+try:
+    # anndata >= 0.13 moved the index type aliases from `compat` to `typing`.
+    from anndata.typing import Index
+except ImportError:
+    # anndata <= 0.12
+    from anndata.compat import Index
 
 
 @singledispatch

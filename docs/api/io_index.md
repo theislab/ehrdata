@@ -13,9 +13,9 @@
     :nosignatures:
 
     io.read_csv
-    io.read_h5ad
+    io.read_h5ed
     io.read_zarr
-    io.write_h5ad
+    io.write_h5ed
     io.write_zarr
     io.from_pandas
     io.to_pandas
