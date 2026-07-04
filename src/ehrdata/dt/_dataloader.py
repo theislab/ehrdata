@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal, get_args
 from urllib.parse import urlparse
 
 import pooch
+from rich.console import Console
 from rich.progress import Progress
 
 from ehrdata._logger import logger
@@ -35,7 +36,7 @@ class _RichProgress:
 
     def _ensure_started(self) -> None:
         if self._progress is None:
-            self._progress = Progress(refresh_per_second=3)
+            self._progress = Progress(refresh_per_second=3, console=Console(force_jupyter=False))
             self._progress.start()
             self._task = self._progress.add_task(self._description, total=self.total or None)
 
