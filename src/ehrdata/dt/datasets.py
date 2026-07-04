@@ -888,7 +888,7 @@ def _create_edata_from_physionet_long_format(
         else EHRData(X=tem_layer, obs=obs, var=var, tem=tem)
     )
 
-    return edata[~edata.obs.index.isin(drop_samples or [])]
+    return edata[~edata.obs.index.isin(drop_samples or [])].copy()
 
 
 def mimic_2(
@@ -925,7 +925,8 @@ def mimic_2(
 
     censor_col = "censor_flg"
     if censor_col in edata.var.index:
-        edata[:, [censor_col]].X = np.where(edata[:, [censor_col]].X == 0, 1, 0)
+        censor_idx = edata.var.index.get_loc(censor_col)
+        edata.X[:, censor_idx] = np.where(edata.X[:, censor_idx] == 0, 1, 0)
     elif censor_col in edata.obs.columns:
         edata.obs[censor_col] = np.where(edata.obs[censor_col] == 0, 1, 0)
 
