@@ -4,16 +4,17 @@ import logging
 import os
 import shutil
 import tempfile
-import warnings
 from pathlib import Path, PurePath
-from typing import Literal, get_args
+from typing import TYPE_CHECKING, Literal, get_args
 from urllib.parse import urlparse
+
+import pooch
+from rich.progress import Progress
 
 from ehrdata._logger import logger
 
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", message="IProgress not found")
-    import pooch
+if TYPE_CHECKING:
+    from rich.progress import TaskID
 
 pooch.get_logger().setLevel(logging.WARNING)
 
@@ -21,6 +22,46 @@ COMPRESSION_FORMATS = Literal["tar.gz", "gztar", "zip", "tar", "gz", "bz", "xz"]
 COMPRESSION_FORMATS_LIST = list(get_args(COMPRESSION_FORMATS))
 RAW_FORMATS = Literal["csv", "txt", "parquet", "h5ad", "zarr"]
 RAW_FORMATS_LIST = list(get_args(RAW_FORMATS))
+
+
+class _RichProgress:
+    """Adapter exposing the tqdm-like interface pooch expects, backed by :mod:`rich.progress`.
+
+    Using :mod:`rich` (already an ehrdata dependency) avoids pulling in ``tqdm`` just for a
+    download progress bar, and sidesteps the ``IProgress not found`` warning tqdm emits in
+    notebooks without ``ipywidgets``.
+    """
+
+    def __init__(self, description: str = "[red]Downloading..."):
+        self._description = description
+        self._progress: Progress | None = None
+        self._task: TaskID | None = None
+        self.total: int | None = None
+
+    def _ensure_started(self) -> None:
+        if self._progress is None:
+            self._progress = Progress(refresh_per_second=3)
+            self._progress.start()
+            self._task = self._progress.add_task(self._description, total=self.total or None)
+
+    def update(self, n: int) -> None:
+        """Advance the progress bar by ``n`` units."""
+        self._ensure_started()
+        if self.total is not None and self._progress.tasks[self._task].total != self.total:
+            self._progress.update(self._task, total=self.total or None)
+        self._progress.update(self._task, advance=n)
+
+    def reset(self) -> None:
+        """Reset the progress bar back to the start."""
+        self._ensure_started()
+        self._progress.reset(self._task, total=self.total or None)
+
+    def close(self) -> None:
+        """Stop and tear down the progress bar."""
+        if self._progress is not None:
+            self._progress.stop()
+            self._progress = None
+            self._task = None
 
 
 def _download(
@@ -106,7 +147,7 @@ def _download(
         fname=output_filename,
         path=str(download_dir),
         downloader=pooch.HTTPDownloader(
-            progressbar=True,
+            progressbar=_RichProgress(),
             chunk_size=block_size,
             timeout=timeout,
             headers={"User-Agent": "ehrdata/1.0.0 (https://github.com/theislab/ehrdata)"},
