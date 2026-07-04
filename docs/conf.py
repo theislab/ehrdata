@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # -- Path setup --------------------------------------------------------------
 import sys
+import warnings
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
@@ -9,6 +10,7 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "extensions"))
+warnings.filterwarnings("ignore", message="Extra installs are necessary to use", category=UserWarning)
 
 
 # -- Project information -----------------------------------------------------
@@ -140,6 +142,7 @@ nitpick_ignore = [
     ("py:class", "_duckdb.DuckDBPyConnection"),
     # Is documented as a py:attribute instead
     ("py:class", "numpy.int64"),
+    ("py:class", "numpy._typing._array_like.GenericAlias"),
     # For now not in public facing API
     ("py:class", "awkward.highlevel.Array"),
     ("py:class", "h5py._hl.dataset.Dataset"),

@@ -15,7 +15,7 @@ def _assert_fields_are_view(edata: EHRData):
 
 
 #################################################################
-### Test combinations of X, layers, t during initialization
+### Test combinations of X, layers, tem during initialization
 #################################################################
 def test_ehrdata_init_vanilla_empty():
     edata = EHRData()
@@ -149,7 +149,7 @@ def test_ehrdata_init_3dlayer_assign_X_tem(X_numpy_32, X_numpy_322, tem_21):
     assert edata.tem.shape == (2, 1)
 
 
-def test_ehrdata_init_X_assign_3dlayer_t(X_numpy_32, X_numpy_322, tem_21):
+def test_ehrdata_init_X_assign_3dlayer_tem(X_numpy_32, X_numpy_322, tem_21):
     edata = EHRData(X=X_numpy_32)
     _assert_shape_matches(edata, (3, 2, 1))
     edata.layers[DEFAULT_TEM_LAYER_NAME] = X_numpy_322
@@ -160,7 +160,7 @@ def test_ehrdata_init_X_assign_3dlayer_t(X_numpy_32, X_numpy_322, tem_21):
     _assert_shape_matches(edata, (3, 2, 2))
 
 
-def test_ehrdata_init_t_assign_X_3dlayer(X_numpy_32, X_numpy_322, tem_21):
+def test_ehrdata_init_tem_assign_X_3dlayer(X_numpy_32, X_numpy_322, tem_21):
     # It would be OK if this was allowed, but for now we don't enable until there's need for this.
     edata = EHRData(tem=tem_21)
     with pytest.raises(ValueError):
@@ -172,7 +172,7 @@ def test_ehrdata_init_t_assign_X_3dlayer(X_numpy_32, X_numpy_322, tem_21):
         edata.layers[DEFAULT_TEM_LAYER_NAME] = X_numpy_322
 
 
-def test_ehrdata_init_X_3dlayer_assign_t(X_numpy_32, X_numpy_322, tem_21):
+def test_ehrdata_init_X_3dlayer_assign_tem(X_numpy_32, X_numpy_322, tem_21):
     edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
 
     edata.tem = tem_21
@@ -180,7 +180,7 @@ def test_ehrdata_init_X_3dlayer_assign_t(X_numpy_32, X_numpy_322, tem_21):
     assert edata.tem.shape == (2, 1)
 
 
-def test_ehrdata_init_X_t_assign_3dlayer(X_numpy_32, X_numpy_322, tem_21):
+def test_ehrdata_init_X_tem_assign_3dlayer(X_numpy_32, X_numpy_322, tem_21):
     edata = EHRData(X=X_numpy_32, tem=tem_21)
 
     edata.layers[DEFAULT_TEM_LAYER_NAME] = X_numpy_322
@@ -188,7 +188,7 @@ def test_ehrdata_init_X_t_assign_3dlayer(X_numpy_32, X_numpy_322, tem_21):
     assert edata.tem.shape == (2, 1)
 
 
-def test_ehrdata_init_3dlayer_t_assign_X(X_numpy_32, X_numpy_322, tem_21):
+def test_ehrdata_init_3dlayer_tem_assign_X(X_numpy_32, X_numpy_322, tem_21):
     edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322}, tem=tem_21)
 
     edata.X = X_numpy_32
@@ -244,12 +244,12 @@ def test_ehrdata_init_fail_different_3dlayer_3rd_dimension_mismatch(X_numpy_32, 
 
 
 #################################################################
-### Test t is protected alike obs, var
+### Test tem is protected alike obs, var
 #################################################################
 def test_ehrdata_set_aligneddataframes(X_numpy_322):
     edata_layers_only = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
 
-    # show that setting df behavior for t alike obs, var
+    # show that setting df behavior for tem alike obs, var
     with pytest.raises(ValueError):
         edata_layers_only.obs = pd.DataFrame([0, 1, 2, 3, 4])
     with pytest.raises(ValueError):
