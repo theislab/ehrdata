@@ -25,12 +25,7 @@ RAW_FORMATS_LIST = list(get_args(RAW_FORMATS))
 
 
 class _RichProgress:
-    """Adapter exposing the tqdm-like interface pooch expects, backed by :mod:`rich.progress`.
-
-    Using :mod:`rich` (already an ehrdata dependency) avoids pulling in ``tqdm`` just for a
-    download progress bar, and sidesteps the ``IProgress not found`` warning tqdm emits in
-    notebooks without ``ipywidgets``.
-    """
+    """Adapter exposing the tqdm-like interface pooch expects, backed by rich.progress."""
 
     def __init__(self, description: str = "[red]Downloading..."):
         self._description = description
@@ -45,19 +40,16 @@ class _RichProgress:
             self._task = self._progress.add_task(self._description, total=self.total or None)
 
     def update(self, n: int) -> None:
-        """Advance the progress bar by ``n`` units."""
         self._ensure_started()
         if self.total is not None and self._progress.tasks[self._task].total != self.total:
             self._progress.update(self._task, total=self.total or None)
         self._progress.update(self._task, advance=n)
 
     def reset(self) -> None:
-        """Reset the progress bar back to the start."""
         self._ensure_started()
         self._progress.reset(self._task, total=self.total or None)
 
     def close(self) -> None:
-        """Stop and tear down the progress bar."""
         if self._progress is not None:
             self._progress.stop()
             self._progress = None
