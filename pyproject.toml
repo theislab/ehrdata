@@ -110,14 +110,14 @@ envs.hatch-test.matrix = [
   { python = [ "3.12" ], variant = [ "core-anndata-min" ] },
   { python = [ "3.14" ], variant = [ "core-pre" ] },
 ]
-envs.hatch-test.overrides.matrix.variant.set-features = [
-  { value = "test-core", if = [ "core", "core-anndata-min", "core-pre" ] },
-]
 # The explicit pre-release in `core-pre` makes uv and pip allow pre-releases for anndata only; every
 # other dependency stays on its latest stable release.
 envs.hatch-test.overrides.matrix.variant.dependencies = [
   { value = "anndata<0.13", if = [ "core-anndata-min" ] },
   { value = "anndata>=0.13.0rc1", if = [ "core-pre" ] },
+]
+envs.hatch-test.overrides.matrix.variant.set-features = [
+  { value = "test-core", if = [ "core", "core-anndata-min", "core-pre" ] },
 ]
 
 [tool.ruff]
