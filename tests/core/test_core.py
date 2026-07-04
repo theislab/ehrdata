@@ -1,8 +1,10 @@
+import warnings
+
 import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
-from tests.conftest import _assert_shape_matches
+from tests.conftest import _ANNDATA_ALLOWS_ND_X, _assert_shape_matches
 
 from ehrdata import EHRData
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
@@ -57,6 +59,29 @@ def test_ehrdata_init_vanilla_3dlayer(X_numpy_322):
     assert edata.var.shape == (2, 0)
 
     assert edata.tem.shape == (2, 0)
+
+
+def test_ehrdata_3dlayer_emits_no_2d_spec_warning(X_numpy_322):
+    # anndata >=0.13 warns ("... must be 2-dimensional ...") when a >2D array is stored in X/layers.
+    # EHRData holds 3D on purpose (relocated to obsm on write), so it must swallow exactly that warning
+    # on both construction and item assignment. Turning only that message into an error asserts its
+    # absence while leaving unrelated warnings free to surface.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message=r".*must be 2-dimensional.*")
+        edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
+        edata.layers["another_3d"] = X_numpy_322
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (3, 2, 2)
+    assert edata.layers["another_3d"].shape == (3, 2, 2)
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 rejects a >2D X at construction")
+def test_ehrdata_3d_X_emits_no_2d_spec_warning(X_numpy_322):
+    # Same as above for a 3D `X`; only reachable on anndata that permits a >2D X in memory (>=0.13).
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message=r".*must be 2-dimensional.*")
+        edata = EHRData(X=X_numpy_322)
+        edata.X = X_numpy_322
+    assert edata.X.shape == (3, 2, 2)
 
 
 def test_ehrdata_init_vanilla_X_and_3dlayer(X_numpy_32, X_numpy_322):

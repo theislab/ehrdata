@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
@@ -56,6 +58,21 @@ Index = ADIndex | tuple[Index1D, Index1D, Index1D]
 T = TypeVar("T", bound=AlignedMapping)
 
 
+@contextmanager
+def _silence_anndata_nd_warning():
+    """Suppress anndata's ">2D array in X/layers" warning while EHRData stores 3D data.
+
+    anndata >=0.13 emits a ``UserWarning`` ("... must be 2-dimensional ...") whenever a >2D array is
+    assigned to ``X`` or a layer, because such arrays violate its 2D on-disk spec. EHRData deliberately
+    holds 3D time-series in memory and relocates it to ``.obsm`` on write (see ``io/_ondisk.py``), so
+    this warning is expected noise here. Matched by message, so unrelated UserWarnings still pass; a
+    no-op on anndata <0.13, which never emits it.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=r".*must be 2-dimensional.*", category=UserWarning)
+        yield
+
+
 def _validate_layers_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
     # `n_t` is transiently None while the X setter runs (see EHRData.X); skip validation then, the
     # caller recomputes `_n_t` immediately afterwards.
@@ -108,6 +125,13 @@ class AlignedActual3D(AlignedActual):
 
 class Layers3D(AlignedActual3D, Layers):
     """Layers for 3D data."""
+
+    def _validate_value(self, val: Value, key: str | None) -> Value:
+        # EHRData stores 3D layers on purpose (relocated to obsm on write); mute anndata's >2D spec
+        # warning that `Layers._validate_value` emits for a >2D layer. This is the single validation
+        # choke point for both construction (`layers = {...}`) and item assignment (`layers[k] = ...`).
+        with _silence_anndata_nd_warning():
+            return super()._validate_value(val, key)
 
 
 class AlignedView3D(AlignedView):
@@ -415,7 +439,9 @@ class EHRData(AnnData):
         # this is a bit hacky, but anndata checks its own shape to match the shape of X
         self._n_t = None  # type: ignore
 
-        super(EHRData, self.__class__).X.fset(self, value)
+        # EHRData stores 3D X on purpose (relocated to obsm on write); mute anndata's >2D spec warning.
+        with _silence_anndata_nd_warning():
+            super(EHRData, self.__class__).X.fset(self, value)
 
         self._n_t = new_n_t
 
