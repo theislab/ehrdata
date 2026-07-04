@@ -126,7 +126,7 @@ def write_h5ed(
     file, `X` and `layers` cannot be written as `object` dtype. If any of these fields is of `object`
     dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be
     casted to a string dtype. 3D arrays are relocated into `.obsm` on write and restored by
-    :func:`~ehrdata.io.read_h5ed` on read (see :mod:`ehrdata.io._ondisk`).
+    :func:`~ehrdata.io.read_h5ed` on read (see `ehrdata.io._ondisk`).
 
     Args:
         edata: Central data object.
