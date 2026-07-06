@@ -317,9 +317,8 @@ def harmonize_missing_values(
 
     # note that every sparse array is of a numeric dtype and will enter this if block
     if np.issubdtype(X.dtype, np.number):
-        # Numeric arrays have no string sentinels to replace, so this is a no-op. Keep it at debug
-        # level: read_h5ed/read_zarr call this on every layer automatically, and a warning per numeric
-        # layer is noise rather than something the user can act on.
+        # Numeric arrays have no string sentinels to replace, so this is a no-op.
+        # Keep it at debug level: read_h5ed/read_zarr call this on every layer automatically, and a warning per numeric layer is noise rather than something the user can act on.
         logger.debug(f"This operation does not affect numeric layer {'X' if layer is None else layer}.")
         return edata if copy else None
 
@@ -336,17 +335,12 @@ def harmonize_missing_values(
 
 
 def _harmonize_on_read(edata: EHRData) -> None:
-    """Harmonize ``X`` (if present) and every user-facing layer after a read.
-
-    Shared by the h5ed and zarr readers. Skips ``X`` when it is ``None`` and skips anndata 0.13's
-    unified-``X`` ``None`` layer key, which would otherwise re-harmonize ``X`` a second time.
-    """
     if edata.X is not None:
         harmonize_missing_values(edata)
         logger.info("Harmonizing missing values of X")
 
     for key in edata.layers:
-        if key is None:
+        if key is None:  # anndata 0.13: the unified `.X` slot, already harmonized above
             continue
         harmonize_missing_values(edata, layer=key)
         logger.info(f"Harmonizing missing values of layer {key}")

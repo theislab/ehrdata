@@ -197,14 +197,11 @@ def test_write_h5ed_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
 
 
 def test_read_h5ed_legacy_v1_with_3d_in_layers(edata_333, tmp_path):
-    # legacy v1 files store 3D arrays directly in layers, with no reserved obsm keys; they must still
-    # read correctly via the self-describing layout (no reserved keys -> nothing to relocate).
+    # legacy v1 files store 3D arrays directly in layers, with no reserved obsm keys; they must still read correctly via the self-describing layout (no reserved keys -> nothing to relocate).
     path = tmp_path / "legacy_v1.h5ad"
     edata = edata_333.copy()
 
-    # anndata >=0.13 blocks writing a 3D array in `layers` through the high-level writer, so forge a
-    # legacy v1 file by writing the 2D scaffold normally and injecting the 3D layer (and tem) with the
-    # low-level `write_elem`, which bypasses the on-write 2D check.
+    # anndata >=0.13 blocks writing a 3D array in `layers` through the high-level writer, so forge a legacy v1 file by writing the 2D scaffold normally and injecting the 3D layer (and tem) with the low-level `write_elem`, which bypasses the on-write 2D check.
     ad.AnnData(X=np.asarray(edata.X), obs=edata.obs.copy(), var=edata.var.copy()).write_h5ad(path)
     with h5py.File(path, "a") as f:
         ad.io.write_elem(f, "layers", {"tem_data": np.asarray(edata.layers["tem_data"])})
@@ -218,8 +215,7 @@ def test_read_h5ed_legacy_v1_with_3d_in_layers(edata_333, tmp_path):
 
 @pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
 def test_write_read_h5ed_3d_X_relocated_to_obsm(tmp_path):
-    # a 3D X is relocated to the reserved `_ed_ondisk_X` obsm key (and dropped from X) on write, and
-    # restored to a 3D X on read.
+    # a 3D X is relocated to the reserved `_ed_ondisk_X` obsm key (and dropped from X) on write, and restored to a 3D X on read.
     from ehrdata import EHRData
 
     X3 = np.arange(2 * 3 * 4).reshape(2, 3, 4).astype(float)
@@ -246,8 +242,7 @@ def test_write_read_h5ed_3d_X_relocated_to_obsm(tmp_path):
 
 @pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
 def test_read_h5ed_accepts_3d_X_directly_on_disk(tmp_path):
-    # ehrdata reads a file that stores a 3D array directly in X (as anndata >=0.13 still can, with a
-    # warning) just as naturally as one using the relocated `_ed_ondisk_*` layout.
+    # ehrdata reads a file that stores a 3D array directly in X (as anndata >=0.13 still can, with a warning) just as naturally as one using the relocated `_ed_ondisk_*` layout.
     X3 = np.arange(2 * 3 * 4).reshape(2, 3, 4).astype(float)
 
     path = tmp_path / "raw_3d_X.h5ad"

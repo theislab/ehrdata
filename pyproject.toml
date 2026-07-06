@@ -104,14 +104,13 @@ envs.hatch-test.features = [ "test" ]
 envs.hatch-test.matrix = [
   # Full integration-aware suite on both supported Pythons.
   { python = [ "3.12", "3.14" ] },
-  # Integration-free "core" lanes against, in turn: latest anndata, the last anndata <0.13, and the
-  # latest anndata pre-release (the "pre" name flags it in CI). See the dependency pins below.
+  # Integration-free "core" lanes against, in turn: latest anndata, the last anndata <0.13, and the latest anndata pre-release (the "pre" name flags it in CI).
+  # See the dependency pins below.
   { python = [ "3.14" ], variant = [ "core" ] },
   { python = [ "3.12" ], variant = [ "core-anndata-min" ] },
   { python = [ "3.14" ], variant = [ "core-pre" ] },
 ]
-# The explicit pre-release in `core-pre` makes uv and pip allow pre-releases for anndata only; every
-# other dependency stays on its latest stable release.
+# The explicit pre-release in `core-pre` makes uv and pip allow pre-releases for anndata only; every other dependency stays on its latest stable release.
 envs.hatch-test.overrides.matrix.variant.dependencies = [
   { value = "anndata<0.13", if = [ "core-anndata-min" ] },
   { value = "anndata>=0.13.0rc1", if = [ "core-pre" ] },

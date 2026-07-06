@@ -12,10 +12,10 @@ DATE_TAG = "date"
 DEFAULT_TEM_LAYER_NAME = "tem_data"
 
 # On-disk format (see :mod:`ehrdata.io._ondisk` for the layout).
-# EHRData stores time-series as 3D arrays in `X`/`layers`, but anndata only guarantees 2D arrays there
-# (https://github.com/scverse/anndata/issues/2430). Since version 2, 3D arrays are relocated into the
-# reserved `.obsm` keys below on write and restored on read. The layout is self-describing, so reads
-# detect it by key presence, not by this stamped version. Bump only when the on-disk layout changes.
+# EHRData stores time-series as 3D arrays in `X`/`layers`, but anndata only guarantees 2D arrays there (https://github.com/scverse/anndata/issues/2430).
+# Since version 2, 3D arrays are relocated into the reserved `.obsm` keys below on write and restored on read.
+# The layout is self-describing, so reads detect it by key presence, not by this stamped version.
+# Bump only when the on-disk layout changes.
 EHRDATA_ONDISK_VERSION = 2
 EHRDATA_ENCODING_TYPE = "ehrdata"
 

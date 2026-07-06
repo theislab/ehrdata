@@ -1,10 +1,9 @@
 """Translate :class:`~ehrdata.EHRData` to and from its on-disk layout.
 
-EHRData keeps time-series as 3D arrays in ``X``/``layers``, but anndata only guarantees 2D arrays
-there. On write, 3D arrays are relocated into ``.obsm`` under reserved keys and restored on read, so
-the same logic is shared by the h5ed and zarr readers/writers. The layout is self-describing: a file
-with the reserved ``.obsm`` keys uses the relocated layout, one without them is the legacy layout (3D
-directly in ``X``/``layers``). See :mod:`ehrdata.core.constants` for the version and reserved keys.
+EHRData keeps time-series as 3D arrays in ``X``/``layers``, but anndata only guarantees 2D arrays there.
+On write, 3D arrays are relocated into ``.obsm`` under reserved keys and restored on read, so the same logic is shared by the h5ed and zarr readers/writers.
+The layout is self-describing: a file with the reserved ``.obsm`` keys uses the relocated layout, one without them is the legacy layout (3D directly in ``X``/``layers``).
+See :mod:`ehrdata.core.constants` for the version and reserved keys.
 """
 
 from __future__ import annotations
@@ -20,25 +19,22 @@ if TYPE_CHECKING:
 
 
 def _is_3d(arr: Any) -> bool:
-    """Whether ``arr`` is a 3D array. Safe to call on anything, including ``None``."""
     return arr is not None and hasattr(arr, "shape") and len(arr.shape) == 3
 
 
 def _obsm_key_for_layer(name: str) -> str:
-    """Reserved ``.obsm`` key that holds the 3D layer ``name`` on disk."""
     return f"{EHRDATA_OBSM_3D_LAYER_PREFIX}{name}"
 
 
 def _layer_for_obsm_key(key: str) -> str | None:
-    """Layer name for a reserved 3D-layer ``.obsm`` key, or ``None`` if ``key`` is not one."""
     return key.removeprefix(EHRDATA_OBSM_3D_LAYER_PREFIX) if key.startswith(EHRDATA_OBSM_3D_LAYER_PREFIX) else None
 
 
 def encode_for_disk(edata: EHRData) -> ad.AnnData:
     """Build an :class:`~anndata.AnnData` with 3D ``X``/``layers`` relocated into reserved ``.obsm`` keys.
 
-    The result satisfies anndata's 2D-only ``X``/``layers`` spec. ``.tem`` is written separately by the
-    callers and is not part of the returned object.
+    The result satisfies anndata's 2D-only ``X``/``layers`` spec.
+    ``.tem`` is written separately by the callers and is not part of the returned object.
     """
     obsm = dict(edata.obsm)
     layers = {}

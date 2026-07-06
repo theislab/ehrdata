@@ -177,8 +177,7 @@ def test_write_zarr_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
 def test_write_read_zarr_X_none_with_3d_layer(edata_330, tmp_path):
     import numpy as np
 
-    # X=None is a first-class state (encode_for_disk drops a None X); reading it with harmonization on
-    # (the default) must not crash on the None X.
+    # X=None is a first-class state (encode_for_disk drops a None X); reading it with harmonization on (the default) must not crash on the None X.
     edata = edata_330.copy()
     edata.layers["tem_data"] = np.arange(3 * 3 * 3).reshape(3, 3, 3).astype(float)
     edata.X = None
@@ -199,8 +198,7 @@ def test_write_read_zarr_3d_X_relocated_to_obsm(tmp_path):
 
     from ehrdata import EHRData
 
-    # a 3D X is relocated to the reserved `_ed_ondisk_X` obsm key on write and restored on read, without
-    # leaking the unified-X None key in as a spurious "layer".
+    # a 3D X is relocated to the reserved `_ed_ondisk_X` obsm key on write and restored on read, without leaking the unified-X None key in as a spurious "layer".
     X3 = np.arange(2 * 3 * 4).reshape(2, 3, 4).astype(float)
     path = tmp_path / "edata_3dX.ehrdata.zarr"
     write_zarr(EHRData(X=X3), path)

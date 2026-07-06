@@ -18,11 +18,7 @@ if TYPE_CHECKING:
 
 
 def _restore_3d_from_obsm_backed(edata: EHRData) -> None:
-    """Restore relocated 3D layers from obsm for a backed read.
-
-    Backed reads only support updates to X, so a relocated 3D X cannot be restored here and is left in
-    obsm with a warning; 3D layers (the common time-series case) are restored.
-    """
+    # Backed reads only support updates to X, so a relocated 3D X cannot be restored here and is left in obsm with a warning; 3D layers (the common time-series case) are restored.
     for obsm_key in [k for k in edata.obsm if _layer_for_obsm_key(k) is not None]:
         edata.layers[_layer_for_obsm_key(obsm_key)] = edata.obsm[obsm_key]
         del edata.obsm[obsm_key]
@@ -43,10 +39,9 @@ def read_h5ed(
 ) -> EHRData:
     """Read an ehrdata hdf5 file (`.h5ed`) into an :class:`~ehrdata.EHRData` object.
 
-    Also reads plain anndata `.h5ad` files. 3D arrays are restored to `X`/`layers` whether they were
-    relocated into `.obsm` (ehrdata v2 format) or stored directly in `X`/`layers` (legacy ehrdata files
-    or anndata files that still contain higher-dimensional arrays). A file storing a 3D `X` (rather than
-    3D layers) can only be read on anndata >=0.13, which permits a >2D `X` in memory.
+    Also reads plain anndata `.h5ad` files.
+    3D arrays are restored to `X`/`layers` whether they were relocated into `.obsm` (ehrdata v2 format) or stored directly in `X`/`layers` (legacy ehrdata files or anndata files that still contain higher-dimensional arrays).
+    A file storing a 3D `X` (rather than 3D layers) can only be read on anndata >=0.13, which permits a >2D `X` in memory.
 
     Args:
         filename: Path to the file or directory to read.
@@ -122,11 +117,10 @@ def write_h5ed(
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to an ehrdata hdf5 file (`.h5ed`).
 
-    `.h5ed` is the ehrdata on-disk format, marking it distinct from anndata's `.h5ad`. To write the
-    file, `X` and `layers` cannot be written as `object` dtype. If any of these fields is of `object`
-    dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be
-    casted to a string dtype. 3D arrays are relocated into `.obsm` on write and restored by
-    :func:`~ehrdata.io.read_h5ed` on read (see `ehrdata.io._ondisk`).
+    `.h5ed` is the ehrdata on-disk format, marking it distinct from anndata's `.h5ad`.
+    To write the file, `X` and `layers` cannot be written as `object` dtype.
+    If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a string dtype.
+    3D arrays are relocated into `.obsm` on write and restored by :func:`~ehrdata.io.read_h5ed` on read (see `ehrdata.io._ondisk`).
 
     Args:
         edata: Central data object.

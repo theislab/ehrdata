@@ -106,11 +106,10 @@ def write_zarr(
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
-    The recommended store name extension is `.ehrdata.zarr`. To write to a `.zarr` store, `X`, and
-    `layers` cannot be written as `object` dtype. If any of these fields is of `object` dtype, this
-    function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a
-    `str` dtype. 3D arrays are relocated into `.obsm` on write and restored by
-    :func:`~ehrdata.io.read_zarr` on read (see `ehrdata.io._ondisk`).
+    The recommended store name extension is `.ehrdata.zarr`.
+    To write to a `.zarr` store, `X`, and `layers` cannot be written as `object` dtype.
+    If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
+    3D arrays are relocated into `.obsm` on write and restored by :func:`~ehrdata.io.read_zarr` on read (see `ehrdata.io._ondisk`).
 
     Args:
         edata: Central data object.
@@ -156,8 +155,7 @@ def write_zarr(
                 dataset_kwargs = {"shards": (2**16,), "chunks": (2**8,), **dataset_kwargs}
             func(g, k, elem, dataset_kwargs=dataset_kwargs)
 
-        # anndata 0.13 rejects writing with key "/" into a non-root subgroup, so dispatch from the
-        # root store under the "anndata" key (matching the chunks="auto" write_elem path).
+        # anndata 0.13 rejects writing with key "/" into a non-root subgroup, so dispatch from the root store under the "anndata" key (matching the chunks="auto" write_elem path).
         return ad.experimental.write_dispatched(group, "anndata", adata, callback=callback)
 
     if chunks == "auto":

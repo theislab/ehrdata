@@ -26,9 +26,9 @@ from anndata._core.views import (
     as_view,
 )
 
-# anndata 0.13 compatibility (ehrdata supports anndata <0.13 and >=0.13). The 0.13 changes adapted to:
-#   * `.X` is unified into `layers[None]`, so iterating `.layers` yields a `None` key, `isbacked`
-#     delegates to the layers store, and `adata.X = v` routes through `layers[None] = v`.
+# anndata 0.13 compatibility (ehrdata supports anndata <0.13 and >=0.13).
+# The 0.13 changes adapted to:
+#   * `.X` is unified into `layers[None]`, so iterating `.layers` yields a `None` key, `isbacked` delegates to the layers store, and `adata.X = v` routes through `layers[None] = v`.
 #   * normalised view indices (`_oidx`/`_vidx`) are wrapped in `anndata.compat.IndexManager`.
 #   * the `Index`/`Index1D` type aliases moved from `anndata.compat` to `anndata.typing`.
 # Sites below say "anndata 0.13" and point here rather than restating this.
@@ -60,22 +60,16 @@ T = TypeVar("T", bound=AlignedMapping)
 
 @contextmanager
 def _silence_anndata_nd_warning():
-    """Suppress anndata's ">2D array in X/layers" warning while EHRData stores 3D data.
-
-    anndata >=0.13 emits a ``UserWarning`` ("... must be 2-dimensional ...") whenever a >2D array is
-    assigned to ``X`` or a layer, because such arrays violate its 2D on-disk spec. EHRData deliberately
-    holds 3D time-series in memory and relocates it to ``.obsm`` on write (see ``io/_ondisk.py``), so
-    this warning is expected noise here. Matched by message, so unrelated UserWarnings still pass; a
-    no-op on anndata <0.13, which never emits it.
-    """
+    # Suppress anndata >=0.13's ">2D array in X/layers" UserWarning while EHRData stores 3D data.
+    # EHRData deliberately holds 3D time-series in memory and relocates it to `.obsm` on write (see `io/_ondisk.py`), so the warning is expected noise here.
+    # Matching by message keeps unrelated UserWarnings surfacing; a no-op on anndata <0.13, which never emits it.
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=r".*must be 2-dimensional.*", category=UserWarning)
         yield
 
 
 def _validate_layers_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
-    # `n_t` is transiently None while the X setter runs (see EHRData.X); skip validation then, the
-    # caller recomputes `_n_t` immediately afterwards.
+    # `n_t` is transiently None while the X setter runs (see EHRData.X); skip validation then, the caller recomputes `_n_t` immediately afterwards.
     if obj.n_t is not None and obj.n_t > 1 and _get_layers_3d_dim(value) != obj.n_t:
         msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
         raise ValueError(msg)
@@ -89,8 +83,7 @@ def _validate_array_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None
 
 
 def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
-    # anndata 0.13: IndexManager isn't Iterable — materialise it so the np.ix_ branches below select by
-    # index combination (outer product), not coordinate pairs.
+    # anndata 0.13: IndexManager isn't Iterable — materialise it so the np.ix_ branches below select by index combination (outer product), not coordinate pairs.
     if isinstance(subset_idx, tuple):
         subset_idx = tuple(np.asarray(x) if isinstance(x, _INDEX_MANAGER_TYPES) else x for x in subset_idx)
     # Select as combination of indexes, not coordinates
@@ -110,8 +103,7 @@ class AlignedActual3D(AlignedActual):
     """AlignedActual for 3D data."""
 
     def __setitem__(self, key: str | None, value: Value) -> None:
-        # anndata 0.13: key None is the unified `.X` slot; its 3D/n_t/tem bookkeeping is owned by the
-        # EHRData.X setter, so just store it (the base class also runs anndata's 2D-spec warning).
+        # anndata 0.13: key None is the unified `.X` slot; its 3D/n_t/tem bookkeeping is owned by the EHRData.X setter, so just store it (the base class also runs anndata's 2D-spec warning).
         if key is None:
             super().__setitem__(key, value)
             return
@@ -127,9 +119,8 @@ class Layers3D(AlignedActual3D, Layers):
     """Layers for 3D data."""
 
     def _validate_value(self, val: Value, key: str | None) -> Value:
-        # EHRData stores 3D layers on purpose (relocated to obsm on write); mute anndata's >2D spec
-        # warning that `Layers._validate_value` emits for a >2D layer. This is the single validation
-        # choke point for both construction (`layers = {...}`) and item assignment (`layers[k] = ...`).
+        # EHRData stores 3D layers on purpose (relocated to obsm on write); mute anndata's >2D spec warning that `Layers._validate_value` emits for a >2D layer.
+        # This is the single validation choke point for both construction (`layers = {...}`) and item assignment (`layers[k] = ...`).
         with _silence_anndata_nd_warning():
             return super()._validate_value(val, key)
 
@@ -155,8 +146,7 @@ class LayersView3D(AlignedView3D, LayersBase):
 
     def __init__(self, parent_mapping: LayersBase, parent_view: AnnData, subset_idx: Any) -> None:
         super().__init__(parent_mapping, parent_view, subset_idx)
-        # anndata 0.13: X delegates `isbacked` to the layers store, so mirror anndata's own LayersView
-        # and expose it on 3D layer views too (absent on <0.13, hence the guard).
+        # anndata 0.13: X delegates `isbacked` to the layers store, so mirror anndata's own LayersView and expose it on 3D layer views too (absent on <0.13, hence the guard).
         if hasattr(parent_mapping, "isbacked"):
             self.isbacked = parent_mapping.isbacked
 
@@ -380,8 +370,8 @@ class EHRData(AnnData):
                 instance.tem = tem
 
             # Make a backed-reconstructed EHRData report `isbacked == True` so X is read from disk.
-            # `isbacked` requires the materialised X to be absent: from the layers store on anndata 0.13
-            # (X is `layers[None]`) and from the `_X` slot on <0.13. Each line no-ops on the other.
+            # `isbacked` requires the materialised X to be absent: from the layers store on anndata 0.13 (X is `layers[None]`) and from the `_X` slot on <0.13.
+            # Each line no-ops on the other.
             if adata.isbacked:
                 instance._layers.pop(None, None)
                 instance._X = None
@@ -426,8 +416,8 @@ class EHRData(AnnData):
     @X.setter
     def X(self, value):
         # On a view whose parent has no X, AnnData's setter writes into None and raises TypeError.
-        # Materialise the view first so the assignment lands on a real object, as for obs/var on
-        # X-less views. Read `.X` (not `_X`, removed in anndata 0.13) off the non-view parent.
+        # Materialise the view first so the assignment lands on a real object, as for obs/var on X-less views.
+        # Read `.X` (not `_X`, removed in anndata 0.13) off the non-view parent.
         if self.is_view and self._adata_ref is not None and self._adata_ref.X is None:
             self._init_as_actual(self.copy())
 
@@ -478,9 +468,8 @@ class EHRData(AnnData):
             if "obs:" in line or "var:" in line:
                 position_of_t += 1
 
-            # anndata >=0.13 stores `.X` as the `None`-keyed layer, which leaks into the base repr's
-            # `layers:` line. Rebuild that line from the user-facing (non-None) keys, and drop it
-            # entirely if there are no real layers.
+            # anndata >=0.13 stores `.X` as the `None`-keyed layer, which leaks into the base repr's `layers:` line.
+            # Rebuild that line from the user-facing (non-None) keys, and drop it entirely if there are no real layers.
             if line.lstrip().startswith("layers:"):
                 real_layers = [key for key in self.layers if key is not None]
                 if not real_layers:
