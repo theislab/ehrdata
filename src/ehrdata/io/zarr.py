@@ -115,8 +115,6 @@ def write_zarr(
     To write to a `.zarr` store, `X`, and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
 
-    Detail information for power users:
-    3D arrays are relocated into `.obsm` on write and restored by :func:`~ehrdata.io.read_zarr` on read.
 
     Args:
         edata: Central data object.

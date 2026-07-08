@@ -1,7 +1,7 @@
 """Translate :class:`~ehrdata.EHRData` to and from its on-disk layout.
 
 EHRData keeps time-series as 3D arrays in ``X``/``layers``, but anndata only guarantees 2D arrays there, and enforces this 0.13.0 onwards
-On writ under ehrdata ondisk version 0.2.0, 3D arrays are relocated into ``.obsm`` under reserved keys and restored on read, so the same logic is shared by the h5ed and zarr readers/writers.
+EHRData in memory: keeps 3D arrays in ``X``/``layers``. EHRData on disk: moves 3D arrays into ``.obsm``.
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:
 
 
 def _check_020_ehrdata_on_disk_format(f: Any) -> bool:
-    """Return True iff the file/store carries the ehrdata 0.2.0 on-disk stamp.
+    """Return True if the file/store carries the ehrdata 0.2.0 on-disk stamp.
 
     The type stamp lives under a different key per format (zarr uses ``encoding-type``, h5ed uses the
     namespaced ``ehrdata-encoding-type``), so either key identifies an ehrdata store here.

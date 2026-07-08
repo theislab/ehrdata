@@ -34,10 +34,6 @@ def read_h5ed(
 
     Also can read plain anndata `.h5ad` files.
 
-    Detail information for power users:
-    3D arrays are restored to `X`/`layers` whether they were relocated into `.obsm` (ehrdata v2 format) or stored directly in `X`/`layers` (legacy ehrdata files or anndata files that still contain higher-dimensional arrays).
-    A file storing a 3D `X` (rather than 3D layers) can only be read on anndata >=0.13, which permits a >2D `X` in memory.
-
     Args:
         filename: Path to the file or directory to read.
         backed: If 'r', load :class:`~ehrdata.EHRData` in backed mode instead of fully loading it into memory (memory mode).
@@ -122,8 +118,6 @@ def write_h5ed(
     To write the file, `X` and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a string dtype.
 
-    Detail for power users:
-    3D arrays are relocated into `.obsm` on write and restored by :func:`~ehrdata.io.read_h5ed` on read.
 
     Args:
         edata: Central data object.
