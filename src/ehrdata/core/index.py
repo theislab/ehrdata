@@ -4,7 +4,7 @@ from functools import singledispatch
 import numpy as np
 import pandas as pd
 
-try:  # anndata 0.13: aliases moved to anndata.typing (see ehrdata.core.ehrdata)
+try:  # anndata 0.13: aliases moved to anndata.typing
     from anndata.typing import Index
 except ImportError:
     from anndata.compat import Index

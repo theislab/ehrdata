@@ -75,10 +75,10 @@ with h5py.File(TOY_H5AD / "edata_sparse_with_tem.h5ad", "w") as h5ad_file:
 
 
 #########################
-# edata_minimal_v0_2_0.h5ed / .ehrdata.zarr:  tiny EHRData written in the current 0.2.0 format
+# edata_minimal_v0_2_0.h5ed / .ehrdata.zarr:  tiny EHRData written in the current 0.2.0 encoding format
 # (3D arrays relocated into .obsm + `ehrdata-encoding-version="0.2.0"` stamp). Together with the
 # plain-anndata "version 0" adata_basic.* above, these form the minimal read-test corpus
-# (2x2: {h5, zarr} x {version-0 plain-anndata, 0.2.0 ehrdata}). Deterministic (no RNG).
+# (2x2: {h5, zarr} x {version-0 plain-anndata, 0.2.0 encoding format}).
 TOY_H5ED.mkdir(exist_ok=True)
 edata_minimal = ed.EHRData(
     X=np.arange(6, dtype=float).reshape(3, 2),

@@ -19,7 +19,6 @@ from ehrdata.io import read_h5ad, read_h5ed, write_h5ad, write_h5ed
 TEST_PATH_H5AD = TEST_DATA_PATH / "toy_h5ad"
 
 
-# TODO: tests with X as None, tests with R as None?
 @pytest.mark.parametrize(
     ("backed", "harmonize_missing_values", "cast_variables_to_float"),
     [(False, False, False), (False, False, True), (False, True, False), (True, False, False)],
@@ -111,7 +110,6 @@ def test_write_h5ed_basic(edata_name, request, tmp_path):
     write_h5ed(edata, f"{tmp_path}/{edata_name}.h5ed")
 
     with h5py.File(f"{tmp_path}/{edata_name}.h5ed", "r") as h5ad_file:
-        # Note that R is not included in the list because it is just a value of the .layers field
         assert set(dict(h5ad_file).keys()) == {
             "X",
             "obs",
@@ -202,7 +200,6 @@ def test_read_h5ed_legacy_v1_with_3d_in_layers(edata_333, tmp_path):
     path = tmp_path / "legacy_v1.h5ad"
     edata = edata_333.copy()
 
-    # anndata >=0.13 blocks writing a 3D array in `layers` through the high-level writer, so forge a legacy v1 file by writing the 2D scaffold normally and injecting the 3D layer (and tem) with the low-level `write_elem`, which bypasses the on-write 2D check.
     ad.AnnData(X=np.asarray(edata.X), obs=edata.obs.copy(), var=edata.var.copy()).write_h5ad(path)
     with h5py.File(path, "a") as f:
         ad.io.write_elem(f, "layers", {"tem_data": np.asarray(edata.layers["tem_data"])})
@@ -271,7 +268,6 @@ def test_h5ad_io_aliases_are_deprecated(edata_333, tmp_path):
 
 def test_read_h5ed_backed_3d_raises(tmp_path):
     # Backed reading of a 0.2.0 file whose 3D arrays were relocated into `.obsm` is unsupported
-    # (backed mode can only update `X`), so it raises rather than returning a mis-shaped object.
     edata = EHRData(
         X=np.arange(6, dtype=float).reshape(3, 2),
         layers={"tem_data": np.arange(3 * 2 * 2, dtype=float).reshape(3, 2, 2)},
@@ -283,8 +279,7 @@ def test_read_h5ed_backed_3d_raises(tmp_path):
 
 
 def test_read_minimal_corpus_h5():
-    # Minimal read-test corpus (h5 half): a "version 0" plain-anndata `.h5ad` (no ehrdata stamp)
-    # and a committed 0.2.0 `.h5ed` (relocated 3D layer + stamp) both read correctly.
+    # Minimal read-test corpus (h5 half): a "version 0" plain-anndata `.h5ad` (no ehrdata stamp) and a committed 0.2.0 `.h5ed` (relocated 3D layer + stamp) both read correctly.
     with h5py.File(TEST_PATH_H5AD / "adata_basic.h5ad") as f:
         assert "ehrdata-encoding-version" not in f.attrs
     _assert_shape_matches(read_h5ed(TEST_PATH_H5AD / "adata_basic.h5ad"), (5, 4, 1))

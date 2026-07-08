@@ -26,13 +26,6 @@ from anndata._core.views import (
     as_view,
 )
 
-# anndata 0.13 compatibility (ehrdata supports anndata <0.13 and >=0.13).
-# The 0.13 changes adapted to:
-#   * `.X` is unified into `layers[None]`, so iterating `.layers` yields a `None` key, `isbacked` delegates to the layers store, and `adata.X = v` routes through `layers[None] = v`.
-#   * normalised view indices (`_oidx`/`_vidx`) are wrapped in `anndata.compat.IndexManager`.
-#   * the `Index`/`Index1D` type aliases moved from `anndata.compat` to `anndata.typing`.
-# Sites below say "anndata 0.13" and point here rather than restating this.
-
 try:  # anndata 0.13: aliases moved to anndata.typing
     from anndata.typing import Index as ADIndex
     from anndata.typing import Index1D
@@ -44,7 +37,7 @@ try:  # anndata 0.13: view indices wrapped in IndexManager (materialised in _sub
     from anndata.compat import IndexManager as _IndexManager
 
     _INDEX_MANAGER_TYPES: tuple[type, ...] = (_IndexManager,)
-except ImportError:  # <0.13 has no IndexManager; isinstance(x, ()) is always False, so nothing converts
+except ImportError:  # anndata <0.13 has no IndexManager; isinstance(x, ()) is always False, so nothing converts
     _INDEX_MANAGER_TYPES = ()
 
 if TYPE_CHECKING:
@@ -60,23 +53,20 @@ T = TypeVar("T", bound=AlignedMapping)
 
 @contextmanager
 def _silence_anndata_nd_warning():
-    # Suppress anndata >=0.13's ">2D array in X/layers" UserWarning while EHRData stores 3D data.
-    # EHRData deliberately holds 3D time-series in memory and relocates it to `.obsm` on write (see `io/_ondisk.py`), so the warning is expected noise here.
-    # Matching by message keeps unrelated UserWarnings surfacing; a no-op on anndata <0.13, which never emits it.
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=r".*must be 2-dimensional.*", category=UserWarning)
         yield
 
 
 def _validate_layers_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
-    # `n_t` is transiently None while the X setter runs (see EHRData.X); skip validation then, the caller recomputes `_n_t` immediately afterwards.
+    # `n_t` is transiently None while the X setter runs
     if obj.n_t is not None and obj.n_t > 1 and _get_layers_3d_dim(value) != obj.n_t:
         msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
         raise ValueError(msg)
 
 
 def _validate_array_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
-    # See `_validate_layers_3d`: `n_t` is transiently None while the X setter runs.
+    # `n_t` is transiently None while the X setter runs.
     if obj.n_t is not None and obj.n_t > 1 and _get_array_3d_dim(value) > 1 and _get_array_3d_dim(value) != obj.n_t:
         msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
         raise ValueError(msg)
@@ -119,8 +109,6 @@ class Layers3D(AlignedActual3D, Layers):
     """Layers for 3D data."""
 
     def _validate_value(self, val: Value, key: str | None) -> Value:
-        # EHRData stores 3D layers on purpose (relocated to obsm on write); mute anndata's >2D spec warning that `Layers._validate_value` emits for a >2D layer.
-        # This is the single validation choke point for both construction (`layers = {...}`) and item assignment (`layers[k] = ...`).
         with _silence_anndata_nd_warning():
             return super()._validate_value(val, key)
 
@@ -417,7 +405,6 @@ class EHRData(AnnData):
     def X(self, value):
         # On a view whose parent has no X, AnnData's setter writes into None and raises TypeError.
         # Materialise the view first so the assignment lands on a real object, as for obs/var on X-less views.
-        # Read `.X` (not `_X`, removed in anndata 0.13) off the non-view parent.
         if self.is_view and self._adata_ref is not None and self._adata_ref.X is None:
             self._init_as_actual(self.copy())
 
@@ -429,7 +416,6 @@ class EHRData(AnnData):
         # this is a bit hacky, but anndata checks its own shape to match the shape of X
         self._n_t = None  # type: ignore
 
-        # EHRData stores 3D X on purpose (relocated to obsm on write); mute anndata's >2D spec warning.
         with _silence_anndata_nd_warning():
             super(EHRData, self.__class__).X.fset(self, value)
 
@@ -468,8 +454,7 @@ class EHRData(AnnData):
             if "obs:" in line or "var:" in line:
                 position_of_t += 1
 
-            # anndata >=0.13 stores `.X` as the `None`-keyed layer, which leaks into the base repr's `layers:` line.
-            # Rebuild that line from the user-facing (non-None) keys, and drop it entirely if there are no real layers.
+            # clean repr with anndata >=0.13 storing `.X` as the `None`-keyed layer
             if line.lstrip().startswith("layers:"):
                 real_layers = [key for key in self.layers if key is not None]
                 if not real_layers:

@@ -136,7 +136,7 @@ def test_write_read_zarr_basic(edata_name, chunks, request, tmp_path):
     store = zarr.open(store_path)
     assert store.attrs["encoding-type"] == "ehrdata"
     assert store.attrs["ehrdata-encoding-type"] == "ehrdata"
-    assert store.attrs["ehrdata-encoding-version"] == str(EHRDATA_ONDISK_VERSION)
+    assert store.attrs["ehrdata-encoding-version"] == EHRDATA_ONDISK_VERSION
 
     # check success of convert_strings_to_categoricals
     if "obs_col_2" in edata_read.obs.columns:

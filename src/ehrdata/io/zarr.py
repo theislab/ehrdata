@@ -79,9 +79,6 @@ def read_zarr(
         err = f"Unkown encoding-type '{f.attrs['encoding-type']}'."
         raise ValueError(err)
 
-    # From the ehrdata 0.3.0 release, files carry `ehrdata-encoding-version` and reads check it:
-    # only stamped 0.2.0 files relocate 3D arrays into `.obsm`, so only they are decoded back.
-    # Files written before (or plain anndata) store any 3D `X`/layers directly and need no rearrangement.
     if _check_020_ehrdata_on_disk_format(f):
         dictionary_for_init = decode_init_dict(dictionary_for_init)
     edata = EHRData(**dictionary_for_init)
@@ -114,10 +111,11 @@ def write_zarr(
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
-    The recommended store name extension is `.ehrdata.zarr`.
     To write to a `.zarr` store, `X`, and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
-    3D arrays are relocated into `.obsm` on write and restored by :func:`~ehrdata.io.read_zarr` on read (see `ehrdata.io._ondisk`).
+
+    Detail information for power users:
+    3D arrays are relocated into `.obsm` on write and restored by :func:`~ehrdata.io.read_zarr` on read.
 
     Args:
         edata: Central data object.
@@ -178,9 +176,5 @@ def write_zarr(
 
     ad.io.write_elem(store, "tem", edata.tem)
 
-    # Identify the store as ehrdata. `read_zarr` dispatches nested-vs-flat on the structural
-    # `encoding-type`; the namespaced `ehrdata-encoding-*` stamp carries the on-disk version that
-    # gates the 3D-relocation decode on read (see `_check_020_ehrdata_on_disk_format`).
-    store.attrs["encoding-type"] = EHRDATA_ENCODING_TYPE
     store.attrs[EHRDATA_ENCODING_TYPE_KEY] = EHRDATA_ENCODING_TYPE
-    store.attrs[EHRDATA_ONDISK_VERSION_KEY] = str(EHRDATA_ONDISK_VERSION)
+    store.attrs[EHRDATA_ONDISK_VERSION_KEY] = EHRDATA_ONDISK_VERSION

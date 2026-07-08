@@ -10,7 +10,7 @@ from ehrdata import EHRData
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 
 # anndata >=0.13 unifies `.X` into `layers[None]`, which changes view `.X`-assignment semantics: <0.13 broadcasts a view's `.X = value` back into the parent; >=0.13 initialises the view as an actual object and leaves the parent unchanged.
-# Detect the mode by feature (the `None` layers key) rather than by version string, since pre-releases and editable dev builds report misleading versions.
+# Detect the mode by feature (the `None` layers key) rather than by version string.
 _ANNDATA_X_UNIFIED = None in set(ad.AnnData(np.zeros((1, 1), dtype=float)).layers.keys())
 
 
@@ -61,8 +61,6 @@ def test_ehrdata_init_vanilla_3dlayer(X_numpy_322):
 
 def test_ehrdata_3dlayer_emits_no_2d_spec_warning(X_numpy_322):
     # anndata >=0.13 warns ("... must be 2-dimensional ...") when a >2D array is stored in X/layers.
-    # EHRData holds 3D on purpose (relocated to obsm on write), so it must swallow exactly that warning on both construction and item assignment.
-    # Turning only that message into an error asserts its absence while leaving unrelated warnings free to surface.
     with warnings.catch_warnings():
         warnings.filterwarnings("error", message=r".*must be 2-dimensional.*")
         edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})

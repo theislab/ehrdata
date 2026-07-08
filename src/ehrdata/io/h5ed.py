@@ -78,9 +78,6 @@ def read_h5ed(
             )
             is_ehrdata_020 = _check_020_ehrdata_on_disk_format(f)
 
-        # From the ehrdata 0.3.0 release, files carry `ehrdata-encoding-version` and reads check it:
-        # only stamped 0.2.0 files relocate 3D arrays into `.obsm`, so only they are decoded back.
-        # Files written before (or plain anndata) store any 3D `X`/layers directly and need no rearrangement.
         if is_ehrdata_020:
             dictionary_for_init = decode_init_dict(dictionary_for_init)
         edata = EHRData(**dictionary_for_init)
@@ -95,7 +92,6 @@ def read_h5ed(
             tem = ad.io.read_elem(f["tem"]) if "tem" in f else None
 
             # A 0.2.0 file relocates 3D `X`/layers into `.obsm`; backed mode can't move them back
-            # (it only supports updates to `X`), so refuse rather than return a mis-shaped object.
             obsm = f.get("obsm", {})
             if _check_020_ehrdata_on_disk_format(f) and (
                 EHRDATA_OBSM_3D_X_KEY in obsm or any(k.startswith(EHRDATA_OBSM_3D_LAYER_PREFIX) for k in obsm)

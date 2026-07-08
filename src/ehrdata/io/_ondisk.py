@@ -1,9 +1,7 @@
 """Translate :class:`~ehrdata.EHRData` to and from its on-disk layout.
 
-EHRData keeps time-series as 3D arrays in ``X``/``layers``, but anndata only guarantees 2D arrays there.
-On write, 3D arrays are relocated into ``.obsm`` under reserved keys and restored on read, so the same logic is shared by the h5ed and zarr readers/writers.
-The layout is self-describing: a file with the reserved ``.obsm`` keys uses the relocated layout, one without them is the legacy layout (3D directly in ``X``/``layers``).
-See :mod:`ehrdata.core.constants` for the version and reserved keys.
+EHRData keeps time-series as 3D arrays in ``X``/``layers``, but anndata only guarantees 2D arrays there, and enforces this 0.13.0 onwards
+On writ under ehrdata ondisk version 0.2.0, 3D arrays are relocated into ``.obsm`` under reserved keys and restored on read, so the same logic is shared by the h5ed and zarr readers/writers.
 """
 
 from __future__ import annotations
@@ -38,11 +36,7 @@ def _layer_for_obsm_key(key: str) -> str | None:
 
 
 def encode_for_disk(edata: EHRData) -> ad.AnnData:
-    """Build an :class:`~anndata.AnnData` with 3D ``X``/``layers`` relocated into reserved ``.obsm`` keys.
-
-    The result satisfies anndata's 2D-only ``X``/``layers`` spec.
-    ``.tem`` is written separately by the callers and is not part of the returned object.
-    """
+    """Build an :class:`~anndata.AnnData` with 3D ``X``/``layers`` relocated into reserved ``.obsm`` keys."""
     obsm = dict(edata.obsm)
     layers = {}
 
@@ -74,10 +68,7 @@ def encode_for_disk(edata: EHRData) -> ad.AnnData:
 
 
 def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:
-    """Restore relocated 3D arrays from ``.obsm`` back into ``X``/``layers`` in a dict of init kwargs.
-
-    Files without the reserved keys (legacy ehrdata files or plain anndata) are returned unchanged.
-    """
+    """Restore relocated 3D arrays from ``.obsm`` back into ``X``/``layers`` in a dict of init kwargs."""
     obsm = dict(init.get("obsm") or {})
     layers = dict(init.get("layers") or {})
 
@@ -97,13 +88,7 @@ def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:
 
 
 def _check_020_ehrdata_on_disk_format(f: Any) -> bool:
-    """Return True iff the file/store carries the ehrdata 0.2.0 on-disk stamp.
-
-    Checks the root ``ehrdata-encoding-type`` / ``ehrdata-encoding-version`` attributes (not the
-    reserved ``.obsm`` keys). Only 0.2.0 files relocate 3D arrays into ``.obsm``; the readers use
-    this to decide whether to run :func:`decode_init_dict` (pre-0.2.0 and plain-anndata files store
-    any 3D ``X``/layers directly and are read natively).
-    """
+    """Return True iff the file/store carries the ehrdata 0.2.0 on-disk stamp."""
     return (
         f.attrs.get(EHRDATA_ENCODING_TYPE_KEY) == EHRDATA_ENCODING_TYPE
         and f.attrs.get(EHRDATA_ONDISK_VERSION_KEY) == EHRDATA_ONDISK_VERSION

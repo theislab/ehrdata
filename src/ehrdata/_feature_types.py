@@ -317,9 +317,7 @@ def harmonize_missing_values(
 
     # note that every sparse array is of a numeric dtype and will enter this if block
     if np.issubdtype(X.dtype, np.number):
-        # Numeric arrays have no string sentinels to replace, so this is a no-op.
-        # Keep it at debug level: read_h5ed/read_zarr call this on every layer automatically, and a warning per numeric layer is noise rather than something the user can act on.
-        logger.debug(f"This operation does not affect numeric layer {'X' if layer is None else layer}.")
+        logger.debug(f"ed.harmonize_missing_values does not affect numeric layer {'X' if layer is None else layer}.")
         return edata if copy else None
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)

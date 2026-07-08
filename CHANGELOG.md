@@ -12,13 +12,12 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
  - {func}`~ehrdata.io.read_h5ed` and {func}`~ehrdata.io.write_h5ed` are the new primary HDF5 I/O functions: `.h5ed` is now ehrdata's on-disk format, marking it distinct from anndata's `.h5ad`. `read_h5ad` and `write_h5ad` remain as deprecated aliases. @eroell
- - {func}`~ehrdata.io.write_h5ed` and {func}`~ehrdata.io.write_zarr` now write the ehrdata v2 on-disk format. Because AnnData only guarantees 2D arrays in `X`/`layers` (see [scverse/anndata#2430](https://github.com/scverse/anndata/issues/2430)), 3D arrays are relocated into `.obsm` (under reserved `_ed_ondisk_X` / `_ed_ondisk_layers_<name>` keys) and dropped from `X`/`layers` on write, then restored on read. The layout is self-describing, so files written by older ehrdata versions and anndata files that store 3D arrays directly in `X`/`layers` remain readable. The recommended file extensions are now `.h5ed` and `.ehrdata.zarr`. @eroell
+ - {func}`~ehrdata.io.write_h5ed` and {func}`~ehrdata.io.write_zarr` now write the ehrdata on-disk encoding 0.2.0. Because AnnData only guarantees 2D but not 3D arrays in `X`/`layers` (see [scverse/anndata#2430](https://github.com/scverse/anndata/issues/2430)), 3D arrays are relocated into `.obsm` (under reserved `_ed_ondisk_X` / `_ed_ondisk_layers_<name>` keys) and dropped from `X`/`layers` on write, then restored on read. Backwards compatibility for reading is maintained. The recommended file extensions for `hdf5` are now `.h5ed` @eroell
 
 ### Fixed
 - {func}`~ehrdata.infer_feature_types` can handle `EHRData` objects with `X` as `None`. ([#246](https://github.com/theislab/ehrdata/pull/246)) @sueoglu
  - {func}`~ehrdata.dt.physionet2019` no longer raises a shape mismatch on the full dataset: persons whose dynamic measurements all fall outside the observation window are now padded with missing values instead of being dropped from the time series tensor. ([#251](https://github.com/theislab/ehrdata/issues/251)) @eroell
  - {func}`~ehrdata.harmonize_missing_values` no longer logs a warning for each numeric layer when it has nothing to harmonize; reading a fully numeric dataset is now quiet. @eroell
- - {func}`~ehrdata.io.read_zarr` no longer raises `AttributeError` when reading a store whose `X` is `None` (e.g. an `EHRData` with only a 3D time-series layer); harmonization now skips a `None` `X`, matching {func}`~ehrdata.io.read_h5ed`. @eroell
 
 ### Maintenance
  - ehrdata is now compatible with anndata 0.13 (unified `X`/`layers` storage, `IndexManager` view indices, index type aliases moved to `anndata.typing`, and the stricter 2D-only `X`/`layers` on-disk rule) while remaining compatible with anndata `<0.13`. CI gains an integration-free `core-anndata-min` lane (pinned to `anndata<0.13`) and a pre-release lane to catch upstream breakage early. @eroell
