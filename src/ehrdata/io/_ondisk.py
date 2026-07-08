@@ -12,7 +12,14 @@ from typing import TYPE_CHECKING, Any
 
 import anndata as ad
 
-from ehrdata.core.constants import EHRDATA_OBSM_3D_LAYER_PREFIX, EHRDATA_OBSM_3D_X_KEY
+from ehrdata.core.constants import (
+    EHRDATA_ENCODING_TYPE,
+    EHRDATA_ENCODING_TYPE_KEY,
+    EHRDATA_OBSM_3D_LAYER_PREFIX,
+    EHRDATA_OBSM_3D_X_KEY,
+    EHRDATA_ONDISK_VERSION,
+    EHRDATA_ONDISK_VERSION_KEY,
+)
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
@@ -90,8 +97,14 @@ def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:
 
 
 def _check_020_ehrdata_on_disk_format(f: Any) -> bool:
-    """Return True if the file is a ehrdata 0.2.0 on-disk layout, False otherwise.
+    """Return True iff the file/store carries the ehrdata 0.2.0 on-disk stamp.
 
-    The v0.2.0 layout is self-describing: it has the reserved ``.obsm`` keys for relocated 3D arrays.
+    Checks the root ``ehrdata-encoding-type`` / ``ehrdata-encoding-version`` attributes (not the
+    reserved ``.obsm`` keys). Only 0.2.0 files relocate 3D arrays into ``.obsm``; the readers use
+    this to decide whether to run :func:`decode_init_dict` (pre-0.2.0 and plain-anndata files store
+    any 3D ``X``/layers directly and are read natively).
     """
-    return f.attrs.get("ehrdata-encoding-type") == "ehrdata" and f.attrs.get("ehrdata-encoding-version") == "0.2.0"
+    return (
+        f.attrs.get(EHRDATA_ENCODING_TYPE_KEY) == EHRDATA_ENCODING_TYPE
+        and f.attrs.get(EHRDATA_ONDISK_VERSION_KEY) == EHRDATA_ONDISK_VERSION
+    )

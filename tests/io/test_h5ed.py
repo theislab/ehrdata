@@ -187,7 +187,7 @@ def test_write_h5ed_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
         assert "_ed_ondisk_layers_tem_data" in f["obsm"]
         assert "tem_data" not in f["layers"]
         assert f.attrs["ehrdata-encoding-type"] == "ehrdata"
-        assert f.attrs["ehrdata-encoding-version"] == "2"
+        assert f.attrs["ehrdata-encoding-version"] == "0.2.0"
 
     edata_read = read_h5ed(path)
     _assert_shape_matches(edata_read, (3, 3, 3))
@@ -267,3 +267,32 @@ def test_h5ad_io_aliases_are_deprecated(edata_333, tmp_path):
 
     _assert_shape_matches(edata_read, (3, 3, 3))
     assert np.array_equal(edata_333.layers["tem_data"], edata_read.layers["tem_data"])
+
+
+def test_read_h5ed_backed_3d_raises(tmp_path):
+    # Backed reading of a 0.2.0 file whose 3D arrays were relocated into `.obsm` is unsupported
+    # (backed mode can only update `X`), so it raises rather than returning a mis-shaped object.
+    edata = EHRData(
+        X=np.arange(6, dtype=float).reshape(3, 2),
+        layers={"tem_data": np.arange(3 * 2 * 2, dtype=float).reshape(3, 2, 2)},
+    )
+    path = tmp_path / "backed_3d.h5ed"
+    write_h5ed(edata.copy(), path)
+    with pytest.raises(NotImplementedError, match="Backed reading"):
+        read_h5ed(path, backed=True, harmonize_missing_values=False, cast_variables_to_float=False)
+
+
+def test_read_minimal_corpus_h5():
+    # Minimal read-test corpus (h5 half): a "version 0" plain-anndata `.h5ad` (no ehrdata stamp)
+    # and a committed 0.2.0 `.h5ed` (relocated 3D layer + stamp) both read correctly.
+    with h5py.File(TEST_PATH_H5AD / "adata_basic.h5ad") as f:
+        assert "ehrdata-encoding-version" not in f.attrs
+    _assert_shape_matches(read_h5ed(TEST_PATH_H5AD / "adata_basic.h5ad"), (5, 4, 1))
+
+    path_020 = TEST_DATA_PATH / "toy_h5ed" / "edata_minimal_v0_2_0.h5ed"
+    with h5py.File(path_020) as f:
+        assert f.attrs["ehrdata-encoding-type"] == "ehrdata"
+        assert f.attrs["ehrdata-encoding-version"] == "0.2.0"
+    edata_020 = read_h5ed(path_020)
+    _assert_shape_matches(edata_020, (3, 2, 2))
+    assert np.array_equal(np.asarray(edata_020.layers["tem_data"]), np.arange(3 * 2 * 2, dtype=float).reshape(3, 2, 2))

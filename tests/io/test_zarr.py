@@ -135,7 +135,8 @@ def test_write_read_zarr_basic(edata_name, chunks, request, tmp_path):
     # check the test file is an ehrdata zarr store
     store = zarr.open(store_path)
     assert store.attrs["encoding-type"] == "ehrdata"
-    assert store.attrs["encoding-version"] == str(EHRDATA_ONDISK_VERSION)
+    assert store.attrs["ehrdata-encoding-type"] == "ehrdata"
+    assert store.attrs["ehrdata-encoding-version"] == str(EHRDATA_ONDISK_VERSION)
 
     # check success of convert_strings_to_categoricals
     if "obs_col_2" in edata_read.obs.columns:
@@ -165,7 +166,8 @@ def test_write_zarr_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
     assert "_ed_ondisk_layers_tem_data" in store["anndata"]["obsm"]
     assert "tem_data" not in store["anndata"]["layers"]
     assert store.attrs["encoding-type"] == "ehrdata"
-    assert store.attrs["encoding-version"] == str(EHRDATA_ONDISK_VERSION)
+    assert store.attrs["ehrdata-encoding-type"] == "ehrdata"
+    assert store.attrs["ehrdata-encoding-version"] == str(EHRDATA_ONDISK_VERSION)
 
     edata_read = read_zarr(path)
     _assert_shape_matches(edata_read, (3, 3, 3))
@@ -209,3 +211,19 @@ def test_write_read_zarr_3d_X_relocated_to_obsm(tmp_path):
     assert edata_read.shape == (2, 3, 4)
     assert np.array_equal(np.asarray(edata_read.X), X3)
     assert [k for k in edata_read.layers if k is not None] == []
+
+
+def test_read_minimal_corpus_zarr():
+    # Minimal read-test corpus (zarr half): a "version 0" plain-anndata store (no ehrdata stamp)
+    # and a committed 0.2.0 ehrdata store (relocated 3D layer + stamp) both read correctly.
+    v0 = zarr.open(TEST_PATH_ZARR / "adata_basic.zarr")
+    assert "ehrdata-encoding-version" not in v0.attrs
+    edata_v0 = read_zarr(TEST_PATH_ZARR / "adata_basic.zarr")
+    _assert_shape_matches(edata_v0, (5, 4, 1))
+
+    store_020 = zarr.open(TEST_PATH_ZARR / "edata_minimal_v0_2_0.ehrdata.zarr")
+    assert store_020.attrs["ehrdata-encoding-type"] == "ehrdata"
+    assert store_020.attrs["ehrdata-encoding-version"] == str(EHRDATA_ONDISK_VERSION)
+    edata_020 = read_zarr(TEST_PATH_ZARR / "edata_minimal_v0_2_0.ehrdata.zarr")
+    _assert_shape_matches(edata_020, (3, 2, 2))
+    assert np.array_equal(np.asarray(edata_020.layers["tem_data"]), np.arange(3 * 2 * 2, dtype=float).reshape(3, 2, 2))

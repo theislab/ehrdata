@@ -8,32 +8,19 @@ import anndata as ad
 import h5py
 
 from ehrdata._feature_types import _harmonize_on_read
-from ehrdata._logger import logger
 from ehrdata.core.constants import (
     EHRDATA_ENCODING_TYPE,
     EHRDATA_ENCODING_TYPE_KEY,
+    EHRDATA_OBSM_3D_LAYER_PREFIX,
     EHRDATA_OBSM_3D_X_KEY,
     EHRDATA_ONDISK_VERSION,
     EHRDATA_ONDISK_VERSION_KEY,
 )
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
-from ehrdata.io._ondisk import _check_020_ehrdata_on_disk_format, _layer_for_obsm_key, decode_init_dict, encode_for_disk
+from ehrdata.io._ondisk import _check_020_ehrdata_on_disk_format, decode_init_dict, encode_for_disk
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
-
-
-def _restore_3d_from_obsm_backed(edata: EHRData) -> None:
-    # Backed reads only support updates to X, so a relocated 3D X cannot be restored here and is left in obsm with a warning; 3D layers (the common time-series case) are restored.
-    for obsm_key in [k for k in edata.obsm if _layer_for_obsm_key(k) is not None]:
-        edata.layers[_layer_for_obsm_key(obsm_key)] = edata.obsm[obsm_key]
-        del edata.obsm[obsm_key]
-
-    if EHRDATA_OBSM_3D_X_KEY in edata.obsm:
-        logger.warning(
-            "This file stores a 3D X in obsm. Restoring it to X is not supported in backed mode; it "
-            "remains accessible under obsm. Read without backed=... to restore X."
-        )
 
 
 def read_h5ed(
@@ -89,9 +76,13 @@ def read_h5ed(
             dictionary_for_init.update(
                 {k: ad.io.read_elem(f[k]) for k, _ in dict(f).items() if not k.startswith("raw.")}
             )
+            is_ehrdata_020 = _check_020_ehrdata_on_disk_format(f)
 
-        # Move any relocated 3D arrays from obsm back into X/layers (see ehrdata.io._ondisk).
-        dictionary_for_init = decode_init_dict(dictionary_for_init)
+        # From the ehrdata 0.3.0 release, files carry `ehrdata-encoding-version` and reads check it:
+        # only stamped 0.2.0 files relocate 3D arrays into `.obsm`, so only they are decoded back.
+        # Files written before (or plain anndata) store any 3D `X`/layers directly and need no rearrangement.
+        if is_ehrdata_020:
+            dictionary_for_init = decode_init_dict(dictionary_for_init)
         edata = EHRData(**dictionary_for_init)
 
     else:
@@ -103,14 +94,15 @@ def read_h5ed(
         with h5py.File(filename, "r") as f:
             tem = ad.io.read_elem(f["tem"]) if "tem" in f else None
 
-            if (_check_020_ehrdata_on_disk_format(f) and EHRDATA_OBSM_3D_X_KEY in f["obsm"]) or any(
-                k.startswith("_ed_ondisk_layers_") for k in f["obsm"]
+            # A 0.2.0 file relocates 3D `X`/layers into `.obsm`; backed mode can't move them back
+            # (it only supports updates to `X`), so refuse rather than return a mis-shaped object.
+            obsm = f.get("obsm", {})
+            if _check_020_ehrdata_on_disk_format(f) and (
+                EHRDATA_OBSM_3D_X_KEY in obsm or any(k.startswith(EHRDATA_OBSM_3D_LAYER_PREFIX) for k in obsm)
             ):
                 msg_0 = "Backed reading of .h5ed files with 3D arrays is not supported. Please open an issue on GitHub if you need this feature."
                 raise NotImplementedError(msg_0)
             edata = EHRData.from_adata(adata, tem=tem)
-
-        _restore_3d_from_obsm_backed(edata)
 
     if harmonize_missing_values:
         _harmonize_on_read(edata)

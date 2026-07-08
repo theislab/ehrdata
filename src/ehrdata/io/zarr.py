@@ -16,7 +16,7 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION_KEY,
 )
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
-from ehrdata.io._ondisk import decode_init_dict, encode_for_disk
+from ehrdata.io._ondisk import _check_020_ehrdata_on_disk_format, decode_init_dict, encode_for_disk
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -79,8 +79,11 @@ def read_zarr(
         err = f"Unkown encoding-type '{f.attrs['encoding-type']}'."
         raise ValueError(err)
 
-    # Move any relocated 3D arrays from obsm back into X/layers (see ehrdata.io._ondisk).
-    dictionary_for_init = decode_init_dict(dictionary_for_init)
+    # From the ehrdata 0.3.0 release, files carry `ehrdata-encoding-version` and reads check it:
+    # only stamped 0.2.0 files relocate 3D arrays into `.obsm`, so only they are decoded back.
+    # Files written before (or plain anndata) store any 3D `X`/layers directly and need no rearrangement.
+    if _check_020_ehrdata_on_disk_format(f):
+        dictionary_for_init = decode_init_dict(dictionary_for_init)
     edata = EHRData(**dictionary_for_init)
 
     if harmonize_missing_values:
@@ -175,6 +178,9 @@ def write_zarr(
 
     ad.io.write_elem(store, "tem", edata.tem)
 
-    # Identify the store as ehrdata (read_zarr dispatches on encoding-type; the version is informational).
+    # Identify the store as ehrdata. `read_zarr` dispatches nested-vs-flat on the structural
+    # `encoding-type`; the namespaced `ehrdata-encoding-*` stamp carries the on-disk version that
+    # gates the 3D-relocation decode on read (see `_check_020_ehrdata_on_disk_format`).
+    store.attrs["encoding-type"] = EHRDATA_ENCODING_TYPE
     store.attrs[EHRDATA_ENCODING_TYPE_KEY] = EHRDATA_ENCODING_TYPE
     store.attrs[EHRDATA_ONDISK_VERSION_KEY] = str(EHRDATA_ONDISK_VERSION)
