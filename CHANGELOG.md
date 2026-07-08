@@ -10,10 +10,7 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
-<!--
-anndata 0.13.0 has been released and is now supported.
-The anndata 0.13.0 release notes are worth a look: https://anndata.scverse.org/en/stable/release-notes/index.html#v0-13-0
--->
+## [0.3.0]
 
 ### Added
  - {func}`~ehrdata.io.read_h5ed` and {func}`~ehrdata.io.write_h5ed` are the new primary HDF5 I/O functions: `.h5ed` is now ehrdata's on-disk format, marking it distinct from anndata's `.h5ad`. `read_h5ad` and `write_h5ad` remain as deprecated aliases. ([#252](https://github.com/theislab/ehrdata/pull/252)) @eroell
@@ -26,8 +23,10 @@ The anndata 0.13.0 release notes are worth a look: https://anndata.scverse.org/e
 
 ### Maintenance
  - ehrdata is now compatible with anndata 0.13 (unified `X`/`layers` storage, `IndexManager` view indices, index type aliases moved to `anndata.typing`, and the stricter 2D-only `X`/`layers` on-disk rule) while remaining compatible with anndata `<0.13`. CI gains an integration-free `core-anndata-min` lane (pinned to `anndata<0.13`) and a pre-release lane to catch upstream breakage early. ([#252](https://github.com/theislab/ehrdata/pull/252)) @eroell
+ - `DaskArray` import fixed to follow anndata 0.12.16, and `dask` added to the intersphinx mapping. ([#248](https://github.com/theislab/ehrdata/pull/248)) @sueoglu
  - CI now caches downloaded datasets used by `ehrdata.dt` to reduce flaky upstream hosts (e.g. physionet.org) breaking the test and notebook workflows. ([#250](https://github.com/theislab/ehrdata/pull/250)) @eroell
  - Dataset downloads now use [pooch](https://www.fatiando.org/pooch/) instead of a custom `requests`-based downloader, aligning with the scverse ecosystem and providing caching out of the box. ([#251](https://github.com/theislab/ehrdata/issues/251)) @eroell
+ - The `tqdm` dependency has been removed. ([#254](https://github.com/theislab/ehrdata/pull/254)) @eroell
 
 ## [0.2.1]
 
