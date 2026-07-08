@@ -55,8 +55,9 @@ def read_zarr(
 
     f = filename if isinstance(filename, zarr.Group) else zarr.open(filename, mode="r")
 
-    if "encoding-type" not in f.attrs:
-        err = "The zarr store does not contain an encoding-type attribute."
+    # on-disk format 0.0.1 used "encoding-type" as anndata calls it, while on-disk format 0.2.0 uses "ehrdata-encoding-type" to be in sync with the h5ed style
+    if ("encoding-type" not in f.attrs) and ("ehrdata-encoding-type" not in f.attrs):
+        err = "The zarr store does not contain one of the required encoding-type or ehrdata-encoding-type attributes."
         raise ValueError(err)
 
     if f.attrs["encoding-type"] == "ehrdata":
