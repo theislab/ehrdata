@@ -13,6 +13,7 @@ import anndata as ad
 from ehrdata.core.constants import (
     EHRDATA_ENCODING_TYPE,
     EHRDATA_ENCODING_TYPE_KEY,
+    EHRDATA_ENCODING_TYPE_KEY_ZARR,
     EHRDATA_OBSM_3D_LAYER_PREFIX,
     EHRDATA_OBSM_3D_X_KEY,
     EHRDATA_ONDISK_VERSION,
@@ -88,8 +89,13 @@ def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:
 
 
 def _check_020_ehrdata_on_disk_format(f: Any) -> bool:
-    """Return True iff the file/store carries the ehrdata 0.2.0 on-disk stamp."""
-    return (
-        f.attrs.get(EHRDATA_ENCODING_TYPE_KEY) == EHRDATA_ENCODING_TYPE
-        and f.attrs.get(EHRDATA_ONDISK_VERSION_KEY) == EHRDATA_ONDISK_VERSION
+    """Return True iff the file/store carries the ehrdata 0.2.0 on-disk stamp.
+
+    The type stamp lives under a different key per format (zarr uses ``encoding-type``, h5ed uses the
+    namespaced ``ehrdata-encoding-type``), so either key identifies an ehrdata store here.
+    """
+    stamped_as_ehrdata = EHRDATA_ENCODING_TYPE in (
+        f.attrs.get(EHRDATA_ENCODING_TYPE_KEY_ZARR),
+        f.attrs.get(EHRDATA_ENCODING_TYPE_KEY),
     )
+    return stamped_as_ehrdata and f.attrs.get(EHRDATA_ONDISK_VERSION_KEY) == EHRDATA_ONDISK_VERSION

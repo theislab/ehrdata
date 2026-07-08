@@ -15,7 +15,12 @@ DEFAULT_TEM_LAYER_NAME = "tem_data"
 # EHRData stores time-series as 3D arrays in `X`/`layers`, but anndata only guarantees 2D arrays there (https://github.com/scverse/anndata/issues/2430) and enforces this since release 0.13.0
 # Since storage version 0.2.0 (ehrdata release 0.3.0), 3D arrays are relocated into the reserved `.obsm` keys below on write and restored on read.
 # Bump only when the on-disk layout changes.
+#
+# The attribute key that stamps a store as ehrdata differs by format, on purpose:
+# - h5ed writes the anndata payload at the file root, where anndata already claims `encoding-type = "anndata"`, so ehrdata must namespace its stamp as `ehrdata-encoding-type`.
+# - zarr nests the anndata payload in a subgroup, leaving the store root's `encoding-type` free for ehrdata to claim as a natural sibling of anndata's own `encoding-type = "anndata"`.
 EHRDATA_ENCODING_TYPE_KEY = "ehrdata-encoding-type"
+EHRDATA_ENCODING_TYPE_KEY_ZARR = "encoding-type"
 EHRDATA_ENCODING_TYPE = "ehrdata"
 EHRDATA_ONDISK_VERSION_KEY = "ehrdata-encoding-version"
 EHRDATA_ONDISK_VERSION = "0.2.0"

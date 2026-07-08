@@ -135,7 +135,6 @@ def test_write_read_zarr_basic(edata_name, chunks, request, tmp_path):
     # check the test file is an ehrdata zarr store
     store = zarr.open(store_path)
     assert store.attrs["encoding-type"] == "ehrdata"
-    assert store.attrs["ehrdata-encoding-type"] == "ehrdata"
     assert store.attrs["ehrdata-encoding-version"] == EHRDATA_ONDISK_VERSION
 
     # check success of convert_strings_to_categoricals
@@ -166,7 +165,6 @@ def test_write_zarr_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
     assert "_ed_ondisk_layers_tem_data" in store["anndata"]["obsm"]
     assert "tem_data" not in store["anndata"]["layers"]
     assert store.attrs["encoding-type"] == "ehrdata"
-    assert store.attrs["ehrdata-encoding-type"] == "ehrdata"
     assert store.attrs["ehrdata-encoding-version"] == str(EHRDATA_ONDISK_VERSION)
 
     edata_read = read_zarr(path)

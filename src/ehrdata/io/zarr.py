@@ -11,7 +11,7 @@ import zarr
 from ehrdata._feature_types import _harmonize_on_read
 from ehrdata.core.constants import (
     EHRDATA_ENCODING_TYPE,
-    EHRDATA_ENCODING_TYPE_KEY,
+    EHRDATA_ENCODING_TYPE_KEY_ZARR,
     EHRDATA_ONDISK_VERSION,
     EHRDATA_ONDISK_VERSION_KEY,
 )
@@ -55,12 +55,12 @@ def read_zarr(
 
     f = filename if isinstance(filename, zarr.Group) else zarr.open(filename, mode="r")
 
-    # on-disk format 0.0.1 used "encoding-type" as anndata calls it, while on-disk format 0.2.0 uses "ehrdata-encoding-type" to be in sync with the h5ed style
-    if ("encoding-type" not in f.attrs) and ("ehrdata-encoding-type" not in f.attrs):
-        err = "The zarr store does not contain one of the required encoding-type or ehrdata-encoding-type attributes."
+    if EHRDATA_ENCODING_TYPE_KEY_ZARR not in f.attrs:
+        err = f"The zarr store does not contain the required '{EHRDATA_ENCODING_TYPE_KEY_ZARR}' attribute."
         raise ValueError(err)
 
-    if f.attrs["encoding-type"] == "ehrdata":
+    encoding_type = f.attrs[EHRDATA_ENCODING_TYPE_KEY_ZARR]
+    if encoding_type == EHRDATA_ENCODING_TYPE:
         if "anndata" in f:
             dictionary_for_init = {
                 k: ad.io.read_elem(f["anndata"][k]) for k, v in dict(f["anndata"]).items() if not k.startswith("raw.")
@@ -73,11 +73,11 @@ def read_zarr(
         else:
             warnings.warn("The zarr store does not contain the 'tem' group.", stacklevel=2)
 
-    elif f.attrs["encoding-type"] == "anndata":
+    elif encoding_type == "anndata":
         dictionary_for_init = {k: ad.io.read_elem(f[k]) for k, v in dict(f).items() if not k.startswith("raw.")}
 
     else:
-        err = f"Unkown encoding-type '{f.attrs['encoding-type']}'."
+        err = f"Unknown encoding-type '{encoding_type}'."
         raise ValueError(err)
 
     if _check_020_ehrdata_on_disk_format(f):
@@ -177,5 +177,5 @@ def write_zarr(
 
     ad.io.write_elem(store, "tem", edata.tem)
 
-    store.attrs[EHRDATA_ENCODING_TYPE_KEY] = EHRDATA_ENCODING_TYPE
+    store.attrs[EHRDATA_ENCODING_TYPE_KEY_ZARR] = EHRDATA_ENCODING_TYPE
     store.attrs[EHRDATA_ONDISK_VERSION_KEY] = EHRDATA_ONDISK_VERSION
