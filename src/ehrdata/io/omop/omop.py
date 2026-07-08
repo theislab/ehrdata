@@ -503,7 +503,10 @@ def setup_variables(
                     how="left",
                     left_on="unit_concept_id",
                     right_on="concept_id",
-                    suffixes=("", "_unit"),
+                    # distinct from the unit_report merge above (which already added `*_unit`
+                    # columns); a second `_unit` suffix would collide on `concept_id_unit`, which
+                    # pandas >=3.0 rejects with a MergeError.
+                    suffixes=("", "_unit_concept"),
                 )
 
         if instantiate_tensor:

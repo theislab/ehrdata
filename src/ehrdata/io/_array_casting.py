@@ -1,13 +1,38 @@
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pandas as pd
+
+from ehrdata._feature_types import _detect_feature_type
+from ehrdata._logger import logger
+from ehrdata.core.constants import NUMERIC_TAG
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
-from ehrdata._logger import logger
+
+
+def _recover_numeric_columns(arr: np.ndarray) -> np.ndarray:
+    """Return ``arr`` as an object array with each variable column ehrdata infers as numeric cast to float.
+
+    Which columns are numeric is decided by ehrdata's feature-type inference
+    (:func:`~ehrdata._feature_types._detect_feature_type`) rather than an ad-hoc float cast, so dates
+    and non-numeric categoricals are left untouched. A fresh object array is built so columns can
+    independently hold floats: numpy 2 / pandas 3 read string data back as a homogeneous
+    ``StringDType`` array, into which an in-place ``astype(float64)`` assignment would merely
+    re-stringify the values.
+    """
+    out = np.asarray(arr, dtype=object).copy()
+    for column in range(out.shape[1]):
+        col = pd.Series(np.asarray(out[:, column]).reshape(-1))
+        try:
+            feature_type, _ = _detect_feature_type(col, binary_as="numeric")
+        except ValueError:
+            continue  # e.g. an all-missing column: nothing to recover
+        if feature_type == NUMERIC_TAG:
+            out[:, column] = out[:, column].astype(np.float64)
+    return out
 
 
 def _cast_variables_to_float(edata: EHRData) -> None:
@@ -17,15 +42,11 @@ def _cast_variables_to_float(edata: EHRData) -> None:
         raise ValueError(msg)
 
     if edata.X is not None and not np.issubdtype(edata.X.dtype, np.number):
-        for column in range(edata.shape[1]):
-            with contextlib.suppress(ValueError):
-                edata.X[:, column] = edata.X[:, column].astype(np.float64)
+        edata.X = _recover_numeric_columns(edata.X)
 
     for key in edata.layers:
         if edata.layers[key] is not None and not np.issubdtype(edata.layers[key].dtype, np.number):
-            for column in range(edata.shape[1]):
-                with contextlib.suppress(ValueError):
-                    edata.layers[key][:, column] = edata.layers[key][:, column].astype(np.float64)
+            edata.layers[key] = _recover_numeric_columns(edata.layers[key])
 
 
 def _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata: EHRData) -> EHRData:

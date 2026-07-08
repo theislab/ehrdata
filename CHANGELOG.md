@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning][].
 ### Fixed
 - {func}`~ehrdata.infer_feature_types` can handle `EHRData` objects with `X` as `None`. ([#246](https://github.com/theislab/ehrdata/pull/246)) @sueoglu
  - {func}`~ehrdata.dt.physionet2019` no longer raises a shape mismatch on the full dataset: persons whose dynamic measurements all fall outside the observation window are now padded with missing values instead of being dropped from the time series tensor. ([#251](https://github.com/theislab/ehrdata/issues/251)) @eroell
+ - `ehrdata.io.omop.setup_variables` no longer raises `pandas.errors.MergeError` on `pandas>=3.0` when `enrich_var_with_feature_info` and `enrich_var_with_unit_info` are both set: the unit-concept merge used a distinct suffix so it no longer collides with the unit report's `concept_id_unit` column. @eroell
+ - Reading non-numeric arrays from `.zarr`/`.h5ed` again recovers numeric variable columns to float on `numpy>=2`/`pandas>=3` (where string data reads back as a homogeneous `StringDType` array that cannot hold floats in place); numeric columns are now identified via ehrdata's feature-type inference. @eroell
 
 ### Maintenance
  - CI now caches downloaded datasets used by `ehrdata.dt` to reduce flaky upstream hosts (e.g. physionet.org) breaking the test and notebook workflows. ([#250](https://github.com/theislab/ehrdata/pull/250)) @eroell
