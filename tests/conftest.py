@@ -14,6 +14,34 @@ from ehrdata.dt import mimic_iv_omop
 from ehrdata.io.omop import setup_connection
 
 
+def _anndata_allows_nd_x() -> bool:
+    import warnings
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ad.AnnData(np.zeros((1, 1, 1), dtype=float))
+    except ValueError:
+        return False
+    return True
+
+
+# Does AnnData allow a 3D ``X`` in memory; <0.13 raises at construction, so 3D-``X`` tests are skipped for lower anndata version.
+_ANNDATA_ALLOWS_ND_X = _anndata_allows_nd_x()
+
+
+def _anndata_has_acc() -> bool:
+    try:
+        from anndata.acc import A  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+# Does anndata expose the ``acc`` accessor references (``A.X[:, k]``); added in 0.13, absent below.
+_ANNDATA_HAS_ACC = _anndata_has_acc()
+
+
 def _assert_shape_matches(
     edata: EHRData,
     shape: tuple[int, int, int],

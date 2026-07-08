@@ -3,7 +3,11 @@ from functools import singledispatch
 
 import numpy as np
 import pandas as pd
-from anndata.compat import Index
+
+try:  # anndata 0.13: aliases moved to anndata.typing
+    from anndata.typing import Index
+except ImportError:
+    from anndata.compat import Index
 
 
 @singledispatch

@@ -17,15 +17,27 @@ def _cast_variables_to_float(edata: EHRData) -> None:
         raise ValueError(msg)
 
     if edata.X is not None and not np.issubdtype(edata.X.dtype, np.number):
-        for column in range(edata.shape[1]):
+        # sparse arrays will never enter this branch since they are numeric
+        out = edata.X.astype(
+            object
+        ).copy()  # A fresh object array is built so columns can independently hold floats: numpy 2 / pandas 3 read string data back as a homogeneous ``StringDType`` array, into which an in-place ``astype(float64)`` assignment would merely re-stringify the values.
+
+        for column in range(out.shape[1]):
             with contextlib.suppress(ValueError):
-                edata.X[:, column] = edata.X[:, column].astype(np.float64)
+                out[:, column] = out[:, column].astype(np.float64)
+
+        edata.X = out
 
     for key in edata.layers:
         if edata.layers[key] is not None and not np.issubdtype(edata.layers[key].dtype, np.number):
-            for column in range(edata.shape[1]):
+            # sparse arrays will never enter this branch since they are numeric
+            out = edata.X.astype(object).copy()
+
+            for column in range(out.shape[1]):
                 with contextlib.suppress(ValueError):
-                    edata.layers[key][:, column] = edata.layers[key][:, column].astype(np.float64)
+                    out[:, column] = out[:, column].astype(np.float64)
+
+            edata.layers[key] = out
 
 
 def _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata: EHRData) -> EHRData:
