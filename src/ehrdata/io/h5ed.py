@@ -9,9 +9,15 @@ import h5py
 
 from ehrdata._feature_types import _harmonize_on_read
 from ehrdata._logger import logger
-from ehrdata.core.constants import EHRDATA_ENCODING_TYPE, EHRDATA_OBSM_3D_X_KEY, EHRDATA_ONDISK_VERSION
+from ehrdata.core.constants import (
+    EHRDATA_ENCODING_TYPE,
+    EHRDATA_ENCODING_TYPE_KEY,
+    EHRDATA_OBSM_3D_X_KEY,
+    EHRDATA_ONDISK_VERSION,
+    EHRDATA_ONDISK_VERSION_KEY,
+)
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
-from ehrdata.io._ondisk import _layer_for_obsm_key, decode_init_dict, encode_for_disk
+from ehrdata.io._ondisk import _check_020_ehrdata_on_disk_format, _layer_for_obsm_key, decode_init_dict, encode_for_disk
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
@@ -39,7 +45,9 @@ def read_h5ed(
 ) -> EHRData:
     """Read an ehrdata hdf5 file (`.h5ed`) into an :class:`~ehrdata.EHRData` object.
 
-    Also reads plain anndata `.h5ad` files.
+    Also can read plain anndata `.h5ad` files.
+
+    Detail information for power users:
     3D arrays are restored to `X`/`layers` whether they were relocated into `.obsm` (ehrdata v2 format) or stored directly in `X`/`layers` (legacy ehrdata files or anndata files that still contain higher-dimensional arrays).
     A file storing a 3D `X` (rather than 3D layers) can only be read on anndata >=0.13, which permits a >2D `X` in memory.
 
@@ -95,6 +103,11 @@ def read_h5ed(
         with h5py.File(filename, "r") as f:
             tem = ad.io.read_elem(f["tem"]) if "tem" in f else None
 
+            if (_check_020_ehrdata_on_disk_format(f) and EHRDATA_OBSM_3D_X_KEY in f["obsm"]) or any(
+                k.startswith("_ed_ondisk_layers_") for k in f["obsm"]
+            ):
+                msg_0 = "Backed reading of .h5ed files with 3D arrays is not supported. Please open an issue on GitHub if you need this feature."
+                raise NotImplementedError(msg_0)
             edata = EHRData.from_adata(adata, tem=tem)
 
         _restore_3d_from_obsm_backed(edata)
@@ -117,10 +130,12 @@ def write_h5ed(
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to an ehrdata hdf5 file (`.h5ed`).
 
-    `.h5ed` is the ehrdata on-disk format, marking it distinct from anndata's `.h5ad`.
+    `.h5ed` is the ehrdata on-disk format.
     To write the file, `X` and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a string dtype.
-    3D arrays are relocated into `.obsm` on write and restored by :func:`~ehrdata.io.read_h5ed` on read (see `ehrdata.io._ondisk`).
+
+    Detail for power users:
+    3D arrays are relocated into `.obsm` on write and restored by :func:`~ehrdata.io.read_h5ed` on read.
 
     Args:
         edata: Central data object.
@@ -146,8 +161,8 @@ def write_h5ed(
     with h5py.File(filename, "a") as f:
         ad.io.write_elem(f, "tem", edata.tem)
         # Identify the file as ehrdata, namespaced to not clash with anndata's own encoding attrs.
-        f.attrs["ehrdata-encoding-type"] = EHRDATA_ENCODING_TYPE
-        f.attrs["ehrdata-encoding-version"] = str(EHRDATA_ONDISK_VERSION)
+        f.attrs[EHRDATA_ENCODING_TYPE_KEY] = EHRDATA_ENCODING_TYPE
+        f.attrs[EHRDATA_ONDISK_VERSION_KEY] = str(EHRDATA_ONDISK_VERSION)
 
 
 def read_h5ad(

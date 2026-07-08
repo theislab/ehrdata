@@ -87,3 +87,11 @@ def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:
         init["layers"] = layers
 
     return init
+
+
+def _check_020_ehrdata_on_disk_format(f: Any) -> bool:
+    """Return True if the file is a ehrdata 0.2.0 on-disk layout, False otherwise.
+
+    The v0.2.0 layout is self-describing: it has the reserved ``.obsm`` keys for relocated 3D arrays.
+    """
+    return f.attrs.get("ehrdata-encoding-type") == "ehrdata" and f.attrs.get("ehrdata-encoding-version") == "0.2.0"

@@ -13,7 +13,8 @@ from tests.conftest import (
     _assert_shape_matches,
 )
 
-from ehrdata.io import read_h5ed, write_h5ed
+from ehrdata import EHRData
+from ehrdata.io import read_h5ad, read_h5ed, write_h5ad, write_h5ed
 
 TEST_PATH_H5AD = TEST_DATA_PATH / "toy_h5ad"
 
@@ -216,7 +217,6 @@ def test_read_h5ed_legacy_v1_with_3d_in_layers(edata_333, tmp_path):
 @pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
 def test_write_read_h5ed_3d_X_relocated_to_obsm(tmp_path):
     # a 3D X is relocated to the reserved `_ed_ondisk_X` obsm key (and dropped from X) on write, and restored to a 3D X on read.
-    from ehrdata import EHRData
 
     X3 = np.arange(2 * 3 * 4).reshape(2, 3, 4).astype(float)
     edata = EHRData(X=X3)
@@ -258,7 +258,6 @@ def test_read_h5ed_accepts_3d_X_directly_on_disk(tmp_path):
 
 def test_h5ad_io_aliases_are_deprecated(edata_333, tmp_path):
     # `read_h5ad`/`write_h5ad` remain as deprecated aliases of the `.h5ed` API and still work.
-    from ehrdata.io import read_h5ad, write_h5ad
 
     path = tmp_path / "edata_alias.h5ed"
     with pytest.warns(DeprecationWarning, match="write_h5ed"):

@@ -1,4 +1,5 @@
 import anndata as ad
+import numpy as np
 import pandas as pd
 import pytest
 import zarr
@@ -155,7 +156,6 @@ def test_write_zarr_chunks_error(edata_333, tmp_path):
 
 
 def test_write_zarr_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
-    import numpy as np
 
     # ehrdata writes the v2 layout: 3D arrays move into .obsm so anndata's 2D-only spec is respected.
     path = tmp_path / "edata_333.ehrdata.zarr"
@@ -175,7 +175,6 @@ def test_write_zarr_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
 
 
 def test_write_read_zarr_X_none_with_3d_layer(edata_330, tmp_path):
-    import numpy as np
 
     # X=None is a first-class state (encode_for_disk drops a None X); reading it with harmonization on (the default) must not crash on the None X.
     edata = edata_330.copy()
@@ -194,7 +193,6 @@ def test_write_read_zarr_X_none_with_3d_layer(edata_330, tmp_path):
 
 @pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
 def test_write_read_zarr_3d_X_relocated_to_obsm(tmp_path):
-    import numpy as np
 
     from ehrdata import EHRData
 

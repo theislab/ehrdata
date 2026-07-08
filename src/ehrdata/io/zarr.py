@@ -9,7 +9,12 @@ import anndata as ad
 import zarr
 
 from ehrdata._feature_types import _harmonize_on_read
-from ehrdata.core.constants import EHRDATA_ENCODING_TYPE, EHRDATA_ONDISK_VERSION
+from ehrdata.core.constants import (
+    EHRDATA_ENCODING_TYPE,
+    EHRDATA_ENCODING_TYPE_KEY,
+    EHRDATA_ONDISK_VERSION,
+    EHRDATA_ONDISK_VERSION_KEY,
+)
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
 from ehrdata.io._ondisk import decode_init_dict, encode_for_disk
 
@@ -171,5 +176,5 @@ def write_zarr(
     ad.io.write_elem(store, "tem", edata.tem)
 
     # Identify the store as ehrdata (read_zarr dispatches on encoding-type; the version is informational).
-    store.attrs["encoding-type"] = EHRDATA_ENCODING_TYPE
-    store.attrs["encoding-version"] = str(EHRDATA_ONDISK_VERSION)
+    store.attrs[EHRDATA_ENCODING_TYPE_KEY] = EHRDATA_ENCODING_TYPE
+    store.attrs[EHRDATA_ONDISK_VERSION_KEY] = str(EHRDATA_ONDISK_VERSION)

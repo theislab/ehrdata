@@ -16,8 +16,10 @@ DEFAULT_TEM_LAYER_NAME = "tem_data"
 # Since version 2, 3D arrays are relocated into the reserved `.obsm` keys below on write and restored on read.
 # The layout is self-describing, so reads detect it by key presence, not by this stamped version.
 # Bump only when the on-disk layout changes.
-EHRDATA_ONDISK_VERSION = 2
+EHRDATA_ENCODING_TYPE_KEY = "ehrdata-encoding-type"
 EHRDATA_ENCODING_TYPE = "ehrdata"
+EHRDATA_ONDISK_VERSION_KEY = "ehrdata-encoding-version"
+EHRDATA_ONDISK_VERSION = "0.2.0"
 
 # Reserved `.obsm` keys holding a 3D `X` / a 3D layer `<name>` on disk.
 EHRDATA_OBSM_3D_X_KEY = "_ed_ondisk_X"
