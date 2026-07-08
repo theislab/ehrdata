@@ -30,6 +30,18 @@ def _anndata_allows_nd_x() -> bool:
 _ANNDATA_ALLOWS_ND_X = _anndata_allows_nd_x()
 
 
+def _anndata_has_acc() -> bool:
+    try:
+        from anndata.acc import A  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+# Does anndata expose the ``acc`` accessor references (``A.X[:, k]``); added in 0.13, absent below.
+_ANNDATA_HAS_ACC = _anndata_has_acc()
+
+
 def _assert_shape_matches(
     edata: EHRData,
     shape: tuple[int, int, int],

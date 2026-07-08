@@ -40,6 +40,13 @@ try:  # anndata 0.13: view indices wrapped in IndexManager (materialised in _sub
 except ImportError:  # anndata <0.13 has no IndexManager; isinstance(x, ()) is always False, so nothing converts
     _INDEX_MANAGER_TYPES = ()
 
+try:  # anndata 0.13: accessor references (A.X[:, k], A.obs[k], …) resolve to arrays, not slices
+    from anndata.acc import AdRef, MapAcc, RefAcc
+
+    _ACCESSOR_INDEX_TYPES: tuple[type, ...] = (AdRef, RefAcc, MapAcc)
+except ImportError:  # anndata <0.13 has no accessor references
+    _ACCESSOR_INDEX_TYPES = ()
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from os import PathLike
@@ -490,6 +497,11 @@ class EHRData(AnnData):
         Returns:
             An EHRData view object.
         """
+        # anndata 0.13: an accessor ref (e.g. A.X[:, k]) resolves to an array via AnnData;
+        # forward it instead of treating it as an obs/var/t slice, so obs_vector/var_vector work.
+        if _ACCESSOR_INDEX_TYPES and isinstance(index, _ACCESSOR_INDEX_TYPES):
+            return super().__getitem__(index)
+
         oidx, vidx, tidx = self._unpack_index(index)
 
         adata_sliced = super().__getitem__((oidx, vidx))

@@ -4,7 +4,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
-from tests.conftest import _ANNDATA_ALLOWS_ND_X, _assert_shape_matches
+from tests.conftest import _ANNDATA_ALLOWS_ND_X, _ANNDATA_HAS_ACC, _assert_shape_matches
 
 from ehrdata import EHRData
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
@@ -504,6 +504,33 @@ def test_ehrdata_subset_obsvar_names_repeated(edata_333):
     assert np.array_equal(
         edata_a.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][:, 2, :].reshape(3, -1, 3)
     )
+
+
+@pytest.mark.skipif(not _ANNDATA_HAS_ACC, reason="anndata <0.13 has no accessor references")
+def test_ehrdata_getitem_forwards_accessor_ref(X_numpy_32, obs_31, var_21):
+    """An anndata 0.13+ accessor ref (``A.X[:, k]``) must resolve to an array, not a slice.
+
+    ``EHRData.__getitem__`` has to forward accessor refs to ``AnnData`` rather than treating
+    them as an obs/var/t index; otherwise ``obs_vector``/``var_vector`` (used e.g. by scanpy
+    plotting) raise ``IndexError: Unknown indexer ... of type <class 'anndata.acc.AdRef'>``.
+    """
+    from anndata.acc import A
+
+    edata = EHRData(X=X_numpy_32, obs=obs_31, var=var_21)
+    expected = np.asarray(edata.X)[:, 0]
+
+    # Direct accessor indexing returns the column as an array, not a sliced EHRData.
+    result = edata[A.X[:, "var1"]]
+    assert not isinstance(result, EHRData)
+    np.testing.assert_array_equal(np.asarray(result).ravel(), expected)
+
+    # obs_vector (deprecated in favor of the accessor) goes through the same machinery.
+    with pytest.warns(FutureWarning):
+        obs_vec = edata.obs_vector("var1")
+    np.testing.assert_array_equal(np.asarray(obs_vec).ravel(), expected)
+
+    # Regular slicing must still return an EHRData view.
+    assert isinstance(edata[:, ["var1"]], EHRData)
 
 
 def test_ehrdata_subset_boolindex_vanilla(edata_333):
