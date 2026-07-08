@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+<!--
+anndata 0.13.0 has been released and is now supported.
+The anndata 0.13.0 release notes are worth a look: https://anndata.scverse.org/en/stable/release-notes/index.html#v0-13-0
+-->
+
 ### Added
  - {func}`~ehrdata.io.read_h5ed` and {func}`~ehrdata.io.write_h5ed` are the new primary HDF5 I/O functions: `.h5ed` is now ehrdata's on-disk format, marking it distinct from anndata's `.h5ad`. `read_h5ad` and `write_h5ad` remain as deprecated aliases. ([#252](https://github.com/theislab/ehrdata/pull/252)) @eroell
  - {func}`~ehrdata.io.write_h5ed` and {func}`~ehrdata.io.write_zarr` now write the ehrdata on-disk encoding 0.2.0. Because AnnData only guarantees 2D but not 3D arrays in `X`/`layers` (see [scverse/anndata#2430](https://github.com/scverse/anndata/issues/2430)), 3D arrays are relocated into `.obsm` (under reserved `_ed_ondisk_X` / `_ed_ondisk_layers_<name>` keys) and dropped from `X`/`layers` on write, then restored on read. Backwards compatibility for reading is maintained. The recommended file extensions for `hdf5` are now `.h5ed`. ([#252](https://github.com/theislab/ehrdata/pull/252)) @eroell

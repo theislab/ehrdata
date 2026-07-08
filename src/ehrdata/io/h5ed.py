@@ -124,7 +124,7 @@ def write_h5ed(
         filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
         compression: Optional file compression.
             Setting compression to 'gzip' can save disk space but will slow down writing and subsequent reading.
-        compression_opts: See http://docs.h5py.org/en/latest/high/dataset.html.
+        compression_opts: For [`lzf`, `gzip`], see the h5py :ref:`dataset_compression`.
 
     Examples:
         >>> import ehrdata as ed
