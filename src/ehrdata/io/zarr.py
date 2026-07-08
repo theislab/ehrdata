@@ -8,10 +8,15 @@ from typing import TYPE_CHECKING, Any, Literal
 import anndata as ad
 import zarr
 
-import ehrdata as ed
-from ehrdata._logger import logger
-from ehrdata.core.constants import EHRDATA_ZARR_ENCODING_VERSION
+from ehrdata._feature_types import _harmonize_on_read
+from ehrdata.core.constants import (
+    EHRDATA_ENCODING_TYPE,
+    EHRDATA_ENCODING_TYPE_KEY_ZARR,
+    EHRDATA_ONDISK_VERSION,
+    EHRDATA_ONDISK_VERSION_KEY,
+)
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
+from ehrdata.io._ondisk import _check_020_ehrdata_on_disk_format, decode_init_dict, encode_for_disk
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -50,11 +55,12 @@ def read_zarr(
 
     f = filename if isinstance(filename, zarr.Group) else zarr.open(filename, mode="r")
 
-    if "encoding-type" not in f.attrs:
-        err = "The zarr store does not contain an encoding-type attribute."
+    if EHRDATA_ENCODING_TYPE_KEY_ZARR not in f.attrs:
+        err = f"The zarr store does not contain the required '{EHRDATA_ENCODING_TYPE_KEY_ZARR}' attribute."
         raise ValueError(err)
 
-    if f.attrs["encoding-type"] == "ehrdata":
+    encoding_type = f.attrs[EHRDATA_ENCODING_TYPE_KEY_ZARR]
+    if encoding_type == EHRDATA_ENCODING_TYPE:
         if "anndata" in f:
             dictionary_for_init = {
                 k: ad.io.read_elem(f["anndata"][k]) for k, v in dict(f["anndata"]).items() if not k.startswith("raw.")
@@ -67,22 +73,19 @@ def read_zarr(
         else:
             warnings.warn("The zarr store does not contain the 'tem' group.", stacklevel=2)
 
-    elif f.attrs["encoding-type"] == "anndata":
+    elif encoding_type == "anndata":
         dictionary_for_init = {k: ad.io.read_elem(f[k]) for k, v in dict(f).items() if not k.startswith("raw.")}
 
     else:
-        err = f"Unkown encoding-type '{f.attrs['encoding-type']}'."
+        err = f"Unknown encoding-type '{encoding_type}'."
         raise ValueError(err)
 
+    if _check_020_ehrdata_on_disk_format(f):
+        dictionary_for_init = decode_init_dict(dictionary_for_init)
     edata = EHRData(**dictionary_for_init)
 
     if harmonize_missing_values:
-        ed.harmonize_missing_values(edata)
-        logger.info("Harmonizing missing values of X")
-
-        for key in edata.layers:
-            ed.harmonize_missing_values(edata, layer=key)
-            logger.info(f"Harmonizing missing values of layer {key}")
+        _harmonize_on_read(edata)
 
     if cast_variables_to_float:
         _cast_variables_to_float(edata)
@@ -109,8 +112,9 @@ def write_zarr(
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
-    To write to a `.zarr` file, `X`, and `layers` cannot be written as `object` dtype.
-    If any of these fields is of `object` dtype, it this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
+    To write to a `.zarr` store, `X`, and `layers` cannot be written as `object` dtype.
+    If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
+
 
     Args:
         edata: Central data object.
@@ -121,14 +125,14 @@ def write_zarr(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_2()
-        >>> ed.io.write_zarr("mimic_2.zarr", edata)
+        >>> ed.io.write_zarr("mimic_2.ehrdata.zarr", edata)
     """
     filename = Path(filename)
     edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
 
     store = zarr.open_group(filename, mode="a", use_consolidated=False, zarr_format=3)
 
-    adata = ad.AnnData(edata)
+    adata = encode_for_disk(edata)
 
     if convert_strings_to_categoricals:
         adata.strings_to_categoricals(adata.obs)
@@ -156,13 +160,13 @@ def write_zarr(
                 dataset_kwargs = {"shards": (2**16,), "chunks": (2**8,), **dataset_kwargs}
             func(g, k, elem, dataset_kwargs=dataset_kwargs)
 
-        return ad.experimental.write_dispatched(group, "/", adata, callback=callback)
+        # anndata 0.13 rejects writing with key "/" into a non-root subgroup, so dispatch from the root store under the "anndata" key (matching the chunks="auto" write_elem path).
+        return ad.experimental.write_dispatched(group, "anndata", adata, callback=callback)
 
     if chunks == "auto":
         ad.io.write_elem(store, "anndata", adata)
     elif chunks == "ehrdata_auto":
-        anndata_group = store.create_group("anndata")
-        write_sharded(anndata_group, adata)
+        write_sharded(store, adata)
     else:
         err = (
             f"chunks={chunks} is not implemented. Currently, only chunks='auto' and chunks='ehrdata_auto' is supported."
@@ -171,5 +175,5 @@ def write_zarr(
 
     ad.io.write_elem(store, "tem", edata.tem)
 
-    store.attrs["encoding-version"] = EHRDATA_ZARR_ENCODING_VERSION
-    store.attrs["encoding-type"] = "ehrdata"
+    store.attrs[EHRDATA_ENCODING_TYPE_KEY_ZARR] = EHRDATA_ENCODING_TYPE
+    store.attrs[EHRDATA_ONDISK_VERSION_KEY] = EHRDATA_ONDISK_VERSION

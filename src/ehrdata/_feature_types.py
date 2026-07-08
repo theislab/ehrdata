@@ -317,7 +317,7 @@ def harmonize_missing_values(
 
     # note that every sparse array is of a numeric dtype and will enter this if block
     if np.issubdtype(X.dtype, np.number):
-        logger.warning(f"This operation does not affect numeric layer {'X' if layer is None else layer}.")
+        logger.debug(f"ed.harmonize_missing_values does not affect numeric layer {'X' if layer is None else layer}.")
         return edata if copy else None
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
@@ -330,3 +330,15 @@ def harmonize_missing_values(
         edata.layers[layer] = df.values.reshape(X.shape)
 
     return edata if copy else None
+
+
+def _harmonize_on_read(edata: EHRData) -> None:
+    if edata.X is not None:
+        harmonize_missing_values(edata)
+        logger.info("Harmonizing missing values of X")
+
+    for key in edata.layers:
+        if key is None:  # anndata 0.13: the unified `.X` slot, already harmonized above
+            continue
+        harmonize_missing_values(edata, layer=key)
+        logger.info(f"Harmonizing missing values of layer {key}")

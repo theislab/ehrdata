@@ -503,7 +503,7 @@ def setup_variables(
                     how="left",
                     left_on="unit_concept_id",
                     right_on="concept_id",
-                    suffixes=("", "_unit"),
+                    suffixes=("", "_unit_concept"),
                 )
 
         if instantiate_tensor:

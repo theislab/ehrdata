@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
@@ -23,8 +25,27 @@ from anndata._core.views import (
     _resolve_idx,
     as_view,
 )
-from anndata.compat import Index as ADIndex
-from anndata.compat import Index1D
+
+try:  # anndata 0.13: aliases moved to anndata.typing
+    from anndata.typing import Index as ADIndex
+    from anndata.typing import Index1D
+except ImportError:
+    from anndata.compat import Index as ADIndex
+    from anndata.compat import Index1D
+
+try:  # anndata 0.13: view indices wrapped in IndexManager (materialised in _subset)
+    from anndata.compat import IndexManager as _IndexManager
+
+    _INDEX_MANAGER_TYPES: tuple[type, ...] = (_IndexManager,)
+except ImportError:  # anndata <0.13 has no IndexManager; isinstance(x, ()) is always False, so nothing converts
+    _INDEX_MANAGER_TYPES = ()
+
+try:  # anndata 0.13: accessor references (A.X[:, k], A.obs[k], …) resolve to arrays, not slices
+    from anndata.acc import AdRef, MapAcc, RefAcc
+
+    _ACCESSOR_INDEX_TYPES: tuple[type, ...] = (AdRef, RefAcc, MapAcc)
+except ImportError:  # anndata <0.13 has no accessor references
+    _ACCESSOR_INDEX_TYPES = ()
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -37,19 +58,31 @@ Index = ADIndex | tuple[Index1D, Index1D, Index1D]
 T = TypeVar("T", bound=AlignedMapping)
 
 
+@contextmanager
+def _silence_anndata_nd_warning():
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=r".*must be 2-dimensional.*", category=UserWarning)
+        yield
+
+
 def _validate_layers_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
-    if obj.n_t > 1 and _get_layers_3d_dim(value) != obj.n_t:
+    # `n_t` is transiently None while the X setter runs
+    if obj.n_t is not None and obj.n_t > 1 and _get_layers_3d_dim(value) != obj.n_t:
         msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
         raise ValueError(msg)
 
 
 def _validate_array_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
-    if obj.n_t > 1 and _get_array_3d_dim(value) > 1 and _get_array_3d_dim(value) != obj.n_t:
+    # `n_t` is transiently None while the X setter runs.
+    if obj.n_t is not None and obj.n_t > 1 and _get_array_3d_dim(value) > 1 and _get_array_3d_dim(value) != obj.n_t:
         msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
         raise ValueError(msg)
 
 
 def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
+    # anndata 0.13: IndexManager isn't Iterable — materialise it so the np.ix_ branches below select by index combination (outer product), not coordinate pairs.
+    if isinstance(subset_idx, tuple):
+        subset_idx = tuple(np.asarray(x) if isinstance(x, _INDEX_MANAGER_TYPES) else x for x in subset_idx)
     # Select as combination of indexes, not coordinates
     # Correcting for indexing behaviour of np.ndarray
     if (len(subset_idx) == 2 and all(isinstance(x, Iterable) for x in subset_idx)) or (
@@ -66,7 +99,11 @@ def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
 class AlignedActual3D(AlignedActual):
     """AlignedActual for 3D data."""
 
-    def __setitem__(self, key: str, value: Value) -> None:
+    def __setitem__(self, key: str | None, value: Value) -> None:
+        # anndata 0.13: key None is the unified `.X` slot; its 3D/n_t/tem bookkeeping is owned by the EHRData.X setter, so just store it (the base class also runs anndata's 2D-spec warning).
+        if key is None:
+            super().__setitem__(key, value)
+            return
         _validate_array_3d(self.parent, value)
         self.parent._n_t = max(self.parent._n_t, _get_array_3d_dim(value))
         # only if the new aligned object is not 1 anymore and the original object was, create a new minimal tem
@@ -78,25 +115,35 @@ class AlignedActual3D(AlignedActual):
 class Layers3D(AlignedActual3D, Layers):
     """Layers for 3D data."""
 
+    def _validate_value(self, val: Value, key: str | None) -> Value:
+        with _silence_anndata_nd_warning():
+            return super()._validate_value(val, key)
+
 
 class AlignedView3D(AlignedView):
     """AlignedView for 3D data."""
 
     def __getitem__(self, key: str | None) -> Value:
-        # The None key represents .X under anndata's "Unify X and layers" change.
-        # Defer to the base class so its None-handling (including is_none_backed) applies.
-        if key is None:
-            return super().__getitem__(key)
-        # this is a hack to allow __getitem to work for 2D and 3D data
-        subset_idx = self.subset_idx[:2] if self.parent_mapping[key].ndim == 2 else self.subset_idx
+        # anndata 0.13: key None is the unified `.X` slot, None when X is unset.
+        elem = self.parent_mapping[key]
+        if elem is None:
+            return None
+        # 2D arrays (`.X` and 2D layers) index on the first two axes; 3D layers index on all three.
+        subset_idx = self.subset_idx if getattr(elem, "ndim", 2) == 3 else self.subset_idx[:2]
         return as_view(
-            _subset(self.parent_mapping[key], subset_idx),
+            _subset(elem, subset_idx),
             ElementRef(self.parent, self.attrname, (key,)),
         )
 
 
 class LayersView3D(AlignedView3D, LayersBase):
     """LayersView for 3D data."""
+
+    def __init__(self, parent_mapping: LayersBase, parent_view: AnnData, subset_idx: Any) -> None:
+        super().__init__(parent_mapping, parent_view, subset_idx)
+        # anndata 0.13: X delegates `isbacked` to the layers store, so mirror anndata's own LayersView and expose it on 3D layer views too (absent on <0.13, hence the guard).
+        if hasattr(parent_mapping, "isbacked"):
+            self.isbacked = parent_mapping.isbacked
 
 
 # overwrite the view class of LayersBase allows to use the required __getitem__ method of AlignedView3D
@@ -317,11 +364,11 @@ class EHRData(AnnData):
             if tem is not None:
                 instance.tem = tem
 
-            # This is a workaround to ensure an EHRData object created from an AnnData object with backed X is has edata.isbacked == True.
-            # Reason: AnnData's _init_as_actual sets _X = X (which in the backed case is an h5py.Dataset object) regardless of whether it is backed or not.
-            # However, adata.isbacked (which edata inherits) requires _X to be None to return True.
+            # Make a backed-reconstructed EHRData report `isbacked == True` so X is read from disk.
+            # `isbacked` requires the materialised X to be absent: from the layers store on anndata 0.13 (X is `layers[None]`) and from the `_X` slot on <0.13.
+            # Each line no-ops on the other.
             if adata.isbacked:
-                # self._X can be safely set to None since it is backed (https://github.com/scverse/anndata/blob/4a62c2e3128b950e7d699506b91d8e572da20a96/src/anndata/_core/anndata.py#L1051C15-L1051C17)
+                instance._layers.pop(None, None)
                 instance._X = None
 
         return instance
@@ -363,11 +410,9 @@ class EHRData(AnnData):
 
     @X.setter
     def X(self, value):
-        # When this is a view whose parent has no X (parent._X is None), AnnData's
-        # setter tries to write into None and raises TypeError. Materialise the view
-        # first so the assignment lands on a real object, matching the behaviour for
-        # other fields (obs, var, …) on X-less views.
-        if self.is_view and self._adata_ref is not None and self._adata_ref._X is None:
+        # On a view whose parent has no X, AnnData's setter writes into None and raises TypeError.
+        # Materialise the view first so the assignment lands on a real object, as for obs/var on X-less views.
+        if self.is_view and self._adata_ref is not None and self._adata_ref.X is None:
             self._init_as_actual(self.copy())
 
         # Validate that a 3D X's trailing axis is consistent with the existing n_t,
@@ -378,7 +423,8 @@ class EHRData(AnnData):
         # this is a bit hacky, but anndata checks its own shape to match the shape of X
         self._n_t = None  # type: ignore
 
-        super(EHRData, self.__class__).X.fset(self, value)
+        with _silence_anndata_nd_warning():
+            super(EHRData, self.__class__).X.fset(self, value)
 
         self._n_t = new_n_t
 
@@ -415,6 +461,14 @@ class EHRData(AnnData):
             if "obs:" in line or "var:" in line:
                 position_of_t += 1
 
+            # clean repr with anndata >=0.13 storing `.X` as the `None`-keyed layer
+            if line.lstrip().startswith("layers:"):
+                real_layers = [key for key in self.layers if key is not None]
+                if not real_layers:
+                    continue
+                indent = line[: len(line) - len(line.lstrip())]
+                line = f"{indent}layers: {str(real_layers)[1:-1]}"
+
             lines_ehrdata.append(line)
 
         if not self.tem.empty:
@@ -425,7 +479,9 @@ class EHRData(AnnData):
         shape_info = []
         if self.X is not None:
             shape_info.append(f"shape of .X: {self.X.shape}")
-        shape_info.extend(f"shape of .{layer}: {self.layers[layer].shape}" for layer in self.layers)
+        shape_info.extend(
+            f"shape of .{layer}: {self.layers[layer].shape}" for layer in self.layers if layer is not None
+        )
 
         if shape_info:
             lines_ehrdata.extend(["    " + info for info in shape_info])
@@ -441,6 +497,11 @@ class EHRData(AnnData):
         Returns:
             An EHRData view object.
         """
+        # anndata 0.13: an accessor ref (e.g. A.X[:, k]) resolves to an array via AnnData;
+        # forward it instead of treating it as an obs/var/t slice, so obs_vector/var_vector work.
+        if _ACCESSOR_INDEX_TYPES and isinstance(index, _ACCESSOR_INDEX_TYPES):
+            return super().__getitem__(index)
+
         oidx, vidx, tidx = self._unpack_index(index)
 
         adata_sliced = super().__getitem__((oidx, vidx))

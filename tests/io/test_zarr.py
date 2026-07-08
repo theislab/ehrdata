@@ -1,9 +1,11 @@
 import anndata as ad
+import numpy as np
 import pandas as pd
 import pytest
 import zarr
 from scipy.sparse import issparse
 from tests.conftest import (
+    _ANNDATA_ALLOWS_ND_X,
     TEST_DATA_PATH,
     _assert_dtype_object_array_with_missing_values_equal,
     _assert_io_read,
@@ -11,7 +13,7 @@ from tests.conftest import (
     _check_aligned_anndata_parts_equal,
 )
 
-from ehrdata.core.constants import EHRDATA_ZARR_ENCODING_VERSION
+from ehrdata.core.constants import EHRDATA_ONDISK_VERSION
 from ehrdata.io import read_zarr, write_zarr
 
 TEST_PATH_ZARR = TEST_DATA_PATH / "toy_zarr"
@@ -75,7 +77,8 @@ def test_read_zarr_basic_with_tem(harmonize_missing_values, cast_variables_to_fl
     # check the store is an ehrdata zarr store
     store = zarr.open(TEST_PATH_ZARR / "edata_basic_with_tem.zarr")
     assert store.attrs["encoding-type"] == "ehrdata"
-    assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
+    # legacy committed fixture: written with the old "0.0.1" encoding-version, still readable
+    assert store.attrs["encoding-version"] == "0.0.1"
 
 
 @pytest.mark.parametrize("harmonize_missing_values", [False, True])
@@ -98,7 +101,8 @@ def test_read_zarr_sparse_with_tem(harmonize_missing_values, cast_variables_to_f
     # check the store is an ehrdata zarr store
     store = zarr.open(TEST_PATH_ZARR / "edata_sparse_with_tem.zarr")
     assert store.attrs["encoding-type"] == "ehrdata"
-    assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
+    # legacy committed fixture: written with the old "0.0.1" encoding-version, still readable
+    assert store.attrs["encoding-version"] == "0.0.1"
 
 
 @pytest.mark.parametrize(
@@ -131,7 +135,7 @@ def test_write_read_zarr_basic(edata_name, chunks, request, tmp_path):
     # check the test file is an ehrdata zarr store
     store = zarr.open(store_path)
     assert store.attrs["encoding-type"] == "ehrdata"
-    assert store.attrs["encoding-version"] == EHRDATA_ZARR_ENCODING_VERSION
+    assert store.attrs["ehrdata-encoding-version"] == EHRDATA_ONDISK_VERSION
 
     # check success of convert_strings_to_categoricals
     if "obs_col_2" in edata_read.obs.columns:
@@ -149,3 +153,75 @@ def test_write_zarr_chunks_error(edata_333, tmp_path):
         write_zarr(edata_333, tmp_path / "test.zarr", chunks=1000)
     with pytest.raises(NotImplementedError):
         write_zarr(edata_333, tmp_path / "test.zarr", chunks="foobar")
+
+
+def test_write_zarr_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
+
+    # ehrdata writes the v2 layout: 3D arrays move into .obsm so anndata's 2D-only spec is respected.
+    path = tmp_path / "edata_333.ehrdata.zarr"
+    write_zarr(edata_333.copy(), path)
+
+    store = zarr.open(path)
+    assert "_ed_ondisk_layers_tem_data" in store["anndata"]["obsm"]
+    assert "tem_data" not in store["anndata"]["layers"]
+    assert store.attrs["encoding-type"] == "ehrdata"
+    assert store.attrs["ehrdata-encoding-version"] == str(EHRDATA_ONDISK_VERSION)
+
+    edata_read = read_zarr(path)
+    _assert_shape_matches(edata_read, (3, 3, 3))
+    for key in edata_333.layers:
+        assert np.array_equal(edata_333.layers[key], edata_read.layers[key])
+    assert not any(k.startswith("_ed_ondisk_") for k in edata_read.obsm)
+
+
+def test_write_read_zarr_X_none_with_3d_layer(edata_330, tmp_path):
+
+    # X=None is a first-class state (encode_for_disk drops a None X); reading it with harmonization on (the default) must not crash on the None X.
+    edata = edata_330.copy()
+    edata.layers["tem_data"] = np.arange(3 * 3 * 3).reshape(3, 3, 3).astype(float)
+    edata.X = None
+
+    path = tmp_path / "edata_X_none.ehrdata.zarr"
+    write_zarr(edata.copy(), path)
+
+    edata_read = read_zarr(path)  # harmonize_missing_values=True by default
+    _assert_shape_matches(edata_read, (3, 3, 3), check_X_None=True)
+    assert edata_read.X is None
+    assert np.array_equal(edata.layers["tem_data"], edata_read.layers["tem_data"])
+    assert not any(k.startswith("_ed_ondisk_") for k in edata_read.obsm)
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
+def test_write_read_zarr_3d_X_relocated_to_obsm(tmp_path):
+
+    from ehrdata import EHRData
+
+    # a 3D X is relocated to the reserved `_ed_ondisk_X` obsm key on write and restored on read, without leaking the unified-X None key in as a spurious "layer".
+    X3 = np.arange(2 * 3 * 4).reshape(2, 3, 4).astype(float)
+    path = tmp_path / "edata_3dX.ehrdata.zarr"
+    write_zarr(EHRData(X=X3), path)
+
+    store = zarr.open(path)
+    assert "_ed_ondisk_X" in store["anndata"]["obsm"]
+    assert not any(k.startswith("_ed_ondisk_layers_") for k in store["anndata"]["obsm"])
+
+    edata_read = read_zarr(path, harmonize_missing_values=False, cast_variables_to_float=False)
+    assert edata_read.shape == (2, 3, 4)
+    assert np.array_equal(np.asarray(edata_read.X), X3)
+    assert [k for k in edata_read.layers if k is not None] == []
+
+
+def test_read_minimal_corpus_zarr():
+    # Minimal read-test corpus (zarr half): a "version 0" plain-anndata store (no ehrdata stamp)
+    # and a committed 0.2.0 ehrdata store (relocated 3D layer + stamp) both read correctly.
+    v0 = zarr.open(TEST_PATH_ZARR / "adata_basic.zarr")
+    assert "ehrdata-encoding-version" not in v0.attrs
+    edata_v0 = read_zarr(TEST_PATH_ZARR / "adata_basic.zarr")
+    _assert_shape_matches(edata_v0, (5, 4, 1))
+
+    store_020 = zarr.open(TEST_PATH_ZARR / "edata_minimal_v0_2_0.ehrdata.zarr")
+    assert store_020.attrs["ehrdata-encoding-type"] == "ehrdata"
+    assert store_020.attrs["ehrdata-encoding-version"] == str(EHRDATA_ONDISK_VERSION)
+    edata_020 = read_zarr(TEST_PATH_ZARR / "edata_minimal_v0_2_0.ehrdata.zarr")
+    _assert_shape_matches(edata_020, (3, 2, 2))
+    assert np.array_equal(np.asarray(edata_020.layers["tem_data"]), np.arange(3 * 2 * 2, dtype=float).reshape(3, 2, 2))
