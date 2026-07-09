@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning][].
  - Dataset downloads now use [pooch](https://www.fatiando.org/pooch/) instead of a custom `requests`-based downloader, aligning with the scverse ecosystem and providing caching out of the box. ([#251](https://github.com/theislab/ehrdata/issues/251)) @eroell
  - The `tqdm` dependency has been removed. ([#254](https://github.com/theislab/ehrdata/pull/254)) @eroell
 
+### Documentation
+ - Improve {class}`~ehrdata.EHRData` API documentation. ([#258](https://github.com/theislab/ehrdata/issues/258)) @eroell
+
 ## [0.2.1]
 
 ### Fixed

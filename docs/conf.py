@@ -54,6 +54,11 @@ extensions = [
 
 autosummary_generate = True
 autodoc_member_order = "groupwise"
+autodoc_type_aliases = {
+    "Index": "Index",
+    "Index1D": "Index1D",
+    "XDataType": "XDataType",
+}
 default_role = "literal"
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
