@@ -15,7 +15,7 @@ def skip_member_handler(
     skip: bool,  # noqa: FBT001
     options,
 ) -> bool | None:
-    """Skip inherited members."""
+    """Keep ehrdata members and inherited AnnData attributes; drop inherited methods."""
     if what not in {"method", "attribute", "property"}:
         return None
     if isinstance(obj, property):
@@ -24,11 +24,18 @@ def skip_member_handler(
         return False
     if name.startswith("_"):
         return True
-    if not hasattr(obj, "__module__"):
-        return None
-    if not obj.__module__.startswith("ehrdata"):
+    if name in {"T", "raw"}:
         return True
-    return None
+    module = getattr(obj, "__module__", None)
+    if module is None:
+        return None
+    if module.startswith("ehrdata"):
+        return None
+    if what == "method":
+        return True
+    if module.startswith("anndata"):
+        return None
+    return True
 
 
 def setup(app: Sphinx) -> None:
