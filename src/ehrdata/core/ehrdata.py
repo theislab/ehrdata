@@ -553,7 +553,6 @@ class EHRData(AnnData):
 
     def copy(self) -> EHRData:
         """Returns a copy of the EHRData object."""
-
         with _silence_anndata_nd_warning():
             adata_copy = super().copy()
         return EHRData.from_adata(
