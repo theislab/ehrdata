@@ -407,10 +407,6 @@ class EHRData(AnnData):
     def X(self):
         """Data matrix."""
         X = super().X
-        # AnnData only applies the obs/var indices to `X`. For a 3D `X` on a view, the
-        # time-axis index (`_tidx`) must additionally be applied to the third axis, exactly
-        # as 3D layers are sliced (see `AlignedView3D`). Without this, a sliced `.X` keeps
-        # the parent's full `n_t` while `.shape`/`.tem` already reflect the slice (see #259).
         if X is not None and self.is_view and self._tidx is not None and getattr(X, "ndim", 2) == 3:
             X = _subset(X, (slice(None), slice(None), self._tidx))
         return X

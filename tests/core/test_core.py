@@ -739,8 +739,6 @@ def test_slicing_view_with_3d_layer():
 
 @pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 rejects a >2D X at construction")
 def test_ehrdata_3d_X_sliced_along_time_axis():
-    # Regression test for #259: slicing a 3D `.X` along the time axis must slice `.X` itself,
-    # not only `.shape`/`.tem`. Mirrors how a 3D layer is sliced (AlignedView3D).
     X = np.arange(1, 4 * 3 * 5 + 1).reshape(4, 3, 5)
     edata = EHRData(X=X)
 
