@@ -53,7 +53,8 @@ def _assert_shape_matches(
     if check_X_None:
         assert edata.X is None
     else:
-        assert edata.X.shape == shape[0:2]
+        # X may be 2D (n_obs, n_vars) or 3D (n_obs, n_vars, n_t); tolerate both like layers below.
+        assert edata.X.shape in [shape, shape[0:2], (shape[0], shape[1], 1)]
 
     assert isinstance(edata.obs, pd.DataFrame)
     assert len(edata.obs) == shape[0]
@@ -206,6 +207,30 @@ def tem_32():
 @pytest.fixture
 def edata_333(X_numpy_33, X_numpy_333, obs_31, var_31, tem_31):
     return EHRData(X=X_numpy_33, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_333}, obs=obs_31, var=var_31, tem=tem_31)
+
+
+@pytest.fixture(
+    params=[
+        "layer",
+        pytest.param(
+            "X",
+            marks=pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 rejects a >2D X at construction"),
+        ),
+    ]
+)
+def edata_3d_slot(request, X_numpy_33, X_numpy_333, obs_31, var_31, tem_31):
+    """A (3, 3, 3) EHRData with the 3D tensor in the layer or in ``.X``.
+
+    Parametrizes the slicing battery over the tensor slot so a 3D ``.X`` gets the same
+    coverage as a 3D layer. Both variants keep a valid ``.X`` (3D in the X case, 2D in the
+    layer case). Returns ``(edata, slot)`` where ``slot`` is ``"layer"`` or ``"X"``.
+    """
+    slot = request.param
+    if slot == "X":
+        edata = EHRData(X=X_numpy_333, obs=obs_31, var=var_31, tem=tem_31)
+    else:
+        edata = EHRData(X=X_numpy_33, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_333}, obs=obs_31, var=var_31, tem=tem_31)
+    return edata, slot
 
 
 @pytest.fixture

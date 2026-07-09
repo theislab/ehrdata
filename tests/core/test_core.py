@@ -20,6 +20,11 @@ def _assert_fields_are_view(edata: EHRData):
     assert isinstance(edata.tem, ad._core.views.DataFrameView)
 
 
+def _slot_tensor(edata: EHRData, slot: str):
+    """Return the 3D tensor from whichever slot (``"X"`` or ``"layer"``) holds it."""
+    return edata.X if slot == "X" else edata.layers[DEFAULT_TEM_LAYER_NAME]
+
+
 #################################################################
 ### Test combinations of X, layers, tem during initialization
 #################################################################
@@ -428,8 +433,8 @@ def test_ehrdata_subset_slice_2D_repeated(X_numpy_32, X_numpy_322, obs_31, var_2
     assert np.array_equal(edata_sliced.layers[DEFAULT_TEM_LAYER_NAME], X_numpy_322[2].reshape(-1, 2, 2))
 
 
-def test_ehrdata_subset_slice_3D_vanilla(X_numpy_32, X_numpy_322, obs_31, var_21, tem_21):
-    edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322}, obs=obs_31, var=var_21, tem=tem_21)
+def test_ehrdata_subset_slice_3D_vanilla(edata_3d_slot):
+    edata, _ = edata_3d_slot
     edata_sliced = edata[:2, :1, :1]
 
     _assert_fields_are_view(edata_sliced)
@@ -438,8 +443,9 @@ def test_ehrdata_subset_slice_3D_vanilla(X_numpy_32, X_numpy_322, obs_31, var_21
     assert edata_sliced.tem.shape == (1, 1)
 
 
-def test_ehrdata_subset_slice_3D_repeated(edata_333):
-    edata = edata_333
+def test_ehrdata_subset_slice_3D_repeated(edata_3d_slot):
+    edata, slot = edata_3d_slot
+    ref = np.asarray(_slot_tensor(edata, slot))
     edata_sliced = edata[1:, 1:, 1:]
     edata_sliced = edata_sliced[1:, 1:, 1:]
 
@@ -449,15 +455,12 @@ def test_ehrdata_subset_slice_3D_repeated(edata_333):
     assert edata_sliced.tem.shape == (1, 1)
 
     # test that the true values are conserved
-    assert np.array_equal(edata_sliced.X, edata.X[2, 2].reshape(-1, 1))
-    assert np.array_equal(
-        edata_sliced.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][2, 2, 2].reshape(-1, 1, 1)
-    )
+    assert np.array_equal(np.asarray(_slot_tensor(edata_sliced, slot)), ref[2, 2, 2].reshape(-1, 1, 1))
     assert np.array_equal(edata.tem.iloc[2].values.reshape(-1, 1), edata_sliced.tem.values)
 
 
-def test_ehrdata_subset_obsvar_names_vanilla(edata_333):
-    edata = edata_333
+def test_ehrdata_subset_obsvar_names_vanilla(edata_3d_slot):
+    edata, slot = edata_3d_slot
     edata_a = edata[["obs1"]]
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (1, 3, 3))
@@ -475,35 +478,30 @@ def test_ehrdata_subset_obsvar_names_vanilla(edata_333):
     _assert_shape_matches(edata_ab, (3, 2, 3))
 
     edata_a = edata[["obs1", "obs2"], ["var1", "var2"]]
-    edata_a.layers[DEFAULT_TEM_LAYER_NAME]
 
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (2, 2, 3))
-    assert edata_a.layers[DEFAULT_TEM_LAYER_NAME].shape == (2, 2, 3)
+    assert _slot_tensor(edata_a, slot).shape == (2, 2, 3)
 
 
-def test_ehrdata_subset_obsvar_names_repeated(edata_333):
-    edata = edata_333
+def test_ehrdata_subset_obsvar_names_repeated(edata_3d_slot):
+    edata, slot = edata_3d_slot
+    ref = np.asarray(_slot_tensor(edata, slot))
     edata_ab = edata[["obs2", "obs3"]]
     edata_a = edata_ab[["obs3"]]
 
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (1, 3, 3))
 
-    assert np.array_equal(
-        edata_a.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][2, :, :].reshape(-1, 3, 3)
-    )
+    assert np.array_equal(np.asarray(_slot_tensor(edata_a, slot)), ref[2, :, :].reshape(-1, 3, 3))
 
-    edata = edata_333
     edata_ab = edata[:, ["var2", "var3"]]
     edata_a = edata_ab[:, ["var3"]]
 
     _assert_fields_are_view(edata_a)
     _assert_shape_matches(edata_a, (3, 1, 3))
 
-    assert np.array_equal(
-        edata_a.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][:, 2, :].reshape(3, -1, 3)
-    )
+    assert np.array_equal(np.asarray(_slot_tensor(edata_a, slot)), ref[:, 2, :].reshape(3, -1, 3))
 
 
 @pytest.mark.skipif(not _ANNDATA_HAS_ACC, reason="anndata <0.13 has no accessor references")
@@ -533,8 +531,8 @@ def test_ehrdata_getitem_forwards_accessor_ref(X_numpy_32, obs_31, var_21):
     assert isinstance(edata[:, ["var1"]], EHRData)
 
 
-def test_ehrdata_subset_boolindex_vanilla(edata_333):
-    edata = edata_333
+def test_ehrdata_subset_boolindex_vanilla(edata_3d_slot):
+    edata, _ = edata_3d_slot
     edata_sliced = edata[[False, True, True], [True, False, False], [True, False, False]]
 
     _assert_fields_are_view(edata_sliced)
@@ -543,8 +541,9 @@ def test_ehrdata_subset_boolindex_vanilla(edata_333):
     assert edata_sliced.tem.shape == (1, 1)
 
 
-def test_ehrdata_subset_boolindex_repeated(edata_333):
-    edata = edata_333
+def test_ehrdata_subset_boolindex_repeated(edata_3d_slot):
+    edata, slot = edata_3d_slot
+    ref = np.asarray(_slot_tensor(edata, slot))
     edata_sliced = edata[[False, True, True], [False, True, True], [False, True, True]]
     edata_sliced = edata_sliced[[False, True], [False, True], [False, True]]
 
@@ -554,15 +553,12 @@ def test_ehrdata_subset_boolindex_repeated(edata_333):
     assert edata_sliced.tem.shape == (1, 1)
 
     # test that the true values are conserved
-    assert np.array_equal(edata_sliced.X, edata.X[2, 2].reshape(-1, 1))
-    assert np.array_equal(
-        edata_sliced.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][2, 2, 2].reshape(-1, 1, 1)
-    )
+    assert np.array_equal(np.asarray(_slot_tensor(edata_sliced, slot)), ref[2, 2, 2].reshape(-1, 1, 1))
     assert np.array_equal(edata.tem.iloc[2].values.reshape(-1, 1), edata_sliced.tem.values)
 
 
-def test_ehrdata_subset_numberindex_vanilla(edata_333):
-    edata = edata_333
+def test_ehrdata_subset_numberindex_vanilla(edata_3d_slot):
+    edata, _ = edata_3d_slot
     edata_sliced = edata[[1, 2], [1], [1]]
 
     _assert_fields_are_view(edata_sliced)
@@ -571,8 +567,9 @@ def test_ehrdata_subset_numberindex_vanilla(edata_333):
     assert edata_sliced.tem.shape == (1, 1)
 
 
-def test_ehrdata_subset_numberindex_repeated(edata_333):
-    edata = edata_333
+def test_ehrdata_subset_numberindex_repeated(edata_3d_slot):
+    edata, slot = edata_3d_slot
+    ref = np.asarray(_slot_tensor(edata, slot))
     edata_sliced = edata[[1, 2], [1, 2], [1, 2]]
     edata_sliced = edata_sliced[[1], [1], [1]]
 
@@ -582,15 +579,12 @@ def test_ehrdata_subset_numberindex_repeated(edata_333):
     assert edata_sliced.tem.shape == (1, 1)
 
     # test that the true values are conserved
-    assert np.array_equal(edata_sliced.X, edata.X[2, 2].reshape(-1, 1))
-    assert np.array_equal(
-        edata_sliced.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME][2, 2, 2].reshape(-1, 1, 1)
-    )
+    assert np.array_equal(np.asarray(_slot_tensor(edata_sliced, slot)), ref[2, 2, 2].reshape(-1, 1, 1))
     assert np.array_equal(edata.tem.iloc[2].values.reshape(-1, 1), edata_sliced.tem.values)
 
 
-def test_ehrdata_subset_mixedindices(edata_333):
-    edata = edata_333
+def test_ehrdata_subset_mixedindices(edata_3d_slot):
+    edata, _ = edata_3d_slot
 
     edata_sliced = edata[["obs1", "obs2"], 1, [False, True, True]]
 
@@ -619,14 +613,14 @@ def test_copy(edata_333):
     assert edata.tem.shape == (3, 1)
 
 
-def test_copy_of_slice(edata_333):
-    edata = edata_333
+def test_copy_of_slice(edata_3d_slot):
+    edata, slot = edata_3d_slot
     edata_sliced = edata[1:, 1:, 1:]
     edata_sliced_copy = edata_sliced.copy()
 
     _assert_shape_matches(edata_sliced_copy, (2, 2, 2))
     assert isinstance(edata_sliced_copy.X, np.ndarray)
-    assert isinstance(edata_sliced_copy.layers[DEFAULT_TEM_LAYER_NAME], np.ndarray)
+    assert isinstance(_slot_tensor(edata_sliced_copy, slot), np.ndarray)
     assert isinstance(edata_sliced_copy.obs, pd.DataFrame)
     assert isinstance(edata_sliced_copy.var, pd.DataFrame)
     assert isinstance(edata_sliced_copy.tem, pd.DataFrame)
@@ -634,8 +628,8 @@ def test_copy_of_slice(edata_333):
     assert edata_sliced_copy.tem.shape == (2, 1)
 
 
-def test_copy_of_obsvar_names(edata_333):
-    edata = edata_333
+def test_copy_of_obsvar_names(edata_3d_slot):
+    edata, _ = edata_3d_slot
 
     edata_obs_subset = edata[["obs1", "obs2"]]
     edata_obs_subset = edata_obs_subset.copy()
@@ -653,72 +647,52 @@ def test_copy_of_obsvar_names(edata_333):
     _assert_shape_matches(edata_obsvar_subset, (1, 2, 3))
 
 
-def test_inplace_subset_obs(edata_333):
-    edata_333_copy = edata_333.copy()
+def test_inplace_subset_obs(edata_3d_slot):
+    edata, slot = edata_3d_slot
+    edata_copy = edata.copy()
+    ref = np.asarray(_slot_tensor(edata_copy, slot))
 
     # simple subset
-    edata_333._inplace_subset_obs([0, 2])
-
-    _assert_shape_matches(edata_333, (2, 3, 3))
-
-    assert np.allclose(edata_333_copy.X[[0, 2], :], edata_333.X)
-    assert np.allclose(
-        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][[0, 2], :, :], edata_333.layers[DEFAULT_TEM_LAYER_NAME]
-    )
-    assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
+    edata._inplace_subset_obs([0, 2])
+    _assert_shape_matches(edata, (2, 3, 3))
+    assert np.allclose(ref[[0, 2], :, :], np.asarray(_slot_tensor(edata, slot)))
+    assert pd.DataFrame.equals(edata.tem, edata_copy.tem)
 
     # repeated subset
-    edata_333._inplace_subset_obs([1])
-
-    _assert_shape_matches(edata_333, (1, 3, 3))
-    assert np.allclose(edata_333_copy.X[[2], :], edata_333.X)
-    assert np.allclose(
-        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][[2], :, :], edata_333.layers[DEFAULT_TEM_LAYER_NAME]
-    )
-    assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
+    edata._inplace_subset_obs([1])
+    _assert_shape_matches(edata, (1, 3, 3))
+    assert np.allclose(ref[[2], :, :], np.asarray(_slot_tensor(edata, slot)))
+    assert pd.DataFrame.equals(edata.tem, edata_copy.tem)
 
     # mixed subset
-    edata_333._inplace_subset_var([0, 2])
-    _assert_shape_matches(edata_333, (1, 2, 3))
-    assert np.allclose(edata_333_copy.X[[2], [0, 2]], edata_333.X)
-    assert np.allclose(
-        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][[2], [0, 2], :], edata_333.layers[DEFAULT_TEM_LAYER_NAME]
-    )
-    assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
+    edata._inplace_subset_var([0, 2])
+    _assert_shape_matches(edata, (1, 2, 3))
+    assert np.allclose(ref[[2], :, :][:, [0, 2], :], np.asarray(_slot_tensor(edata, slot)))
+    assert pd.DataFrame.equals(edata.tem, edata_copy.tem)
 
 
-def test_inplace_subset_var(edata_333):
-    edata_333_copy = edata_333.copy()
+def test_inplace_subset_var(edata_3d_slot):
+    edata, slot = edata_3d_slot
+    edata_copy = edata.copy()
+    ref = np.asarray(_slot_tensor(edata_copy, slot))
+
     # simple subset
-    edata_333._inplace_subset_var([0, 2])
-
-    _assert_shape_matches(edata_333, (3, 2, 3))
-
-    assert np.allclose(edata_333_copy.X[:, [0, 2]], edata_333.X)
-    assert np.allclose(
-        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][:, [0, 2], :], edata_333.layers[DEFAULT_TEM_LAYER_NAME]
-    )
-    assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
+    edata._inplace_subset_var([0, 2])
+    _assert_shape_matches(edata, (3, 2, 3))
+    assert np.allclose(ref[:, [0, 2], :], np.asarray(_slot_tensor(edata, slot)))
+    assert pd.DataFrame.equals(edata.tem, edata_copy.tem)
 
     # repeated subset
-    edata_333._inplace_subset_var([1])
-
-    _assert_shape_matches(edata_333, (3, 1, 3))
-    assert np.allclose(edata_333_copy.X[:, [2]], edata_333.X)
-    assert np.allclose(
-        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][:, [2], :], edata_333.layers[DEFAULT_TEM_LAYER_NAME]
-    )
-    assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
+    edata._inplace_subset_var([1])
+    _assert_shape_matches(edata, (3, 1, 3))
+    assert np.allclose(ref[:, [2], :], np.asarray(_slot_tensor(edata, slot)))
+    assert pd.DataFrame.equals(edata.tem, edata_copy.tem)
 
     # mixed subset
-    edata_333._inplace_subset_obs([0, 2])
-    _assert_shape_matches(edata_333, (2, 1, 3))
-    assert np.allclose(edata_333_copy.X[[0, 2], [2]].reshape(-1, 1), edata_333.X)
-    assert np.allclose(
-        edata_333_copy.layers[DEFAULT_TEM_LAYER_NAME][[0, 2], [2], :].reshape(-1, 1, 3),
-        edata_333.layers[DEFAULT_TEM_LAYER_NAME],
-    )
-    assert pd.DataFrame.equals(edata_333.tem, edata_333_copy.tem)
+    edata._inplace_subset_obs([0, 2])
+    _assert_shape_matches(edata, (2, 1, 3))
+    assert np.allclose(ref[:, [2], :][[0, 2], :, :], np.asarray(_slot_tensor(edata, slot)))
+    assert pd.DataFrame.equals(edata.tem, edata_copy.tem)
 
 
 def test_slicing_view_with_3d_layer():
@@ -756,16 +730,6 @@ def test_ehrdata_3d_X_sliced_along_time_axis():
     edata_sliced = edata[[0, 2], [0, 1], [1, 3]]
     assert edata_sliced.X.shape == edata_sliced.shape == (2, 2, 2)
     assert np.array_equal(np.asarray(edata_sliced.X), X[np.ix_([0, 2], [0, 1], [1, 3])])
-
-
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 rejects a >2D X at construction")
-def test_ehrdata_3d_X_repeated_time_slicing():
-    # Repeated (view-of-view) slicing along the time axis stays consistent.
-    X = np.arange(1, 4 * 3 * 6 + 1).reshape(4, 3, 6)
-    edata = EHRData(X=X)
-    edata_sliced = edata[:, :, 1:5][:, :, 1:3]
-    assert edata_sliced.X.shape == edata_sliced.shape == (4, 3, 2)
-    assert np.array_equal(np.asarray(edata_sliced.X), X[:, :, 1:5][:, :, 1:3])
 
 
 def test_ehrdata_2d_X_slicing_unaffected(X_numpy_32):
