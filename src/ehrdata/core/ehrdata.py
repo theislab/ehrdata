@@ -266,6 +266,24 @@ class EHRData(AnnData):
     filename: PathLike[str] | str | None
     """Change to backing mode by setting the filename of a `.h5ed` file."""
 
+    obsm: np.ndarray | Mapping[str, Sequence[Any]] | None
+    """Key-indexed multi-dimensional observations annotation of length #observations.
+
+    If passing a :class:`~numpy.ndarray`, it needs to have a structured datatype.
+    """
+
+    varm: np.ndarray | Mapping[str, Sequence[Any]] | None
+    """Key-indexed multi-dimensional variables annotation of length #variables.
+
+    If passing a :class:`~numpy.ndarray`, it needs to have a structured datatype.
+    """
+
+    obsp: np.ndarray | Mapping[str, Sequence[Any]] | None
+    """Pairwise annotation of observations, a mutable mapping with array-like values."""
+
+    varp: np.ndarray | Mapping[str, Sequence[Any]] | None
+    """Pairwise annotation of variables/features, a mutable mapping with array-like values."""
+
     def __init__(
         self,
         X: XDataType | pd.DataFrame | None = None,

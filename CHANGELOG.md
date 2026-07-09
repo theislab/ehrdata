@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Documentation
+ - The {class}`~ehrdata.EHRData` attribute reference now describes `.obsm`, `.varm`, `.obsp` and `.varp` in anndata's terms instead of showing a generic placeholder. ([#263](https://github.com/theislab/ehrdata/pull/263)) @eroell
+
 ## [0.3.0]
 
 ### Added
