@@ -735,3 +735,44 @@ def test_slicing_view_with_3d_layer():
     assert isinstance(edata._adata_ref, ad.AnnData)
 
     edata[:2, :2]
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 rejects a >2D X at construction")
+def test_ehrdata_3d_X_sliced_along_time_axis():
+    # Regression test for #259: slicing a 3D `.X` along the time axis must slice `.X` itself,
+    # not only `.shape`/`.tem`. Mirrors how a 3D layer is sliced (AlignedView3D).
+    X = np.arange(1, 4 * 3 * 5 + 1).reshape(4, 3, 5)
+    edata = EHRData(X=X)
+
+    t_bool = np.array([True, False, True, False, True])
+    for index, expected in [
+        ((slice(None), slice(None), slice(1, 3)), X[:, :, 1:3]),
+        ((slice(None), slice(None), [1, 3]), X[:, :, [1, 3]]),
+        ((slice(None), slice(None), t_bool), X[:, :, t_bool]),
+    ]:
+        edata_sliced = edata[index]
+        assert edata_sliced.X.shape == edata_sliced.shape
+        assert np.array_equal(np.asarray(edata_sliced.X), expected)
+
+    # combined obs/var/time fancy indexing uses outer-product (np.ix_) semantics
+    edata_sliced = edata[[0, 2], [0, 1], [1, 3]]
+    assert edata_sliced.X.shape == edata_sliced.shape == (2, 2, 2)
+    assert np.array_equal(np.asarray(edata_sliced.X), X[np.ix_([0, 2], [0, 1], [1, 3])])
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 rejects a >2D X at construction")
+def test_ehrdata_3d_X_repeated_time_slicing():
+    # Repeated (view-of-view) slicing along the time axis stays consistent.
+    X = np.arange(1, 4 * 3 * 6 + 1).reshape(4, 3, 6)
+    edata = EHRData(X=X)
+    edata_sliced = edata[:, :, 1:5][:, :, 1:3]
+    assert edata_sliced.X.shape == edata_sliced.shape == (4, 3, 2)
+    assert np.array_equal(np.asarray(edata_sliced.X), X[:, :, 1:5][:, :, 1:3])
+
+
+def test_ehrdata_2d_X_slicing_unaffected(X_numpy_32):
+    # A 2D `.X` (n_t == 1) must be unaffected by the time-axis handling in the `X` getter.
+    edata = EHRData(X=X_numpy_32)
+    edata_sliced = edata[:2, :1]
+    assert edata_sliced.X.shape == (2, 1)
+    assert np.array_equal(np.asarray(edata_sliced.X), X_numpy_32[:2, :1])
