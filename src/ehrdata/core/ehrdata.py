@@ -258,6 +258,13 @@ class EHRData(AnnData):
     # 0.12.6-0.12.11 require `(name, cls)`; 0.12.12+ make `name` optional (populated by
     # `__set_name__`) and only require `cls`. Passing both by keyword satisfies both.
     layers: AlignedMappingProperty3D = AlignedMappingProperty3D(name="layers", cls=Layers3D)
+    """Dictionary-like object storing 2D or 3D arrays aligned to `X`."""
+
+    is_view: bool
+    """`True` if object is view of another EHRData object, `False` otherwise."""
+
+    filename: PathLike[str] | str | None
+    """Change to backing mode by setting the filename of a `.h5ed` file."""
 
     def __init__(
         self,
