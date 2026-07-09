@@ -29,6 +29,9 @@ The anndata 0.13.0 release notes are worth a look: https://anndata.scverse.org/e
  - CI now caches downloaded datasets used by `ehrdata.dt` to reduce flaky upstream hosts (e.g. physionet.org) breaking the test and notebook workflows. ([#250](https://github.com/theislab/ehrdata/pull/250)) @eroell
  - Dataset downloads now use [pooch](https://www.fatiando.org/pooch/) instead of a custom `requests`-based downloader, aligning with the scverse ecosystem and providing caching out of the box. ([#251](https://github.com/theislab/ehrdata/issues/251)) @eroell
 
+### Documentation
+ - Improve {class}`~ehrdata.EHRData` API documentation. ([#258](https://github.com/theislab/ehrdata/issues/258)) @eroell
+
 ## [0.2.1]
 
 ### Fixed
