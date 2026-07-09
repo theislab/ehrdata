@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Fixed
+ - Slicing a 3D {attr}`~ehrdata.EHRData.X` along the time axis now also slices `.X`. Previously, subsetting the third axis updated `.shape` and `.tem` but returned the parent's full-length `.X`, so `edata[:, :, idx].X.shape` disagreed with `edata[:, :, idx].shape`. `.X` now applies the time-axis index exactly like a 3D layer. ([#259](https://github.com/theislab/ehrdata/issues/259)) @eroell
+
 ## [0.3.0]
 
 ### Added

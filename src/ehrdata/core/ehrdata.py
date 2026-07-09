@@ -413,7 +413,10 @@ class EHRData(AnnData):
     @property
     def X(self):
         """Data matrix."""
-        return super().X
+        X = super().X
+        if X is not None and self.is_view and self._tidx is not None and getattr(X, "ndim", 2) == 3:
+            X = _subset(X, (slice(None), slice(None), self._tidx))
+        return X
 
     @X.setter
     def X(self, value):
