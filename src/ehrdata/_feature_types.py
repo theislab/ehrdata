@@ -144,10 +144,12 @@ def infer_feature_types(
     edata.var[FEATURE_TYPE_KEY] = pd.Series(feature_types)[edata.var_names]
 
     if verbose:
-        logger.warning(
-            f"{'Features' if len(uncertain_features) > 1 else 'Feature'} {str(uncertain_features)[1:-1]} {'were' if len(uncertain_features) > 1 else 'was'} detected as categorical features stored numerically. "
-            f"Adjust using `ed.replace_feature_types` if needed."
-        )
+        if uncertain_features:
+            names = ", ".join(f"'{feature}'" for feature in uncertain_features)
+            logger.warning(
+                f"{'Features' if len(uncertain_features) > 1 else 'Feature'} {names} {'were' if len(uncertain_features) > 1 else 'was'} detected as categorical features stored numerically. "
+                f"Adjust using `ed.replace_feature_types` if needed."
+            )
 
         logger.info(
             f"Stored feature types in edata.var['{FEATURE_TYPE_KEY}']. "
