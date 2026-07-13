@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
  - {func}`~ehrdata.infer_feature_types` binary detection contained a latent bug: the integrality guard used `np.all(<generator>)`, which is always truthy and so never actually ran. The check is now the equivalent, correct `set(col.unique()) == {0, 1}`. No user-visible behaviour changes, as the disabled guard was redundant with the `{0, 1}` set check. ([#268](https://github.com/theislab/ehrdata/pull/268)) @Zethson
+ - {func}`~ehrdata.infer_feature_types` no longer emits a warning with a blank feature name (`Feature  was detected as categorical features stored numerically.`) when no feature is uncertain. The warning is now only shown when at least one feature was detected as categorical stored numerically, and lists the affected feature names. ([#267](https://github.com/theislab/ehrdata/pull/267)) @Zethson
  - Slicing a 3D {attr}`~ehrdata.EHRData.X` along the time axis now also slices `.X`. Previously, subsetting the third axis updated `.shape` and `.tem` but returned the parent's full-length `.X`, so `edata[:, :, idx].X.shape` disagreed with `edata[:, :, idx].shape`. `.X` now applies the time-axis index exactly like a 3D layer. ([#259](https://github.com/theislab/ehrdata/issues/259)) @eroell
 
 ## [0.3.0]
