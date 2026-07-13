@@ -36,7 +36,7 @@ def _detect_feature_type(
         The detected feature type (one of 'date', 'categorical', or 'numeric') and a boolean, which is True if the feature type is uncertain.
     """
     col[col.isin(MISSING_VALUES)] = np.nan
-    col = col.infer_objects(copy=False)
+    col = col.infer_objects()
     col = col.dropna()
     if len(col) == 0:
         err_msg = f"Feature '{col.name}' contains only NaN values. Please drop this feature to infer the feature type."
@@ -322,7 +322,6 @@ def harmonize_missing_values(
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
     df[df.isin(missing_values)] = np.nan
-    df.infer_objects(copy=False)
 
     if layer is None:
         edata.X = df.values.reshape(X.shape)

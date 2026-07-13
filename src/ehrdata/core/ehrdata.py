@@ -139,6 +139,10 @@ class AlignedView3D(AlignedView):
 class LayersView3D(AlignedView3D, LayersBase):
     """LayersView for 3D data."""
 
+    def _validate_value(self, val: Value, key: str | None) -> Value:
+        with _silence_anndata_nd_warning():
+            return super()._validate_value(val, key)
+
     def __init__(self, parent_mapping: LayersBase, parent_view: AnnData, subset_idx: Any) -> None:
         super().__init__(parent_mapping, parent_view, subset_idx)
         # anndata 0.13: X delegates `isbacked` to the layers store, so mirror anndata's own LayersView and expose it on 3D layer views too (absent on <0.13, hence the guard).
@@ -431,7 +435,10 @@ class EHRData(AnnData):
     @property
     def X(self):
         """Data matrix."""
-        return super().X
+        X = super().X
+        if X is not None and self.is_view and self._tidx is not None and getattr(X, "ndim", 2) == 3:
+            X = _subset(X, (slice(None), slice(None), self._tidx))
+        return X
 
     @X.setter
     def X(self, value):
@@ -568,8 +575,10 @@ class EHRData(AnnData):
 
     def copy(self) -> EHRData:
         """Returns a copy of the EHRData object."""
+        with _silence_anndata_nd_warning():
+            adata_copy = super().copy()
         return EHRData.from_adata(
-            super().copy(),
+            adata_copy,
             tem=None if self.tem is None else self.tem.copy(),
             tidx=self._tidx,
         )
