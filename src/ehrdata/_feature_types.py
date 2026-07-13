@@ -62,7 +62,7 @@ def _detect_feature_type(
         return CATEGORICAL_TAG, False  # type: ignore
 
     # Guess categorical if the feature is binary (values are exactly {0, 1})
-    if (majority_type is int or (np.all(i.is_integer() for i in col))) and set(col.unique()) == {0, 1}:
+    if set(col.unique()) == {0, 1}:
         if binary_as == "numeric":
             return NUMERIC_TAG, False  # type: ignore
         return CATEGORICAL_TAG, True  # type: ignore
