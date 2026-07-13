@@ -16,6 +16,7 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION,
     EHRDATA_ONDISK_VERSION_KEY,
 )
+from ehrdata.core.ehrdata import _silence_anndata_nd_warning
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
 from ehrdata.io._ondisk import _check_020_ehrdata_on_disk_format, decode_init_dict, encode_for_disk
 
@@ -82,7 +83,9 @@ def read_h5ed(
         mode = backed
         if mode is True:
             mode = "r+"
-        adata = ad.read_h5ad(filename, backed=mode)
+
+        with _silence_anndata_nd_warning():
+            adata = ad.read_h5ad(filename, backed=mode)
 
         with h5py.File(filename, "r") as f:
             tem = ad.io.read_elem(f["tem"]) if "tem" in f else None
