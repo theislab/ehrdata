@@ -239,18 +239,18 @@ class EHRData(AnnData):
     Extends :class:`~anndata.AnnData` to further support time-series data.
 
     Args:
-        X: A #observations × #variables data array. A view of the data is used if the
+        X: A #observations × #variables (× #time) data array. A view of the data is used if the
             data type matches, otherwise, a copy is made.
         obs: Key-indexed one-dimensional observations annotation of length #observations.
         var: Key-indexed one-dimensional variables annotation of length #variables.
-        tem: Key-indexed one-dimensional time annotation of length #timesteps.
+        tem: Key-indexed one-dimensional time annotation of length #time.
         uns: Key-indexed unstructured annotation.
         obsm: Key-indexed multi-dimensional observations annotation of length #observations.
             If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
         varm: Key-indexed multi-dimensional variables annotation of length #variables.
             If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
-        layers: Key-indexed multi-dimensional #observations × #variables × #timesteps data arrays, aligned to dimensions of `X`.
-        shape: Shape tuple (#observations, #variables, #timesteps). Can only be provided if `X` is None.
+        layers: Key-indexed multi-dimensional #observations × #variables (× #time) data arrays, aligned to dimensions of `X`.
+        shape: Shape tuple (#observations, #variables, #time). Can only be provided if `X` is None.
         filename: Name of backing file. See :class:`h5py.File`.
         filemode: Open mode of backing file. See :class:`h5py.File`.
     """
@@ -262,7 +262,7 @@ class EHRData(AnnData):
     # 0.12.6-0.12.11 require `(name, cls)`; 0.12.12+ make `name` optional (populated by
     # `__set_name__`) and only require `cls`. Passing both by keyword satisfies both.
     layers: AlignedMappingProperty3D = AlignedMappingProperty3D(name="layers", cls=Layers3D)
-    """Dictionary-like object storing 2D or 3D arrays aligned to `X`."""
+    """Key-indexed multi-dimensional #observations × #variables (× #time) data arrays, aligned to dimensions of `X`."""
 
     is_view: bool
     """`True` if object is view of another EHRData object, `False` otherwise."""
@@ -404,7 +404,7 @@ class EHRData(AnnData):
 
     @property
     def tem(self) -> pd.DataFrame:
-        """Time dataframe for describing third axis."""
+        """Key-indexed one-dimensional time annotation of length #time."""
         return self._tem
 
     @tem.setter
@@ -434,7 +434,7 @@ class EHRData(AnnData):
 
     @property
     def X(self):
-        """Data matrix."""
+        """A #observations × #variables (× #time) data array."""
         X = super().X
         if X is not None and self.is_view and self._tidx is not None and getattr(X, "ndim", 2) == 3:
             X = _subset(X, (slice(None), slice(None), self._tidx))
@@ -468,7 +468,7 @@ class EHRData(AnnData):
 
     @property
     def shape(self) -> tuple[int, int] | tuple[int, int, int]:
-        """Shape of data (`n_obs`, `n_vars`, `n_t`)."""
+        """Shape tuple (#observations, #variables, #time)."""
         # this is a bit hacky: self._n_t is supposed to never be None. For a flat EHRData, it is 1.
         # it is only temporarily set to None when setting X
         return (self.n_obs, self.n_vars) if self._n_t is None else (self.n_obs, self.n_vars, self.n_t)
