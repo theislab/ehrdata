@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from ehrdata import EHRData, feature_type_overview, harmonize_missing_values, infer_feature_types, replace_feature_types
+from ehrdata._logger import logger
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME, MISSING_VALUES
 
 
@@ -145,6 +146,35 @@ def test_replace_feature_types(sample_dataset, request):
     target_types["int_column"] = "categorical"
     target_types["int_column_with_missing"] = "categorical"
     assert all(edata.var["feature_type"] == list(target_types.values()))
+
+
+def test_infer_feature_types_warns_with_feature_name(monkeypatch):
+    messages = []
+    monkeypatch.setattr(logger, "warning", lambda msg, **kwargs: messages.append(msg))
+
+    edata = EHRData(
+        X=np.array([[0.0, 1.1], [1.0, 2.2], [0.0, 3.3], [1.0, 4.4]]),
+        var=pd.DataFrame(index=["binary_feature", "numeric_feature"]),
+    )
+    infer_feature_types(edata, output=None)
+
+    uncertain = [msg for msg in messages if "stored numerically" in msg]
+    assert len(uncertain) == 1
+    assert "'binary_feature'" in uncertain[0]
+    assert "Feature  " not in uncertain[0]
+
+
+def test_infer_feature_types_no_warning_without_uncertain_features(monkeypatch):
+    messages = []
+    monkeypatch.setattr(logger, "warning", lambda msg, **kwargs: messages.append(msg))
+
+    edata = EHRData(
+        X=np.array([[1.1], [2.2], [3.3], [4.4]]),
+        var=pd.DataFrame(index=["numeric_feature"]),
+    )
+    infer_feature_types(edata, output=None)
+
+    assert not [msg for msg in messages if "stored numerically" in msg]
 
 
 def test_replace_feature_types_not_inferred_raises_error(variable_type_samples):

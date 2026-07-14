@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning][].
 ## [Unreleased]
 
 ### Fixed
+ - {func}`~ehrdata.infer_feature_types` no longer emits a warning with a blank feature name (`Feature  was detected as categorical features stored numerically.`) when no feature is uncertain. The warning is now only shown when at least one feature was detected as categorical stored numerically, and lists the affected feature names. ([#267](https://github.com/theislab/ehrdata/pull/267)) @Zethson
  - Slicing a 3D {attr}`~ehrdata.EHRData.X` along the time axis now also slices `.X`. Previously, subsetting the third axis updated `.shape` and `.tem` but returned the parent's full-length `.X`, so `edata[:, :, idx].X.shape` disagreed with `edata[:, :, idx].shape`. `.X` now applies the time-axis index exactly like a 3D layer. ([#259](https://github.com/theislab/ehrdata/issues/259)) @eroell
 
 ### Documentation
