@@ -189,17 +189,22 @@ def test_gen_default_config_3d_in_X(edata_blobs_small, tmp_path):
 
     import ehrdata as ed
 
-    edata_blobs_small.X = edata_blobs_small.layers["tem_data"]
-    del edata_blobs_small.layers["tem_data"]
-    assert edata_blobs_small.X.ndim == 3
+    # Build an EHRData with the blob's 3D time series in .X (physionet2019-style) via the constructor.
+    edata = ed.EHRData(
+        X=edata_blobs_small.layers["tem_data"],
+        obs=edata_blobs_small.obs,
+        var=edata_blobs_small.var,
+        tem=edata_blobs_small.tem,
+    )
+    assert edata.X.ndim == 3
 
     np.random.seed(42)
-    edata_blobs_small.obs["Gender"] = np.random.choice(["M", "F"], size=edata_blobs_small.n_obs)
-    scatter_vars = list(edata_blobs_small.var_names[:2])
+    edata.obs["Gender"] = np.random.choice(["M", "F"], size=edata.n_obs)
+    scatter_vars = list(edata.var_names[:2])
 
     zarr_path = tmp_path / "test_3d_in_x.zarr"
     vc = ed.integrations.vitessce.gen_default_config(
-        edata_blobs_small,
+        edata,
         zarr_filepath=zarr_path,
         obs_columns=["Gender"],
         scatter_var_cols=scatter_vars,
@@ -210,7 +215,7 @@ def test_gen_default_config_3d_in_X(edata_blobs_small, tmp_path):
     assert zarr_path.exists()
 
     written = ad.read_zarr(zarr_path)
-    assert written.X.shape == (edata_blobs_small.n_obs, edata_blobs_small.n_vars)
+    assert written.X.shape == (edata.n_obs, edata.n_vars)
 
 
 def test_gen_default_config_missing_layer_raises(edata_blobs_small, tmp_path):
