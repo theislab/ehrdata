@@ -236,7 +236,7 @@ class EHRData(AnnData):
        :align: right
        :class: dark-light
 
-    EHRData stores a data matrix :attr:`~ehrdata.EHRData.X` together with annotations of observations
+    EHRData stores a data array :attr:`~ehrdata.EHRData.X` together with annotations of observations
     :attr:`~ehrdata.EHRData.obs` (:attr:`~ehrdata.EHRData.obsm`, :attr:`~ehrdata.EHRData.obsp`), variables
     :attr:`~ehrdata.EHRData.var` (:attr:`~ehrdata.EHRData.varm`, :attr:`~ehrdata.EHRData.varp`), time
     :attr:`~ehrdata.EHRData.tem`, and unstructured annotations :attr:`~ehrdata.EHRData.uns`.
