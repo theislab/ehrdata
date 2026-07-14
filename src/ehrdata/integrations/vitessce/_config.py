@@ -170,8 +170,8 @@ def gen_default_config(
     obs_columns: Iterable[str] | None = None,
     obs_embedding: str | None = None,
     scatter_var_cols: Iterable[str] | None = None,
-    layer="tem_data",
-    timestep=0,
+    layer: str | None = None,
+    timestep: int = 0,
     return_lamin_artifact: bool = False,
 ):
     """Quickstart interactive Vitessce generator.
@@ -200,9 +200,11 @@ def gen_default_config(
         obs_embedding: Embedding key in edata.obsm
         obs_embedding_labels: Optional dict mapping embedding keys to display labels
         scatter_var_cols: Optional list of 2 variable columns to create ascatterplot from
-        layer: Name of the layer to use for visualization. If the layer is 3D (temporal),
-               a timestep must be selected. Default is "tem_data"
-        timestep: For 3D layers, the timestep index to extract. Default is 0
+        layer: Name of the layer to visualize. If ``None`` (default), ``edata.X`` is used.
+               The selected array may be 3D (``obs`` × ``var`` × ``time``); in that case it is
+               reduced to a single ``timestep`` so the AnnData written for Vitessce satisfies
+               anndata's requirement that ``X``/``layers`` be at most 2D.
+        timestep: For 3D data, the index along the time axis to extract. Default is 0
         return_lamin_artifact: If `True`, return a Lamin `Artifact` of the generated .zarr file.
 
     Returns:
@@ -210,15 +212,11 @@ def gen_default_config(
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ed.dt.physionet2019(
-        ...     layer="tem_data",
-        ...     n_samples=4000,
-        ... )
+        >>> edata = ed.dt.physionet2019(n_samples=4000)  # 3D time series stored in edata.X
         >>> vc = ed.integrations.vitessce.gen_default_config(
         ...     edata,
         ...     obs_columns=["Gender", "Age", "training_Set"],
         ...     scatter_var_cols=["HR", "MAP"],
-        ...     layer="tem_data",
         ...     timestep=10,
         ... )
         >>> vc.widget()
@@ -241,11 +239,28 @@ def gen_default_config(
         err = f"Embedding {obs_embedding} not found in edata.obsm"
         raise ValueError(err)
 
-    if layer is not None and layer in edata.layers:
-        layer_data = edata.layers[layer]
-        X = layer_data[:, :, timestep].reshape(edata.n_obs, -1) if len(layer_data.shape) == 3 else layer_data
+    if layer is None:
+        source, source_label = edata.X, "X"
+    elif layer in edata.layers:
+        source, source_label = edata.layers[layer], layer
     else:
-        X = edata.X
+        err = f"Layer '{layer}' not found in edata.layers (available: {list(edata.layers)}). Pass layer=None to use edata.X."
+        raise ValueError(err)
+
+    if source is None:
+        err = f"Nothing to visualize: {'edata.X' if layer is None else f'layer {layer!r}'} is None."
+        raise ValueError(err)
+
+    # anndata forbids >2D X/layers on disk; reduce a 3D (obs x var x time) source to one timestep.
+    is_3d = getattr(source, "ndim", 2) == 3
+    if is_3d:
+        n_timesteps = source.shape[2]
+        if not -n_timesteps <= timestep < n_timesteps:
+            err = f"timestep {timestep} is out of range for a 3D array with {n_timesteps} timesteps."
+            raise ValueError(err)
+        X = source[:, :, timestep].reshape(edata.n_obs, -1)
+    else:
+        X = source
 
     obsm = {}
     if obs_embedding is not None and obs_embedding in edata.obsm:
@@ -275,11 +290,10 @@ def gen_default_config(
             f"{scatter_var_cols[0]}_vs_{scatter_var_cols[1]}"
         )
 
+    timestep_note = f"at timestep `{timestep}`" if is_3d else "(2D data; no timestep selection)"
     description = f"""
     Displaying {edata.n_obs} patients with {edata.n_vars} variables.
-    The displayed values of the variables are from layer `{layer if layer is not None else "X"}` at timestep `{
-        timestep if layer is not None and layer in edata.layers else 0
-    }`.
+    The displayed values of the variables are from `{source_label}` {timestep_note}.
 
 
     {
@@ -297,6 +311,7 @@ def gen_default_config(
         artifact = ln.Artifact(
             zarr_filepath,
             kind="dataset",
+            description=description,
         )
 
     vc = _gen_config(
