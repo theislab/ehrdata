@@ -408,7 +408,7 @@ class EHRData(AnnData):
 
     @property
     def tem(self) -> pd.DataFrame:
-        """Key-indexed one-dimensional time annotation of length #time."""
+        """One-dimensional annotation of time (`pd.DataFrame`)."""
         return self._tem
 
     @tem.setter
