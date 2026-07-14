@@ -1,7 +1,9 @@
+import anndata as ad
 import numpy as np
 import pytest
-from anndata import AnnData
 from tests.conftest import _ANNDATA_ALLOWS_ND_X
+
+import ehrdata as ed
 
 pytest.importorskip("vitessce")
 
@@ -9,8 +11,8 @@ from ehrdata.integrations.vitessce import gen_config
 
 
 @pytest.fixture
-def adata() -> AnnData:
-    return AnnData(
+def adata() -> ad.AnnData:
+    return ad.AnnData(
         X=np.array([[1, 2, 3], [4, 5, 6]]),
         obs={"gender_concept_id": ["M", "F"]},
         obsm={"X_pca": np.array([[1, 2], [3, 4]])},
@@ -28,7 +30,6 @@ def test_gen_config(adata, tmp_path):
 
 def test_gen_default_config_basic(edata_blobs_small, tmp_path):
     """Test gen_default_config with basic obs_columns only."""
-    import ehrdata as ed
 
     # Add categorical columns to .obs
     np.random.seed(42)
@@ -51,7 +52,6 @@ def test_gen_default_config_basic(edata_blobs_small, tmp_path):
 
 def test_gen_default_config_with_embedding(edata_blobs_small, tmp_path):
     """Test gen_default_config with obs_columns and obs_embedding."""
-    import ehrdata as ed
 
     # Add categorical columns and embedding
     np.random.seed(42)
@@ -77,7 +77,6 @@ def test_gen_default_config_with_embedding(edata_blobs_small, tmp_path):
 
 def test_gen_default_config_with_scatter(edata_blobs_small, tmp_path):
     """Test gen_default_config with obs_columns and scatter plot variables."""
-    import ehrdata as ed
 
     # Add categorical column
     np.random.seed(42)
@@ -104,7 +103,6 @@ def test_gen_default_config_with_scatter(edata_blobs_small, tmp_path):
 
 def test_gen_default_config_with_embedding_and_scatter(edata_blobs_small, tmp_path):
     """Test gen_default_config with all options: obs_columns, embedding, and scatter."""
-    import ehrdata as ed
 
     # Add all necessary fields
     np.random.seed(42)
@@ -134,7 +132,6 @@ def test_gen_default_config_with_embedding_and_scatter(edata_blobs_small, tmp_pa
 
 def test_gen_default_config_illegal_arguments(edata_blobs_small, tmp_path):
     """Test gen_default_config with various illegal arguments."""
-    import ehrdata as ed
 
     np.random.seed(42)
     edata_blobs_small.obs["Gender"] = np.random.choice(["M", "F"], size=edata_blobs_small.n_obs)
@@ -187,9 +184,6 @@ def test_gen_default_config_illegal_arguments(edata_blobs_small, tmp_path):
 @pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
 def test_gen_default_config_3d_in_X(edata_blobs_small, tmp_path):
     """3D time series stored directly in edata.X (no named layer) is reduced to a timestep and written 2D."""
-    import anndata as ad
-
-    import ehrdata as ed
 
     edata_blobs_small.X = edata_blobs_small.layers["tem_data"]
     del edata_blobs_small.layers["tem_data"]
@@ -217,7 +211,6 @@ def test_gen_default_config_3d_in_X(edata_blobs_small, tmp_path):
 
 def test_gen_default_config_missing_layer_raises(edata_blobs_small, tmp_path):
     """Requesting a layer that does not exist gives a clear error pointing at layer=None."""
-    import ehrdata as ed
 
     edata_blobs_small.obs["Gender"] = np.random.default_rng(0).choice(["M", "F"], size=edata_blobs_small.n_obs)
     with pytest.raises(ValueError, match=r"not found in edata\.layers"):
