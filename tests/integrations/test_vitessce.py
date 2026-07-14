@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from anndata import AnnData
+from tests.conftest import _ANNDATA_ALLOWS_ND_X
 
 pytest.importorskip("vitessce")
 
@@ -183,28 +184,24 @@ def test_gen_default_config_illegal_arguments(edata_blobs_small, tmp_path):
         )
 
 
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
 def test_gen_default_config_3d_in_X(edata_blobs_small, tmp_path):
     """3D time series stored directly in edata.X (no named layer) is reduced to a timestep and written 2D."""
     import anndata as ad
 
     import ehrdata as ed
 
-    # Build an EHRData with the blob's 3D time series in .X (physionet2019-style) via the constructor.
-    edata = ed.EHRData(
-        X=edata_blobs_small.layers["tem_data"],
-        obs=edata_blobs_small.obs,
-        var=edata_blobs_small.var,
-        tem=edata_blobs_small.tem,
-    )
-    assert edata.X.ndim == 3
+    edata_blobs_small.X = edata_blobs_small.layers["tem_data"]
+    del edata_blobs_small.layers["tem_data"]
+    assert edata_blobs_small.X.ndim == 3
 
     np.random.seed(42)
-    edata.obs["Gender"] = np.random.choice(["M", "F"], size=edata.n_obs)
-    scatter_vars = list(edata.var_names[:2])
+    edata_blobs_small.obs["Gender"] = np.random.choice(["M", "F"], size=edata_blobs_small.n_obs)
+    scatter_vars = list(edata_blobs_small.var_names[:2])
 
     zarr_path = tmp_path / "test_3d_in_x.zarr"
     vc = ed.integrations.vitessce.gen_default_config(
-        edata,
+        edata_blobs_small,
         zarr_filepath=zarr_path,
         obs_columns=["Gender"],
         scatter_var_cols=scatter_vars,
@@ -215,7 +212,7 @@ def test_gen_default_config_3d_in_X(edata_blobs_small, tmp_path):
     assert zarr_path.exists()
 
     written = ad.read_zarr(zarr_path)
-    assert written.X.shape == (edata.n_obs, edata.n_vars)
+    assert written.X.shape == (edata_blobs_small.n_obs, edata_blobs_small.n_vars)
 
 
 def test_gen_default_config_missing_layer_raises(edata_blobs_small, tmp_path):
