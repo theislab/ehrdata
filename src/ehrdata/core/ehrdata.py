@@ -253,10 +253,15 @@ class EHRData(AnnData):
             If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
         varm: Key-indexed multi-dimensional variables annotation of length #variables.
             If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
+        obsp: Pairwise annotation of observations, a mutable mapping with array-like values.
+        varp: Pairwise annotation of variables/features, a mutable mapping with array-like values.
         layers: Key-indexed multi-dimensional #observations × #variables (× #time) data arrays, aligned to dimensions of `X`.
         shape: Shape tuple (#observations, #variables, #time). Can only be provided if `X` is None.
         filename: Name of backing file. See :class:`h5py.File`.
         filemode: Open mode of backing file. See :class:`h5py.File`.
+        oidx: Observation index for initialising as a view.
+        vidx: Variable index for initialising as a view.
+        tidx: Time index for initialising as a view.
     """
 
     _t: pd.DataFrame | None
