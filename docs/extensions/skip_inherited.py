@@ -20,8 +20,6 @@ def skip_member_handler(
         return None
     if isinstance(obj, property):
         obj = obj.fget
-    if name == "__getitem__":
-        return False
     if name.startswith("_"):
         return True
     if name in {"T", "raw"}:

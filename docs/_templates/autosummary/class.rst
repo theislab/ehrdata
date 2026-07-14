@@ -22,6 +22,7 @@ Attributes table
 ~~~~~~~~~~~~~~~~
 
 .. autosummary::
+    :toctree:
 {% for item in attributes %}
     ~{{ name }}.{{ item }}
 {%- endfor %}
@@ -34,38 +35,11 @@ Methods table
 ~~~~~~~~~~~~~
 
 .. autosummary::
+    :toctree:
 {% for item in methods %}
     {%- if item != '__init__' %}
     ~{{ name }}.{{ item }}
     {%- endif -%}
 {%- endfor %}
-{% endif %}
-{% endblock %}
-
-{% block attributes_documentation %}
-{% if attributes %}
-Attributes
-~~~~~~~~~~
-
-{% for item in attributes %}
-
-.. autoattribute:: {{ [objname, item] | join(".") }}
-{%- endfor %}
-
-{% endif %}
-{% endblock %}
-
-{% block methods_documentation %}
-{% if methods %}
-Methods
-~~~~~~~
-
-{% for item in methods %}
-{%- if item != '__init__' %}
-
-.. automethod:: {{ [objname, item] | join(".") }}
-{%- endif -%}
-{%- endfor %}
-
 {% endif %}
 {% endblock %}
