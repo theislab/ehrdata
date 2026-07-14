@@ -112,6 +112,20 @@ def test_feature_type_inference_3D(sample_dataset, request):
 
 
 @pytest.mark.parametrize(
+    ("binary_as", "expected"),
+    [("categorical", "categorical"), ("numeric", "numeric")],
+)
+def test_feature_type_inference_float_encoded_binary(binary_as, expected):
+    edata = EHRData(
+        X=np.array([[0.0], [1.0], [0.0], [1.0]]),
+        var=pd.DataFrame(index=["binary_feature"]),
+    )
+    infer_feature_types(edata, binary_as=binary_as, output=None)
+
+    assert edata.var["feature_type"]["binary_feature"] == expected
+
+
+@pytest.mark.parametrize(
     "sample_dataset",
     [
         "variable_type_samples",
