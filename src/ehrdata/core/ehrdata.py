@@ -236,11 +236,15 @@ class EHRData(AnnData):
        :align: right
        :class: dark-light
 
+    EHRData stores a data matrix :attr:`~ehrdata.EHRData.X` together with annotations of observations
+    :attr:`~ehrdata.EHRData.obs` (:attr:`~ehrdata.EHRData.obsm`, :attr:`~ehrdata.EHRData.obsp`), variables
+    :attr:`~ehrdata.EHRData.var` (:attr:`~ehrdata.EHRData.varm`, :attr:`~ehrdata.EHRData.varp`), time
+    :attr:`~ehrdata.EHRData.tem`, and unstructured annotations :attr:`~ehrdata.EHRData.uns`.
+
     Extends :class:`~anndata.AnnData` to further support time-series data.
 
     Args:
-        X: A #observations × #variables (× #time) data array. A view of the data is used if the
-            data type matches, otherwise, a copy is made.
+        X: A #observations × #variables (× #time) data array.
         obs: Key-indexed one-dimensional observations annotation of length #observations.
         var: Key-indexed one-dimensional variables annotation of length #variables.
         tem: Key-indexed one-dimensional time annotation of length #time.
