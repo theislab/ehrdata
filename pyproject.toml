@@ -101,12 +101,7 @@ envs.docs.scripts.build = "sphinx-build -M html docs docs/_build {args}"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.hatch-test.features = [ "test" ]
-# Tests run in parallel (`-n auto`) across xdist worker processes, and several read the same committed
-# read-only `.h5ad`/`.h5ed` fixtures. HDF5 takes a non-blocking `flock` on open (exclusive for the
-# `backed=True` r+ opens), so a concurrent reader on another worker fails with
-# `BlockingIOError: [Errno 11] ... unable to lock file`. The fixtures are never written concurrently,
-# so disabling advisory locking is safe and removes this flake. Must be an env var (read at HDF5 init).
-envs.hatch-test.env-vars.HDF5_USE_FILE_LOCKING = "FALSE"
+envs.hatch-test.env-vars.HDF5_USE_FILE_LOCKING = "FALSE"  # avoids concurrent read error BlockingIOError: [Errno 11] ... unable to lock file
 envs.hatch-test.matrix = [
   # Full integration-aware suite on both supported Pythons.
   { python = [ "3.12", "3.14" ] },
