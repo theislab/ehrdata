@@ -28,6 +28,7 @@ dependencies = [
   "fast-array-utils[sparse]",
   "pooch",
   "rich",
+  "sparse",
   "xarray",
   "zarr>=3",
 ]

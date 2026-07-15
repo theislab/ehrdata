@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     from ehrdata import EHRData
 
-from scipy.sparse import coo_array, csr_matrix
+from scipy.sparse import csr_matrix
 
 
 def ehrdata_blobs(
@@ -273,7 +273,9 @@ def ehrdata_blobs(
         coords = np.where(tem_layer_copy != 0)
         values = tem_layer_copy[coords]
 
-        tem_layer = coo_array((values, coords), shape=tem_layer.shape)
+        from sparse import COO  # local import: the `sparse` parameter shadows the module here
+
+        tem_layer = COO(np.asarray(coords), values, shape=tem_layer.shape)
 
     from ehrdata import EHRData
 

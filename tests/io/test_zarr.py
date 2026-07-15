@@ -2,9 +2,11 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+import sparse
 import zarr
 from scipy.sparse import issparse
 from tests.conftest import (
+    _ANNDATA_ALLOWS_COO,
     _ANNDATA_ALLOWS_ND_X,
     TEST_DATA_PATH,
     _assert_dtype_object_array_with_missing_values_equal,
@@ -209,6 +211,36 @@ def test_write_read_zarr_3d_X_relocated_to_obsm(tmp_path):
     assert edata_read.shape == (2, 3, 4)
     assert np.array_equal(np.asarray(edata_read.X), X3)
     assert [k for k in edata_read.layers if k is not None] == []
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+@pytest.mark.parametrize("chunks", ["auto", "ehrdata_auto"])
+@pytest.mark.parametrize("slot", ["X", "layer"])
+def test_write_read_zarr_sparse_coo_3d(slot, chunks, tmp_path):
+    from ehrdata import EHRData
+
+    dense = np.zeros((3, 2, 4))
+    dense[0, 0, 1] = 5.0
+    dense[2, 1, 3] = 7.0
+    coo = sparse.COO.from_numpy(dense)
+
+    if slot == "X":
+        edata = EHRData(X=coo)
+        obsm_key = "_ed_ondisk_X"
+    else:
+        edata = EHRData(X=np.zeros((3, 2)), layers={"tem_data": coo})
+        obsm_key = "_ed_ondisk_layers_tem_data"
+
+    path = tmp_path / f"coo_{slot}_{chunks}.ehrdata.zarr"
+    write_zarr(edata.copy(), path, chunks=chunks)
+
+    store = zarr.open(path)
+    assert store["anndata"]["obsm"][obsm_key].attrs["encoding-type"] == "ehrdata-coo"
+
+    edata_read = read_zarr(path)
+    restored = edata_read.X if slot == "X" else edata_read.layers["tem_data"]
+    assert isinstance(restored, sparse.COO)
+    assert np.array_equal(restored.todense(), dense)
 
 
 def test_read_minimal_corpus_zarr():

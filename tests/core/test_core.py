@@ -4,7 +4,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
-from tests.conftest import _ANNDATA_ALLOWS_ND_X, _ANNDATA_HAS_ACC, _assert_shape_matches
+from tests.conftest import _ANNDATA_ALLOWS_COO, _ANNDATA_ALLOWS_ND_X, _ANNDATA_HAS_ACC, _assert_shape_matches
 
 from ehrdata import EHRData
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
@@ -292,8 +292,17 @@ def test_ehrdata_set_aligneddataframes(X_numpy_322):
 #################################################################
 ### Test different types for 3dlayer
 #################################################################
-# "X_sparse_322" currently disabled as sparse.COO support in AnnData is not yet implemented
-@pytest.mark.parametrize("X_fixture_name", ["X_numpy_322", "X_dask_322"])
+@pytest.mark.parametrize(
+    "X_fixture_name",
+    [
+        "X_numpy_322",
+        "X_dask_322",
+        pytest.param(
+            "X_sparse_322",
+            marks=pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory"),
+        ),
+    ],
+)
 def test_ehrdata_X_data_types(X_fixture_name, request):
     X = request.getfixturevalue(X_fixture_name)
     edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X})

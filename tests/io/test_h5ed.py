@@ -4,8 +4,10 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy as sp
+import sparse
 from scipy.sparse import issparse
 from tests.conftest import (
+    _ANNDATA_ALLOWS_COO,
     _ANNDATA_ALLOWS_ND_X,
     TEST_DATA_PATH,
     _assert_dtype_object_array_with_missing_values_equal,
@@ -193,6 +195,33 @@ def test_write_h5ed_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
         assert np.array_equal(edata_333.layers[key], edata_read.layers[key])
     # the relocation must be invisible to the user-facing object
     assert not any(k.startswith("_ed_ondisk_") for k in edata_read.obsm)
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+@pytest.mark.parametrize("slot", ["X", "layer"])
+def test_write_read_h5ed_sparse_coo_3d(slot, tmp_path):
+    dense = np.zeros((3, 2, 4))
+    dense[0, 0, 1] = 5.0
+    dense[2, 1, 3] = 7.0
+    coo = sparse.COO.from_numpy(dense)
+
+    if slot == "X":
+        edata = EHRData(X=coo)
+        obsm_key = "_ed_ondisk_X"
+    else:
+        edata = EHRData(X=np.zeros((3, 2)), layers={"tem_data": coo})
+        obsm_key = "_ed_ondisk_layers_tem_data"
+
+    path = tmp_path / f"coo_{slot}.h5ed"
+    write_h5ed(edata.copy(), path)
+    with h5py.File(path, "r") as f:
+        assert obsm_key in f["obsm"]
+        assert f["obsm"][obsm_key].attrs["encoding-type"] == "ehrdata-coo"
+
+    edata_read = read_h5ed(path)
+    restored = edata_read.X if slot == "X" else edata_read.layers["tem_data"]
+    assert isinstance(restored, sparse.COO)
+    assert np.array_equal(restored.todense(), dense)
 
 
 def test_read_h5ed_legacy_v1_with_3d_in_layers(edata_333, tmp_path):

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import scipy
 import scipy.sparse as sp
+import sparse
 
 # from anndata.abc import CSCDataset, CSRDataset
 from anndata.compat import CupyArray, CupySparseMatrix, H5Array, H5Group, ZarrArray, ZarrGroup
@@ -33,6 +34,7 @@ type XDataType = (
     | ma.MaskedArray
     | CSMatrix
     | CSArray
+    | sparse.COO
     | H5Array
     | ZarrArray
     | ZappyArray
@@ -80,6 +82,7 @@ ARRAY_TYPES_NUMERIC = (
     as_dense_dask_array,
     sp.csr_array,
     sp.csc_array,
-)  # add coo_array once supported in AnnData
-ARRAY_TYPES_NUMERIC_3D_ABLE = (asarray, as_dense_dask_array)  # add coo_array once supported in AnnData
+    sparse.COO.from_numpy,
+)
+ARRAY_TYPES_NUMERIC_3D_ABLE = (asarray, as_dense_dask_array, sparse.COO.from_numpy)
 ARRAY_TYPES_NONNUMERIC = (asarray, as_dense_dask_array)
