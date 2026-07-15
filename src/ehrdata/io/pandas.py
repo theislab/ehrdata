@@ -70,12 +70,11 @@ def from_pandas(
         ...         "sex": ["M", "F", "F", "M", "F"],
         ...     }
         ... )
-        >>> edata = ed.io.from_pandas(df, layer="tem_data", index_column="patient_id")
+        >>> edata = ed.io.from_pandas(df, index_column="patient_id")
         >>> edata
 
         >>> EHRData object with n_obs × n_vars × n_t = 5 × 2 × 1
-        >>>     layers: 'tem_data'
-        >>>     shape of .tem_data: (5, 2, 1)
+        >>>     shape of .X: (5, 2, 1)
 
         >>> df_wide = pd.DataFrame(
         ...     {
@@ -86,13 +85,12 @@ def from_pandas(
         ...         "systolic_blood_pressure_t_1": [np.nan, 135],
         ...     }
         ... )
-        >>> edata = ed.io.from_pandas(df_wide, layer="tem_data", format="wide", columns_obs_only=["patient_id", "sex"])
+        >>> edata = ed.io.from_pandas(df_wide, format="wide", columns_obs_only=["patient_id", "sex"])
         >>> edata
 
         >>> EHRData object with n_obs × n_vars × n_t = 2 × 1 × 3
         >>>     obs: 'patient_id', 'sex'
-        >>>     layers: 'tem_data'
-        >>>     shape of .tem_data: (2, 1, 3)
+        >>>     shape of .X: (2, 1, 3)
 
 
         >>> df_long = pd.DataFrame(
@@ -110,13 +108,12 @@ def from_pandas(
         ...         "value": ["F", 120, 125, "M", 130, 135],
         ...     }
         ... )
-        >>> edata = ed.io.from_pandas(df_long, layer="tem_data", format="long", columns_obs_only=["sex"])
+        >>> edata = ed.io.from_pandas(df_long, format="long", columns_obs_only=["sex"])
         >>> edata
 
         >>> EHRData object with n_obs × n_vars × n_t = 2 × 1 × 3
         >>>     obs: "sex"
-        >>>     layers: 'tem_data'
-        >>>     shape of .tem_data: (2, 1, 3)
+        >>>     shape of .X: (2, 1, 3)
 
     """
     from ehrdata import EHRData
