@@ -11,6 +11,14 @@ if TYPE_CHECKING:
     from ehrdata import EHRData
 
 
+def _reject_pydata_sparse(array, *, func_name: str) -> None:
+    import sparse
+
+    if isinstance(array, sparse.SparseArray):
+        msg = f"{func_name} does not support pydata-sparse arrays; provide a dense (numpy/dask) or scipy sparse array."
+        raise NotImplementedError(msg)
+
+
 def move_to_obs(
     edata: EHRData,
     var_names: list[str] | str,
@@ -55,6 +63,8 @@ def move_to_obs(
     if layer is not None and (len(edata.layers[layer].shape) > 2) and (edata.layers[layer].shape[2] > 1):
         msg = "Layer is 3D, but move_to_obs only supports 2D layers."
         raise ValueError(msg)
+
+    _reject_pydata_sparse(edata.X if layer is None else edata.layers[layer], func_name="move_to_obs")
 
     if copy:
         edata = edata.copy()
@@ -139,6 +149,8 @@ def move_to_x(
     if layer is not None and (len(edata.layers[layer].shape) > 2) and (edata.layers[layer].shape[2] > 1):
         msg = "Layer is 3D, but move_to_x only supports 2D layers."
         raise ValueError(msg)
+
+    _reject_pydata_sparse(edata.X if layer is None else edata.layers[layer], func_name="move_to_x")
 
     cols_present_in_x = []
     cols_not_in_x = []

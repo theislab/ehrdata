@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+import sparse
 
 import ehrdata as ed
 from ehrdata import EHRData
@@ -19,6 +20,10 @@ import scipy.sparse as sp
 @pytest.mark.parametrize("copy", [True, False])
 def test_move_to_obs_vanilla(edata_330: EHRData, array_type: Callable, *, copy_columns: bool, copy: bool):
     edata_330.X = array_type(edata_330.X)
+    if isinstance(edata_330.X, sparse.SparseArray):
+        with pytest.raises(NotImplementedError):
+            ed.move_to_obs(edata_330, ["var1", "var2"], copy_columns=copy_columns, copy=copy)
+        return
     edata_reference = edata_330.copy()
 
     original_shape = edata_330.X.shape
@@ -66,6 +71,10 @@ def test_move_to_obs_layer(edata_330: EHRData):
 @pytest.mark.parametrize("copy_columns", [True, False])
 def test_move_to_x_vanilla(edata_330: EHRData, array_type: Callable, *, copy_columns: bool):
     edata_330.X = array_type(edata_330.X)
+    if isinstance(edata_330.X, sparse.SparseArray):
+        with pytest.raises(NotImplementedError):
+            ed.move_to_x(edata_330, ["obs_col_1"], copy_columns=copy_columns)
+        return
     edata_reference = edata_330.copy()
 
     original_obs_cols = len(edata_330.obs.columns)
