@@ -64,7 +64,8 @@ def move_to_obs(
         msg = "Layer is 3D, but move_to_obs only supports 2D layers."
         raise ValueError(msg)
 
-    _reject_pydata_sparse(edata.X if layer is None else edata.layers[layer], func_name="move_to_obs")
+    # move_to_obs reads .X (via to_df), regardless of `layer`
+    _reject_pydata_sparse(edata.X, func_name="move_to_obs")
 
     if copy:
         edata = edata.copy()

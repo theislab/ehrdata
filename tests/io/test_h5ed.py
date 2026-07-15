@@ -224,6 +224,23 @@ def test_write_read_h5ed_sparse_coo_3d(slot, tmp_path):
     assert np.array_equal(restored.todense(), dense)
 
 
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+def test_write_read_h5ed_sparse_coo_fill_value_and_dtype(tmp_path):
+    # a non-zero fill_value and a non-float dtype must round-trip losslessly
+    coords = np.array([[0, 2], [0, 1], [1, 3]])
+    data = np.array([5, 7], dtype=np.int64)
+    coo = sparse.COO(coords, data, shape=(3, 2, 4), fill_value=np.int64(9))
+
+    path = tmp_path / "coo_fill.h5ed"
+    write_h5ed(EHRData(X=coo).copy(), path)
+
+    restored = read_h5ed(path).X
+    assert isinstance(restored, sparse.COO)
+    assert restored.dtype == np.int64
+    assert restored.fill_value == np.int64(9)
+    assert np.array_equal(restored.todense(), coo.todense())
+
+
 def test_read_h5ed_legacy_v1_with_3d_in_layers(edata_333, tmp_path):
     # legacy v1 files store 3D arrays directly in layers, with no reserved obsm keys; they must still read correctly via the self-describing layout (no reserved keys -> nothing to relocate).
     path = tmp_path / "legacy_v1.h5ad"

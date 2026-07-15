@@ -26,8 +26,6 @@ dependencies = [
   "anndata>=0.12.6",
   "duckdb",
   "fast-array-utils[sparse]",
-  # sparse pulls numba transitively; floor it on 3.14 so resolution can't backtrack to a pre-3.14 numba
-  "numba>=0.66; python_version>='3.14'",
   "pooch",
   "rich",
   "sparse",
