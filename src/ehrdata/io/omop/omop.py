@@ -384,7 +384,6 @@ def setup_variables(
         >>> edata_gi = ed.io.omop.setup_variables(
         >>>     edata=edata_gi,
         >>>     backend_handle=con_gi,
-        >>>     layer="tem_data",
         >>>     data_tables=["observation", "measurement"],
         >>>     data_field_to_keep={"observation": "observation_source_value", "measurement": "is_present"},
         >>>     interval_length_number=20,
@@ -643,7 +642,6 @@ def setup_interval_variables(
         >>> edata_gi = ed.io.omop.setup_interval_variables(
         >>>     edata=edata_gi,
         >>>     backend_handle=con_gi,
-        >>>     layer="tem_data",
         >>>     data_tables=["drug_exposure", "condition_occurrence"],
         >>>     data_field_to_keep={"drug_exposure": "is_present", "condition_occurrence": "is_present"},
         >>>     interval_length_number=20,

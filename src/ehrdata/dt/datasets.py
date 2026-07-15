@@ -461,13 +461,13 @@ def physionet2012(
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ed.dt.physionet_2012(layer="tem_data)
+        >>> edata = ed.dt.physionet_2012()
+        >>> edata
         EHRData object with n_obs × n_vars × n_t = 11988 × 37 × 48
             obs: 'set', 'Age', 'Gender', 'Height', 'ICUType', 'SAPS-I', 'SOFA', 'Length_of_stay', 'Survival', 'In-hospital_death'
             var: 'Parameter'
             tem: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47'
-            layers: 'tem_data'
-            shape of .tem_data: (11988, 37, 48)
+            shape of .X: (11988, 37, 48)
 
         Inspect static information
 
@@ -482,7 +482,7 @@ def physionet2012(
 
         Inspect the 48-hour trajectory of the variable ``RespRate``:
 
-        >>> edata[edata.obs.index == "132539", edata.var_names == "RespRate"].layers["tem_data"]
+        >>> edata[edata.obs.index == "132539", edata.var_names == "RespRate"].X
         [[[19., 18., 19., 20., 20., 17., nan, 15., 14., 17., 15., 15.,
              12., 15., 15., 12., 14., 13., 18., 13., 12., 20., 15., 24.,
              nan, 16., 19., 18., nan, 16., nan, 18., nan, 18., nan, 20.,
@@ -653,14 +653,13 @@ def physionet2019(
 
     Examples:
         >>> import ehrdata as ed
-        >>> edata = ed.dt.physionet_2019(layer="tem_data")
+        >>> edata = ed.dt.physionet_2019()
         >>> edata
         EHRData object with n_obs × n_vars × n_t = 40336 × 35 × 48
             obs: 'Age', 'Gender', 'Unit1', 'Unit2', 'HospAdmTime', 'training_Set'
             var: 'Parameter'
             tem: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47'
-            layers: 'tem_data'
-            shape of .tem_data: (40336, 35, 48)
+            shape of .X: (40336, 35, 48)
 
         Inspect static information
 
@@ -675,7 +674,7 @@ def physionet2019(
 
         Inspect the 48-hour trajectory of the variable ``SepsisLabel``:
 
-        >>> edata[edata.obs.index == "p020378", edata.var_names == "SepsisLabel"].layers["tem_data"]
+        >>> edata[edata.obs.index == "p020378", edata.var_names == "SepsisLabel"].X
         [[[nan,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
               0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
               0.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1., nan,

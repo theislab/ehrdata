@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Documentation
  - The {class}`~ehrdata.EHRData` attribute reference now describes `.obsm`, `.varm`, `.obsp` and `.varp` in anndata's terms instead of showing a generic placeholder. ([#263](https://github.com/theislab/ehrdata/pull/263)) @eroell
+ - Updated logo with 3D `.X`. Tutorials updated to use `.X` canonically. Docstring examples no longer pass `layer="tem_data"`: the time series is kept in the default 3D `.X`. ([#273](https://github.com/theislab/ehrdata/pull/273)) @eroell
 
 ## [0.3.0]
 
