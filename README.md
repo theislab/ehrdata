@@ -6,14 +6,43 @@
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/theislab/ehrdata/test.yaml?branch=main
 [badge-docs]: https://img.shields.io/readthedocs/ehrdata
 
+<p align="center">
+<img src="https://raw.githubusercontent.com/theislab/ehrdata/main/docs/_static/tutorial_images/ehrdata_logo.png" width="320" alt="EHRData overview: an X data array with obs, var, and tem annotations, alongside layers, obsm, varm, obsp, varp, and uns.">
+</p>
+
 `EHRData` is a data framework that comprises a FAIR storage format and a collection of Python libraries for performant access, alignment, and processing of uni- and multi-modal electronic health record datasets.
 This repository contains the core `ehrdata` library, which has the `EHRData` class at its heart.
 See the [ehrapy][] package for an analysis package that uses ehrdata to enable the analysis of electronic health record datasetes.
 
 ## Getting started
 
-Please refer to the [documentation][],
-in particular, the [API documentation][].
+`EHRData` extends [AnnData][] to represent data of **n** observations × **d** variables × **t** time points — a natural fit for the time-resolved measurements found in electronic health records.
+
+```python
+import ehrdata as ed
+
+# Load the PhysioNet 2019 sepsis-prediction challenge dataset
+# (downloaded and cached on first use)
+edata = ed.dt.physionet2019()
+edata
+```
+
+```
+EHRData object with n_obs × n_vars × n_t = 40336 × 35 × 48
+    obs: 'Age', 'Gender', 'Unit1', 'Unit2', 'HospAdmTime', 'training_Set'
+    var: 'Parameter'
+    tem: '0', '1', '2', ..., '45', '46', '47'
+    shape of .X: (40336, 35, 48)
+```
+
+The 35 clinical parameters are stored over 48 hourly time steps in a single three-dimensional array, with patient- and variable-level metadata aligned alongside.
+You can slice across all three axes at once — for example, the 48-hour trajectory of the sepsis label for one patient:
+
+```python
+edata[edata.obs.index == "p020378", edata.var_names == "SepsisLabel"].X
+```
+
+For more, please refer to the [documentation][], in particular the [API documentation][].
 
 ## Disclaimer
 
@@ -57,6 +86,7 @@ If you found a bug, please use the [issue tracker][].
 
 [mambaforge]: https://github.com/conda-forge/miniforge#mambaforge
 [scverse discourse]: https://discourse.scverse.org
+[anndata]: https://anndata.readthedocs.io/en/stable
 [ehrapy]: https://ehrapy.readthedocs.io/en/stable
 [issue tracker]: https://github.com/theislab/ehrdata/issues
 [tests]: https://github.com/theislab/ehrdata/actions/workflows/test.yml

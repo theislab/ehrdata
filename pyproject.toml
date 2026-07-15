@@ -104,6 +104,7 @@ envs.docs.scripts.build = "sphinx-build -M html docs docs/_build {args}"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.hatch-test.features = [ "test" ]
+envs.hatch-test.env-vars.HDF5_USE_FILE_LOCKING = "FALSE"  # avoids concurrent read error BlockingIOError: [Errno 11] ... unable to lock file
 envs.hatch-test.matrix = [
   # Full integration-aware suite on both supported Pythons.
   { python = [ "3.12", "3.14" ] },
