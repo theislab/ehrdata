@@ -42,9 +42,6 @@ You can slice across all three axes at once — for example, the 48-hour traject
 edata[edata.obs.index == "p020378", edata.var_names == "SepsisLabel"].X
 ```
 
-> **Note:** Storing the time tensor directly in `.X` (as above) requires `anndata>=0.13`.
-> With older `anndata`, pass a layer name via `layer=...` to store it in `.layers` instead.
-
 For more, please refer to the [documentation][], in particular the [API documentation][].
 
 ## Disclaimer
