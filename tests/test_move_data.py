@@ -12,9 +12,24 @@ from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 if TYPE_CHECKING:
     from collections.abc import Callable
 import scipy.sparse as sp
+import sparse
+
+ARRAY_TYPES_NUMERIC_XFAIL_COO = [
+    pytest.param(
+        array_type,
+        marks=pytest.mark.xfail(
+            raises=RuntimeError,
+            strict=True,
+            reason="anndata blocks auto-densification of sparse.COO in .X",
+        ),
+    )
+    if getattr(array_type, "__self__", None) is sparse.COO
+    else array_type
+    for array_type in ARRAY_TYPES_NUMERIC
+]
 
 
-@pytest.mark.parametrize("array_type", ARRAY_TYPES_NUMERIC)
+@pytest.mark.parametrize("array_type", ARRAY_TYPES_NUMERIC_XFAIL_COO)
 @pytest.mark.parametrize("copy_columns", [True, False])
 @pytest.mark.parametrize("copy", [True, False])
 def test_move_to_obs_vanilla(edata_330: EHRData, array_type: Callable, *, copy_columns: bool, copy: bool):
@@ -70,7 +85,7 @@ def test_move_to_obs_reads_from_layer(edata_330: EHRData):
     assert list(edata_330.obs["var1"]) == [101, 104, 107]
 
 
-@pytest.mark.parametrize("array_type", ARRAY_TYPES_NUMERIC)
+@pytest.mark.parametrize("array_type", ARRAY_TYPES_NUMERIC_XFAIL_COO)
 @pytest.mark.parametrize("copy_columns", [True, False])
 def test_move_to_x_vanilla(edata_330: EHRData, array_type: Callable, *, copy_columns: bool):
     edata_330.X = array_type(edata_330.X)
