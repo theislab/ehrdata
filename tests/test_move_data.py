@@ -3,8 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-import sparse
-from tests.conftest import _ANNDATA_ALLOWS_COO
 
 import ehrdata as ed
 from ehrdata import EHRData
@@ -20,14 +18,7 @@ import scipy.sparse as sp
 @pytest.mark.parametrize("copy_columns", [True, False])
 @pytest.mark.parametrize("copy", [True, False])
 def test_move_to_obs_vanilla(edata_330: EHRData, array_type: Callable, *, copy_columns: bool, copy: bool):
-    x = array_type(edata_330.X)
-    if isinstance(x, sparse.SparseArray) and not _ANNDATA_ALLOWS_COO:
-        pytest.skip("anndata <0.13.1 rejects sparse.COO in memory")
-    edata_330.X = x
-    if isinstance(x, sparse.SparseArray):
-        with pytest.raises(NotImplementedError):
-            ed.move_to_obs(edata_330, ["var1", "var2"], copy_columns=copy_columns, copy=copy)
-        return
+    edata_330.X = array_type(edata_330.X)
     edata_reference = edata_330.copy()
 
     original_shape = edata_330.X.shape
@@ -74,14 +65,7 @@ def test_move_to_obs_layer(edata_330: EHRData):
 @pytest.mark.parametrize("array_type", ARRAY_TYPES_NUMERIC)
 @pytest.mark.parametrize("copy_columns", [True, False])
 def test_move_to_x_vanilla(edata_330: EHRData, array_type: Callable, *, copy_columns: bool):
-    x = array_type(edata_330.X)
-    if isinstance(x, sparse.SparseArray) and not _ANNDATA_ALLOWS_COO:
-        pytest.skip("anndata <0.13.1 rejects sparse.COO in memory")
-    edata_330.X = x
-    if isinstance(x, sparse.SparseArray):
-        with pytest.raises(NotImplementedError):
-            ed.move_to_x(edata_330, ["obs_col_1"], copy_columns=copy_columns)
-        return
+    edata_330.X = array_type(edata_330.X)
     edata_reference = edata_330.copy()
 
     original_obs_cols = len(edata_330.obs.columns)
