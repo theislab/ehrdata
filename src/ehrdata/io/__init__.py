@@ -1,5 +1,5 @@
 from . import (
-    _coo_codec,  # registers the sparse.COO IO handlers on import
+    _coo_codec,
     omop,
 )
 from .csv import read_csv

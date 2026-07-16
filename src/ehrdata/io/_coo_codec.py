@@ -1,22 +1,22 @@
-"""Register anndata IO handlers for pydata-sparse :class:`sparse.COO`.
+"""Register anndata-mimicking IO handlers for pydata-sparse :class:`sparse.COO`.
 
-anndata's IO registry has no writer for n-D ``sparse.COO``. This adds one (and its reader)
-under a namespaced spec so a COO tensor relocated into ``.obsm`` round-trips through h5ed/zarr.
-Registration runs on import and is best-effort: it is skipped if pydata-sparse is unavailable,
-if anndata's private IO registry moved, or if a ``sparse.COO`` writer is already registered.
+anndata's IO registry has no writer for n-D ``sparse.COO``.
+This adds one (and its reader) so a COO tensor relocated into ``.obsm`` round-trips through h5ed/zarr.
+Registration runs on import and is best-effort: it is skipped if anndata's private IO registry moved, or if a ``sparse.COO`` writer is already registered.
 """
 
 from __future__ import annotations
 
 import contextlib
 
+import h5py
 import numpy as np
+import sparse
+import zarr
 
 
 def _register() -> None:
-    import h5py
-    import sparse
-    import zarr
+
     from anndata._io.specs.registry import _REGISTRY, IOSpec
 
     if sparse.COO in _REGISTRY.write_specs:
@@ -29,7 +29,7 @@ def _register() -> None:
         g.attrs["shape"] = list(elem.shape)
         _writer.write_elem(g, "coords", np.ascontiguousarray(elem.coords), dataset_kwargs=dataset_kwargs)
         _writer.write_elem(g, "data", np.ascontiguousarray(elem.data), dataset_kwargs=dataset_kwargs)
-        # length-1 (not 0-d): keeps the value's dtype and lets the ehrdata_auto sharding callback size it
+        # length-1 (not 0-d)
         _writer.write_elem(g, "fill_value", np.asarray(elem.fill_value).reshape(1), dataset_kwargs=dataset_kwargs)
 
     def _read_coo(f, *, _reader):
@@ -44,6 +44,6 @@ def _register() -> None:
         _REGISTRY.register_read(group, spec)(_read_coo)
 
 
-# best-effort; never break `import ehrdata` if pydata-sparse or anndata's private registry is absent/changed
+# don't break `import ehrdata` if andata's private registry is absent/changed
 with contextlib.suppress(ImportError, AttributeError, TypeError):
     _register()

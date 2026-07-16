@@ -273,7 +273,7 @@ def ehrdata_blobs(
         coords = np.where(tem_layer_copy != 0)
         values = tem_layer_copy[coords]
 
-        from sparse import COO  # local import: the `sparse` parameter shadows the module here
+        from sparse import COO
 
         tem_layer = COO(np.asarray(coords), values, shape=tem_layer.shape)
 
