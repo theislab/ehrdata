@@ -45,6 +45,7 @@ optional-dependencies.doc = [
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
+  "numpy<2.5",                       # numba (via sparse) caps numpy<2.5; lamindb otherwise pulls 2.5.1, forcing uv to backtrack numba into an unbuildable llvmlite and break the RTD build. Relax when numba supports newer numpy.
   "pandas",
   "scanpydoc",
   "sphinx>=4,<9",
