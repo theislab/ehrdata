@@ -69,11 +69,11 @@ def move_to_obs(
     cols_to_obs_indices = edata.var_names.isin(var_names)
 
     if copy_columns:
-        cols_to_obs = edata[:, cols_to_obs_indices].to_df()
+        cols_to_obs = edata[:, cols_to_obs_indices].to_df(layer=layer)
         edata.obs = edata.obs.join(cols_to_obs)
 
     else:
-        df = edata[:, cols_to_obs_indices].to_df()
+        df = edata[:, cols_to_obs_indices].to_df(layer=layer)
         edata._inplace_subset_var(~cols_to_obs_indices)
         edata.obs = edata.obs.join(df)
 

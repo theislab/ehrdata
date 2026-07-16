@@ -62,6 +62,14 @@ def test_move_to_obs_layer(edata_330: EHRData):
     assert "var2" in edata_330.obs.columns
 
 
+def test_move_to_obs_reads_from_layer(edata_330: EHRData):
+    edata_330.layers["layer1"] = edata_330.X + 100
+
+    ed.move_to_obs(edata_330, "var1", layer="layer1", copy_columns=True)
+
+    assert list(edata_330.obs["var1"]) == [101, 104, 107]
+
+
 @pytest.mark.parametrize("array_type", ARRAY_TYPES_NUMERIC)
 @pytest.mark.parametrize("copy_columns", [True, False])
 def test_move_to_x_vanilla(edata_330: EHRData, array_type: Callable, *, copy_columns: bool):
