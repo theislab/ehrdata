@@ -10,7 +10,11 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Added
+ - {func}`~ehrdata.io.write_h5ed`/{func}`~ehrdata.io.read_h5ed` and {func}`~ehrdata.io.write_zarr`/{func}`~ehrdata.io.read_zarr` can now persist a 3D `.X`/layer stored as a pydata [`sparse.COO`](https://sparse.pydata.org) tensor. Following closely the [binsparse specification](https://graphblas.org/binsparse-specification/) (per-axis `indices_<dim>` + `values` datasets, a `fill_value`, and a JSON `binsparse` descriptor). The descriptor labels dtypes with binsparse's [canonical data-type strings](https://graphblas.org/binsparse-specification/#key_data_types); boolean tensors round-trip as `bint8` (stored on disk as `uint8`). Supported specifically for the reserved 3D `X`/layer slots; a `sparse.COO` in any other slot raises a clear error. ([#276](https://github.com/theislab/ehrdata/pull/276)) @eroell
+
 ### Fixed
+ - {func}`~ehrdata.harmonize_missing_values` and the read-time float casting no longer choke on boolean arrays. Boolean arrays are now treated like numeric ones (nothing to harmonize/cast). ([#264](https://github.com/theislab/ehrdata/issues/264)) @eroell
  - {func}`~ehrdata.move_to_obs` now reads values from the requested `layer` instead of always reading `.X`; passing `layer=` previously validated the layer but silently moved `.X`'s values. ([#279](https://github.com/theislab/ehrdata/pull/279)) @eroell
  - {func}`~ehrdata.integrations.vitessce.gen_default_config` no longer fails with `X must be 2-dimensional` when the time series lives in a 3D `.X` (e.g. from {func}`~ehrdata.dt.physionet2019`); the selected source is reduced to the chosen `timestep` before writing, and `layer` now defaults to `None` (use `.X`). ([#271](https://github.com/theislab/ehrdata/pull/271)) @eroell
  - {func}`~ehrdata.infer_feature_types` binary detection contained a latent bug: the integrality guard used `np.all(<generator>)`, which is always truthy and so never actually ran. The check is now the equivalent, correct `set(col.unique()) == {0, 1}`. No user-visible behaviour changes, as the disabled guard was redundant with the `{0, 1}` set check. ([#268](https://github.com/theislab/ehrdata/pull/268)) @Zethson

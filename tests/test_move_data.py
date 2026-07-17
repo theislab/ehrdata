@@ -12,12 +12,15 @@ from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
 if TYPE_CHECKING:
     from collections.abc import Callable
 import scipy.sparse as sp
+import sparse
 
 
 @pytest.mark.parametrize("array_type", ARRAY_TYPES_NUMERIC)
 @pytest.mark.parametrize("copy_columns", [True, False])
 @pytest.mark.parametrize("copy", [True, False])
 def test_move_to_obs_vanilla(edata_330: EHRData, array_type: Callable, *, copy_columns: bool, copy: bool):
+    if getattr(array_type, "__self__", None) is sparse.COO:
+        pytest.skip("move_to_obs does not support sparse.COO in .X")
     edata_330.X = array_type(edata_330.X)
     edata_reference = edata_330.copy()
 
@@ -73,6 +76,8 @@ def test_move_to_obs_reads_from_layer(edata_330: EHRData):
 @pytest.mark.parametrize("array_type", ARRAY_TYPES_NUMERIC)
 @pytest.mark.parametrize("copy_columns", [True, False])
 def test_move_to_x_vanilla(edata_330: EHRData, array_type: Callable, *, copy_columns: bool):
+    if getattr(array_type, "__self__", None) is sparse.COO:
+        pytest.skip("move_to_x does not support sparse.COO in .X")
     edata_330.X = array_type(edata_330.X)
     edata_reference = edata_330.copy()
 

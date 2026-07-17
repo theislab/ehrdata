@@ -1,10 +1,14 @@
+import json
+
 import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+import sparse
 import zarr
 from scipy.sparse import issparse
 from tests.conftest import (
+    _ANNDATA_ALLOWS_COO,
     _ANNDATA_ALLOWS_ND_X,
     TEST_DATA_PATH,
     _assert_dtype_object_array_with_missing_values_equal,
@@ -209,6 +213,99 @@ def test_write_read_zarr_3d_X_relocated_to_obsm(tmp_path):
     assert edata_read.shape == (2, 3, 4)
     assert np.array_equal(np.asarray(edata_read.X), X3)
     assert [k for k in edata_read.layers if k is not None] == []
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+@pytest.mark.parametrize("chunks", ["auto", "ehrdata_auto"])
+@pytest.mark.parametrize("slot", ["X", "layer"])
+def test_write_read_zarr_sparse_coo_3d(slot, chunks, tmp_path):
+    from ehrdata import EHRData
+
+    dense = np.zeros((3, 2, 4))
+    dense[0, 0, 1] = 5.0
+    dense[2, 1, 3] = 7.0
+    coo = sparse.COO.from_numpy(dense)
+
+    if slot == "X":
+        edata = EHRData(X=coo)
+        obsm_key = "_ed_ondisk_X"
+    else:
+        edata = EHRData(X=np.zeros((3, 2)), layers={"tem_data": coo})
+        obsm_key = "_ed_ondisk_layers_tem_data"
+
+    path = tmp_path / f"coo_{slot}_{chunks}.ehrdata.zarr"
+    write_zarr(edata.copy(), path, chunks=chunks)
+
+    store = zarr.open(path)
+    group = store["anndata"]["obsm"][obsm_key]
+    # ehrdata-owned marker (namespaced, not anndata's `encoding-type`) + binsparse layout
+    assert group.attrs["ehrdata-encoding-type"] == "ehrdata-coo"
+    descriptor = json.loads(group.attrs["binsparse"])
+    assert descriptor["version"] == "0.1"
+    assert descriptor["format"] == "COO"
+    assert descriptor["shape"] == [3, 2, 4]
+    assert descriptor["number_of_stored_values"] == 2
+    assert descriptor["fill"] is True
+    # canonical binsparse dtype strings: values + one per index axis, all int64 indices
+    assert descriptor["data_types"]["values"] == "float64"
+    assert [descriptor["data_types"][f"indices_{i}"] for i in range(3)] == ["int64"] * 3
+    assert {"indices_0", "indices_1", "indices_2", "values", "fill_value"} <= set(group.keys())
+    assert group["indices_0"].dtype == np.int64  # indices are always written as int64 on disk
+
+    edata_read = read_zarr(path)
+    restored = edata_read.X if slot == "X" else edata_read.layers["tem_data"]
+    assert isinstance(restored, sparse.COO)
+    assert np.array_equal(restored.todense(), dense)
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+def test_write_read_zarr_sparse_coo_boolean(tmp_path):
+    # a boolean sparse.COO (e.g. `coo != 0`) must round-trip through the default read path
+    # (harmonize + cast). binsparse labels booleans "bint8" and stores them as uint8 on disk.
+    from ehrdata import EHRData
+
+    dense = np.zeros((3, 2, 4))
+    dense[0, 0, 1] = 5.0
+    dense[2, 1, 3] = 7.0
+    coo = sparse.COO.from_numpy(dense) != 0  # bool COO, fill_value False, 2 stored values
+
+    path = tmp_path / "coo_bool.ehrdata.zarr"
+    write_zarr(EHRData(X=coo).copy(), path)
+
+    store = zarr.open(path)
+    group = store["anndata"]["obsm"]["_ed_ondisk_X"]
+    descriptor = json.loads(group.attrs["binsparse"])
+    assert descriptor["data_types"]["values"] == "bint8"
+    assert descriptor["number_of_stored_values"] == 2
+    assert group["values"].dtype == np.uint8  # bint8 is stored as uint8 on disk
+
+    restored = read_zarr(path).X  # default harmonize + cast must not choke on a boolean array
+    assert isinstance(restored, sparse.COO)
+    assert restored.dtype == np.bool_
+    assert np.array_equal(restored.todense(), coo.todense())
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+@pytest.mark.parametrize("slot", ["X", "layer"])
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(np.array(["a", "bb"]), id="str"),  # dtype <U2
+        pytest.param(np.array([1 + 2j, 3 + 4j]), id="complex128"),
+    ],
+)
+def test_write_zarr_sparse_coo_nonbinsparse_dtype_rejected(slot, data, tmp_path):
+    # binsparse defines only int/uint/float/bint8 dtypes; a sparse.COO with any other value dtype
+    # (e.g. strings, complex) cannot be persisted and must raise before/instead of a broken store.
+    from ehrdata import EHRData
+
+    coords = np.array([[0, 2], [0, 1], [1, 3]])
+    coo = sparse.COO(coords, data, shape=(3, 2, 4))
+
+    edata = EHRData(X=coo) if slot == "X" else EHRData(X=np.zeros((3, 2)), layers={"tem_data": coo})
+
+    with pytest.raises(ValueError, match="binsparse layout"):
+        write_zarr(edata.copy(), tmp_path / "coo_reject.ehrdata.zarr")
 
 
 def test_read_minimal_corpus_zarr():

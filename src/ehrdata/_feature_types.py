@@ -317,8 +317,9 @@ def harmonize_missing_values(
         edata = edata.copy()
     X = edata.X if layer is None else edata.layers[layer]
 
-    # note that every sparse array is of a numeric dtype and will enter this if block
-    if np.issubdtype(X.dtype, np.number):
+    # note that every scipy sparse array is of a numeric dtype and will enter this if block
+    # further sparse.COO, while being allowed in theory to be str dtype, is only allowed numeric dtypes under binsparse specification which we follow closely
+    if np.issubdtype(X.dtype, np.number) or np.issubdtype(X.dtype, np.bool_):
         logger.debug(f"ed.harmonize_missing_values does not affect numeric layer {'X' if layer is None else layer}.")
         return edata if copy else None
 

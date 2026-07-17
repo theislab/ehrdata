@@ -1,11 +1,15 @@
+import json
+
 import anndata as ad
 import h5py
 import numpy as np
 import pandas as pd
 import pytest
 import scipy as sp
+import sparse
 from scipy.sparse import issparse
 from tests.conftest import (
+    _ANNDATA_ALLOWS_COO,
     _ANNDATA_ALLOWS_ND_X,
     TEST_DATA_PATH,
     _assert_dtype_object_array_with_missing_values_equal,
@@ -193,6 +197,108 @@ def test_write_h5ed_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
         assert np.array_equal(edata_333.layers[key], edata_read.layers[key])
     # the relocation must be invisible to the user-facing object
     assert not any(k.startswith("_ed_ondisk_") for k in edata_read.obsm)
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+@pytest.mark.parametrize("slot", ["X", "layer"])
+def test_write_read_h5ed_sparse_coo_3d(slot, tmp_path):
+    dense = np.zeros((3, 2, 4))
+    dense[0, 0, 1] = 5.0
+    dense[2, 1, 3] = 7.0
+    coo = sparse.COO.from_numpy(dense)
+
+    if slot == "X":
+        edata = EHRData(X=coo)
+        obsm_key = "_ed_ondisk_X"
+    else:
+        edata = EHRData(X=np.zeros((3, 2)), layers={"tem_data": coo})
+        obsm_key = "_ed_ondisk_layers_tem_data"
+
+    path = tmp_path / f"coo_{slot}.h5ed"
+    write_h5ed(edata.copy(), path)
+    with h5py.File(path, "r") as f:
+        assert obsm_key in f["obsm"]
+        group = f["obsm"][obsm_key]
+        # ehrdata-owned marker (namespaced, not anndata's `encoding-type`) + binsparse layout
+        assert group.attrs["ehrdata-encoding-type"] == "ehrdata-coo"
+        descriptor = json.loads(group.attrs["binsparse"])
+        assert descriptor["version"] == "0.1"
+        assert descriptor["format"] == "COO"
+        assert descriptor["shape"] == [3, 2, 4]
+        assert descriptor["number_of_stored_values"] == 2
+        assert descriptor["fill"] is True
+        # canonical binsparse dtype strings: values + one per index axis, all int64 indices
+        assert descriptor["data_types"]["values"] == "float64"
+        assert [descriptor["data_types"][f"indices_{i}"] for i in range(3)] == ["int64"] * 3
+        assert {"indices_0", "indices_1", "indices_2", "values", "fill_value"} <= set(group.keys())
+        assert group["indices_0"].dtype == np.int64  # indices are always written as int64 on disk
+
+    edata_read = read_h5ed(path)
+    restored = edata_read.X if slot == "X" else edata_read.layers["tem_data"]
+    assert isinstance(restored, sparse.COO)
+    assert np.array_equal(restored.todense(), dense)
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+def test_write_read_h5ed_sparse_coo_fill_value_and_dtype(tmp_path):
+    # a non-zero fill_value and a non-float dtype must round-trip losslessly
+    coords = np.array([[0, 2], [0, 1], [1, 3]])
+    data = np.array([5, 7], dtype=np.int64)
+    coo = sparse.COO(coords, data, shape=(3, 2, 4), fill_value=np.int64(9))
+
+    path = tmp_path / "coo_fill.h5ed"
+    write_h5ed(EHRData(X=coo).copy(), path)
+
+    restored = read_h5ed(path).X
+    assert isinstance(restored, sparse.COO)
+    assert restored.dtype == np.int64
+    assert restored.fill_value == np.int64(9)
+    assert np.array_equal(restored.todense(), coo.todense())
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+def test_write_read_h5ed_sparse_coo_boolean(tmp_path):
+    # a boolean sparse.COO (e.g. `coo != 0`) must round-trip through the default read path
+    # (harmonize + cast). binsparse labels booleans "bint8" and stores them as uint8 on disk.
+    dense = np.zeros((3, 2, 4))
+    dense[0, 0, 1] = 5.0
+    dense[2, 1, 3] = 7.0
+    coo = sparse.COO.from_numpy(dense) != 0  # bool COO, fill_value False, 2 stored values
+
+    path = tmp_path / "coo_bool.h5ed"
+    write_h5ed(EHRData(X=coo).copy(), path)
+    with h5py.File(path, "r") as f:
+        group = f["obsm"]["_ed_ondisk_X"]
+        descriptor = json.loads(group.attrs["binsparse"])
+        assert descriptor["data_types"]["values"] == "bint8"
+        assert descriptor["number_of_stored_values"] == 2
+        assert group["values"].dtype == np.uint8  # bint8 is stored as uint8 on disk
+
+    restored = read_h5ed(path).X  # default harmonize + cast must not choke on a boolean array
+    assert isinstance(restored, sparse.COO)
+    assert restored.dtype == np.bool_
+    assert np.array_equal(restored.todense(), coo.todense())
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+@pytest.mark.parametrize("slot", ["X", "layer"])
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(np.array(["a", "bb"]), id="str"),  # dtype <U2
+        pytest.param(np.array([1 + 2j, 3 + 4j]), id="complex128"),
+    ],
+)
+def test_write_h5ed_sparse_coo_nonbinsparse_dtype_rejected(slot, data, tmp_path):
+    # binsparse defines only int/uint/float/bint8 dtypes; a sparse.COO with any other value dtype
+    # (e.g. strings, complex) cannot be persisted and must raise before/instead of a broken file.
+    coords = np.array([[0, 2], [0, 1], [1, 3]])
+    coo = sparse.COO(coords, data, shape=(3, 2, 4))
+
+    edata = EHRData(X=coo) if slot == "X" else EHRData(X=np.zeros((3, 2)), layers={"tem_data": coo})
+
+    with pytest.raises(ValueError, match="binsparse layout"):
+        write_h5ed(edata.copy(), tmp_path / "coo_reject.h5ed")
 
 
 def test_read_h5ed_legacy_v1_with_3d_in_layers(edata_333, tmp_path):

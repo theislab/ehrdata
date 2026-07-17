@@ -2,6 +2,9 @@ import duckdb
 import numpy as np
 import pandas as pd
 import pytest
+import sparse
+from scipy.sparse import issparse
+from tests.conftest import _ANNDATA_ALLOWS_COO
 
 import ehrdata as ed
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
@@ -173,7 +176,16 @@ def test_physionet2019_arguments():
     assert edata.var.shape == (35, 1)
 
 
-@pytest.mark.parametrize("sparse_param", [False])  # [False, True]
+@pytest.mark.parametrize(
+    "sparse_param",
+    [
+        False,
+        pytest.param(
+            True,
+            marks=pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory"),
+        ),
+    ],
+)
 def test_ehrdata_blobs(sparse_param):
     """Test the ehrdata_blobs function."""
     edata = ed.dt.ehrdata_blobs(
@@ -195,19 +207,14 @@ def test_ehrdata_blobs(sparse_param):
     # Test X data
     if not sparse_param:
         assert isinstance(edata.X, np.ndarray)
-        assert edata.X.shape == (100, 5)
-    # else:
-    #     assert sparse.issparse(ehr_data.X)
-    #     assert ehr_data.X.shape == (100, 5)
+    else:
+        assert issparse(edata.X)
+    assert edata.X.shape == (100, 5)
 
     # Test 3D data
-    if not sparse_param:
-        assert isinstance(edata.layers[DEFAULT_TEM_LAYER_NAME], np.ndarray)
-        assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (100, 5, 10)
-    # else:
-    #     from sparse import COO
-    #     assert isinstance(ehr_data.R, COO)
-    #     assert ehr_data.R.shape == (100, 5, 10)
+    tem = edata.layers[DEFAULT_TEM_LAYER_NAME]
+    assert isinstance(tem, np.ndarray if not sparse_param else sparse.COO)
+    assert tem.shape == (100, 5, 10)
 
     # Test obs DataFrame
     assert isinstance(edata.obs, pd.DataFrame)

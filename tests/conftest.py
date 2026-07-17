@@ -6,7 +6,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 import pytest
-from scipy import sparse
+import sparse
 
 from ehrdata import EHRData
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
@@ -40,6 +40,18 @@ def _anndata_has_acc() -> bool:
 
 # Does anndata expose the ``acc`` accessor references (``A.X[:, k]``); added in 0.13, absent below.
 _ANNDATA_HAS_ACC = _anndata_has_acc()
+
+
+def _anndata_allows_coo() -> bool:
+    try:
+        ad.AnnData(np.zeros((1, 1)), obsm={"c": sparse.COO.from_numpy(np.zeros((1, 1, 1)))})
+    except (ValueError, TypeError):
+        return False
+    return True
+
+
+# Does anndata accept a pydata-sparse ``COO`` in memory; rejected as an array type before 0.13.1.
+_ANNDATA_ALLOWS_COO = _anndata_allows_coo()
 
 
 def _assert_shape_matches(
@@ -116,13 +128,7 @@ def X_numpy_322():
 
 @pytest.fixture
 def X_sparse_322():
-    return sparse.coo_array(
-        (
-            np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]).ravel(),
-            np.indices((3, 2, 2)).reshape(3, -1),
-        ),
-        shape=(3, 2, 2),
-    )
+    return sparse.COO.from_numpy(np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]))
 
 
 @pytest.fixture

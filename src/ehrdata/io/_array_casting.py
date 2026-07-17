@@ -16,8 +16,9 @@ def _cast_variables_to_float(edata: EHRData) -> None:
         msg = "Cannot cast variables to float when EHRData is backed."
         raise ValueError(msg)
 
-    if edata.X is not None and not np.issubdtype(edata.X.dtype, np.number):
-        # sparse arrays will never enter this branch since they are numeric
+    if edata.X is not None and not (np.issubdtype(edata.X.dtype, np.number) or np.issubdtype(edata.X.dtype, np.bool_)):
+        # note that every scipy sparse array is of a numeric dtype and will enter this if block
+        # further sparse.COO, while being allowed in theory to be str dtype, is only allowed numeric dtypes under binsparse specification which we follow closely
         out = edata.X.astype(
             object
         ).copy()  # A fresh object array is built so columns can independently hold floats: numpy 2 / pandas 3 read string data back as a homogeneous ``StringDType`` array, into which an in-place ``astype(float64)`` assignment would merely re-stringify the values.
@@ -29,8 +30,11 @@ def _cast_variables_to_float(edata: EHRData) -> None:
         edata.X = out
 
     for key in edata.layers:
-        if edata.layers[key] is not None and not np.issubdtype(edata.layers[key].dtype, np.number):
-            # sparse arrays will never enter this branch since they are numeric
+        if edata.layers[key] is not None and not (
+            np.issubdtype(edata.layers[key].dtype, np.number) or np.issubdtype(edata.layers[key].dtype, np.bool_)
+        ):
+            # note that every scipy sparse array is of a numeric dtype and will enter this if block
+            # further sparse.COO, while being allowed in theory to be str dtype, is only allowed numeric dtypes under binsparse specification which we follow closely
             out = edata.X.astype(object).copy()
 
             for column in range(out.shape[1]):
