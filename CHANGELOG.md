@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+## [0.4.0]
+
 ### Added
  - {func}`~ehrdata.io.write_h5ed`/{func}`~ehrdata.io.read_h5ed` and {func}`~ehrdata.io.write_zarr`/{func}`~ehrdata.io.read_zarr` can now persist a 3D `.X`/layer stored as a pydata [`sparse.COO`](https://sparse.pydata.org) tensor. Following closely the [binsparse specification](https://graphblas.org/binsparse-specification/) (per-axis `indices_<dim>` + `values` datasets, a `fill_value`, and a JSON `binsparse` descriptor). The descriptor labels dtypes with binsparse's [canonical data-type strings](https://graphblas.org/binsparse-specification/#key_data_types); boolean tensors round-trip as `bint8` (stored on disk as `uint8`). Supported specifically for the reserved 3D `X`/layer slots; a `sparse.COO` in any other slot raises a clear error. ([#276](https://github.com/theislab/ehrdata/pull/276)) @eroell
 
