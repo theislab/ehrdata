@@ -298,7 +298,7 @@ def harmonize_missing_values(
     missing_values: Iterable[str] | None = ["nan", "np.nan", "<NA>", "pd.NA"],
     copy: bool = False,
 ) -> EHRData | None:
-    """Harmonize missing values in the :class:`~ehrdata.EHRDatatest` object.
+    """Harmonize missing values in the :class:`~ehrdata.EHRData` object.
 
     This function will replace strings that are considered to represent missing values with `np.nan`.
 
