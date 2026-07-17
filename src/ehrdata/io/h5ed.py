@@ -18,7 +18,13 @@ from ehrdata.core.constants import (
 )
 from ehrdata.core.ehrdata import _silence_anndata_nd_warning
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
-from ehrdata.io._ondisk import _check_020_ehrdata_on_disk_format, decode_init_dict, encode_for_disk
+from ehrdata.io._coo_codec import write_coo_h5
+from ehrdata.io._ondisk import (
+    _check_020_ehrdata_on_disk_format,
+    decode_init_dict,
+    encode_for_disk,
+    read_mapping_with_coo,
+)
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
@@ -70,9 +76,11 @@ def read_h5ed(
         dictionary_for_init = {}
 
         with h5py.File(filename, "r") as f:
-            dictionary_for_init.update(
-                {k: ad.io.read_elem(f[k]) for k, _ in dict(f).items() if not k.startswith("raw.")}
-            )
+            for k in dict(f):
+                if k.startswith("raw."):
+                    continue
+                # obsm may hold ehrdata COO groups anndata can't read, so read it child-by-child.
+                dictionary_for_init[k] = read_mapping_with_coo(f["obsm"]) if k == "obsm" else ad.io.read_elem(f[k])
             is_ehrdata_020 = _check_020_ehrdata_on_disk_format(f)
 
         if is_ehrdata_020:
@@ -138,12 +146,20 @@ def write_h5ed(
 
     edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
 
-    encode_for_disk(edata).write_h5ad(
+    adata, coo_obsm = encode_for_disk(edata)
+    adata.write_h5ad(
         filename,
         compression=compression,
         compression_opts=compression_opts,
     )
     with h5py.File(filename, "a") as f:
+        # ehrdata serializes sparse.COO tensors itself (anndata has no COO writer); see io._coo_codec.
+        if coo_obsm:
+            obsm_group = f.require_group("obsm")
+            for key, coo in coo_obsm.items():
+                write_coo_h5(
+                    obsm_group.create_group(key), coo, compression=compression, compression_opts=compression_opts
+                )
         ad.io.write_elem(f, "tem", edata.tem)
         # Identify the file as ehrdata, namespaced to not clash with anndata's own encoding attrs.
         f.attrs[EHRDATA_ENCODING_TYPE_KEY] = EHRDATA_ENCODING_TYPE

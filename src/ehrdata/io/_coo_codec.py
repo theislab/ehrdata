@@ -1,49 +1,143 @@
-"""Register anndata-mimicking IO handlers for pydata-sparse :class:`sparse.COO`.
+"""ehrdata-owned serialization of pydata-sparse :class:`sparse.COO` tensors.
 
-anndata's IO registry has no writer for n-D ``sparse.COO``.
-This adds one (and its reader) so a COO tensor relocated into ``.obsm`` round-trips through h5ed/zarr.
-Registration runs on import and is best-effort: it is skipped if anndata's private IO registry moved, or if a ``sparse.COO`` writer is already registered.
+anndata's IO has no writer for n-D ``sparse.COO``, and ehrdata keeps its time-series as 3D
+``X``/layers. Rather than register a codec on anndata's *private* IO registry (which would
+tie ehrdata to non-public internals), ehrdata serializes these tensors itself, directly on
+the h5py/zarr group.
+
+The on-disk layout follows the binsparse convention (https://graphblas.org/binsparse-specification/):
+one ``indices_<dim>`` dataset per axis, a ``values`` dataset, a length-1 ``fill_value``, and a
+JSON ``binsparse`` descriptor attribute. A namespaced ehrdata marker attribute
+(:data:`~ehrdata.core.constants.EHRDATA_ENCODING_TYPE_KEY`) identifies the group on read, so
+detection never relies on anndata's ``encoding-type``.
 """
 
 from __future__ import annotations
 
-import contextlib
+import json
+from typing import TYPE_CHECKING, Any
 
-import h5py
 import numpy as np
 import sparse
-import zarr
+
+from ehrdata.core.constants import (
+    EHRDATA_ENCODING_TYPE_KEY,
+    EHRDATA_ONDISK_VERSION,
+    EHRDATA_ONDISK_VERSION_KEY,
+)
+
+if TYPE_CHECKING:
+    from ehrdata._types import GroupStorageType
+
+# Value of the namespaced ehrdata marker stamped on a COO group
+COO_ENCODING_TYPE = "ehrdata-coo"
+# binsparse descriptor attribute key and the spec version
+_BINSPARSE_KEY = "binsparse"
+_BINSPARSE_VERSION = "0.1"
+
+# numpy dtype -> binsparse data-type string (https://graphblas.org/binsparse-specification/#key_data_types).
+# Mirrors ivirshup/binsparse-python: booleans map to "bint8" (an unsigned 8-bit integer stored on
+# disk and reinterpreted as a boolean on read). Only these dtypes are representable in binsparse.
+_DTYPE_TO_BINSPARSE_STR = {
+    np.dtype("int8"): "int8",
+    np.dtype("int16"): "int16",
+    np.dtype("int32"): "int32",
+    np.dtype("int64"): "int64",
+    np.dtype("uint8"): "uint8",
+    np.dtype("uint16"): "uint16",
+    np.dtype("uint32"): "uint32",
+    np.dtype("uint64"): "uint64",
+    np.dtype("float32"): "float32",
+    np.dtype("float64"): "float64",
+    np.dtype("bool"): "bint8",
+}
+_BINSPARSE_BOOL_STR = "bint8"
 
 
-def _register() -> None:
-
-    from anndata._io.specs.registry import _REGISTRY, IOSpec
-
-    if sparse.COO in _REGISTRY.write_specs:
-        return
-
-    spec = IOSpec("ehrdata-coo", "0.1.0")
-
-    def _write_coo(f, k, elem, *, _writer, dataset_kwargs):
-        g = f.create_group(k)
-        g.attrs["shape"] = list(elem.shape)
-        _writer.write_elem(g, "coords", np.ascontiguousarray(elem.coords), dataset_kwargs=dataset_kwargs)
-        _writer.write_elem(g, "data", np.ascontiguousarray(elem.data), dataset_kwargs=dataset_kwargs)
-        # length-1 (not 0-d)
-        _writer.write_elem(g, "fill_value", np.asarray(elem.fill_value).reshape(1), dataset_kwargs=dataset_kwargs)
-
-    def _read_coo(f, *, _reader):
-        coords = _reader.read_elem(f["coords"])
-        data = _reader.read_elem(f["data"])
-        shape = tuple(int(v) for v in f.attrs["shape"])
-        fill_value = _reader.read_elem(f["fill_value"])[0]
-        return sparse.COO(coords, data, shape=shape, fill_value=fill_value)
-
-    for group in (h5py.Group, zarr.Group):
-        _REGISTRY.register_write(group, sparse.COO, spec)(_write_coo)
-        _REGISTRY.register_read(group, spec)(_read_coo)
+def _binsparse_dtype_str(dtype: np.dtype) -> str:
+    """Map a numpy dtype to its binsparse data-type string, raising on unsupported dtypes."""
+    result = _DTYPE_TO_BINSPARSE_STR.get(np.dtype(dtype))
+    if result is None:
+        msg = f"sparse.COO values of dtype {dtype!r} are not supported by the binsparse layout."
+        raise ValueError(msg)
+    return result
 
 
-# don't break `import ehrdata` if andata's private registry is absent/changed
-with contextlib.suppress(ImportError, AttributeError, TypeError):
-    _register()
+def _to_disk_array(arr: np.ndarray) -> np.ndarray:
+    """Cast an array to its on-disk dtype (booleans are stored as uint8 per binsparse ``bint8``)."""
+    return arr.astype(np.uint8) if arr.dtype == np.bool_ else arr
+
+
+def _coo_descriptor(shape: tuple[int, ...], data: np.ndarray) -> dict[str, Any]:
+    """Build the binsparse JSON descriptor from a COO's shape and its (as-written) values array."""
+    ndim = len(shape)
+    data_types = {f"indices_{i}": "int64" for i in range(ndim)}  # indices are always written as int64
+    data_types["values"] = _binsparse_dtype_str(data.dtype)
+    return {
+        "version": _BINSPARSE_VERSION,
+        "format": "COO",
+        "shape": [int(s) for s in shape],
+        "number_of_stored_values": int(data.shape[0]),
+        "data_types": data_types,
+        "fill": True,
+    }
+
+
+def _sorted_coords_and_data(coo: sparse.COO) -> tuple[np.ndarray, np.ndarray]:
+    """Return coordinates/data in row-major (C) order.
+
+    binsparse requires stored coordinates to be sorted (row-major) with no duplicates. pydata
+    ``sparse.COO`` coalesces duplicates at construction, but exposes no attribute to tell
+    whether ``.coords`` is currently sorted (``sorted`` is a constructor parameter only), so
+    reorder explicitly (``np.lexsort`` with the last axis varying fastest).
+    """
+    order = np.lexsort(coo.coords[::-1])
+    return coo.coords[:, order], coo.data[order]
+
+
+def _stamp(group: GroupStorageType, descriptor: dict[str, Any]) -> None:
+    group.attrs[EHRDATA_ENCODING_TYPE_KEY] = COO_ENCODING_TYPE
+    group.attrs[EHRDATA_ONDISK_VERSION_KEY] = str(EHRDATA_ONDISK_VERSION)
+    group.attrs[_BINSPARSE_KEY] = json.dumps(descriptor)
+
+
+def is_coo_group(group: GroupStorageType) -> bool:
+    """Return True if ``group`` holds an ehrdata COO tensor."""
+    return group.attrs.get(EHRDATA_ENCODING_TYPE_KEY) == COO_ENCODING_TYPE
+
+
+def write_coo_h5(group, coo: sparse.COO, *, compression=None, compression_opts=None) -> None:
+    """Write a :class:`sparse.COO` into an (already-created) h5py group."""
+    coords, data = _sorted_coords_and_data(coo)
+    kwargs: dict[str, Any] = {}
+    if compression is not None:
+        kwargs = {"compression": compression, "compression_opts": compression_opts}
+    for i in range(coords.shape[0]):
+        group.create_dataset(f"indices_{i}", data=np.ascontiguousarray(coords[i], dtype=np.int64), **kwargs)
+    group.create_dataset("values", data=np.ascontiguousarray(_to_disk_array(data)), **kwargs)
+    group.create_dataset("fill_value", data=_to_disk_array(np.asarray(coo.fill_value).reshape(1)))
+    _stamp(group, _coo_descriptor(coo.shape, data))
+
+
+def write_coo_zarr(group, coo: sparse.COO) -> None:
+    """Write a :class:`sparse.COO` into an (already-created) zarr group."""
+    coords, data = _sorted_coords_and_data(coo)
+    for i in range(coords.shape[0]):
+        group[f"indices_{i}"] = np.ascontiguousarray(coords[i], dtype=np.int64)
+    group["values"] = np.ascontiguousarray(_to_disk_array(data))
+    group["fill_value"] = _to_disk_array(np.asarray(coo.fill_value).reshape(1))
+    _stamp(group, _coo_descriptor(coo.shape, data))
+
+
+def read_coo(group: GroupStorageType) -> sparse.COO:
+    """Reconstruct a :class:`sparse.COO` from an ehrdata COO group (h5py or zarr)."""
+    descriptor = json.loads(group.attrs[_BINSPARSE_KEY])
+    shape = tuple(int(s) for s in descriptor["shape"])
+    coords = np.vstack([group[f"indices_{i}"][...] for i in range(len(shape))])
+    values = group["values"][...]
+    fill_value = group["fill_value"][...][0]
+    if descriptor["data_types"]["values"] == _BINSPARSE_BOOL_STR:
+        # binsparse bint8: on-disk uint8 reinterpreted as boolean
+        values = values.astype(np.bool_)
+        fill_value = np.bool_(fill_value)
+    return sparse.COO(coords, values, shape=shape, fill_value=fill_value)

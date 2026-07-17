@@ -1,3 +1,5 @@
+import json
+
 import anndata as ad
 import h5py
 import numpy as np
@@ -216,7 +218,15 @@ def test_write_read_h5ed_sparse_coo_3d(slot, tmp_path):
     write_h5ed(edata.copy(), path)
     with h5py.File(path, "r") as f:
         assert obsm_key in f["obsm"]
-        assert f["obsm"][obsm_key].attrs["encoding-type"] == "ehrdata-coo"
+        group = f["obsm"][obsm_key]
+        # ehrdata-owned marker (namespaced, not anndata's `encoding-type`) + binsparse layout
+        assert group.attrs["ehrdata-encoding-type"] == "ehrdata-coo"
+        descriptor = json.loads(group.attrs["binsparse"])
+        assert descriptor["format"] == "COO"
+        assert descriptor["shape"] == [3, 2, 4]
+        assert descriptor["number_of_stored_values"] == 2
+        assert descriptor["data_types"]["values"] == "float64"  # canonical binsparse dtype string
+        assert {"indices_0", "indices_1", "indices_2", "values"} <= set(group.keys())
 
     edata_read = read_h5ed(path)
     restored = edata_read.X if slot == "X" else edata_read.layers["tem_data"]
@@ -238,6 +248,30 @@ def test_write_read_h5ed_sparse_coo_fill_value_and_dtype(tmp_path):
     assert isinstance(restored, sparse.COO)
     assert restored.dtype == np.int64
     assert restored.fill_value == np.int64(9)
+    assert np.array_equal(restored.todense(), coo.todense())
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+def test_write_read_h5ed_sparse_coo_boolean(tmp_path):
+    # a boolean sparse.COO (e.g. `coo != 0`) must round-trip through the default read path
+    # (harmonize + cast). binsparse labels booleans "bint8" and stores them as uint8 on disk.
+    dense = np.zeros((3, 2, 4))
+    dense[0, 0, 1] = 5.0
+    dense[2, 1, 3] = 7.0
+    coo = sparse.COO.from_numpy(dense) != 0  # bool COO, fill_value False, 2 stored values
+
+    path = tmp_path / "coo_bool.h5ed"
+    write_h5ed(EHRData(X=coo).copy(), path)
+    with h5py.File(path, "r") as f:
+        group = f["obsm"]["_ed_ondisk_X"]
+        descriptor = json.loads(group.attrs["binsparse"])
+        assert descriptor["data_types"]["values"] == "bint8"
+        assert descriptor["number_of_stored_values"] == 2
+        assert group["values"].dtype == np.uint8  # bint8 is stored as uint8 on disk
+
+    restored = read_h5ed(path).X  # default harmonize + cast must not choke on a boolean array
+    assert isinstance(restored, sparse.COO)
+    assert restored.dtype == np.bool_
     assert np.array_equal(restored.todense(), coo.todense())
 
 

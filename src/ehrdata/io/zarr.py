@@ -16,7 +16,13 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION_KEY,
 )
 from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
-from ehrdata.io._ondisk import _check_020_ehrdata_on_disk_format, decode_init_dict, encode_for_disk
+from ehrdata.io._coo_codec import write_coo_zarr
+from ehrdata.io._ondisk import (
+    _check_020_ehrdata_on_disk_format,
+    decode_init_dict,
+    encode_for_disk,
+    read_mapping_with_coo,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -62,9 +68,14 @@ def read_zarr(
     encoding_type = f.attrs[EHRDATA_ENCODING_TYPE_KEY_ZARR]
     if encoding_type == EHRDATA_ENCODING_TYPE:
         if "anndata" in f:
-            dictionary_for_init = {
-                k: ad.io.read_elem(f["anndata"][k]) for k, v in dict(f["anndata"]).items() if not k.startswith("raw.")
-            }
+            dictionary_for_init = {}
+            for k in dict(f["anndata"]):
+                if k.startswith("raw."):
+                    continue
+                # obsm may hold ehrdata COO groups anndata can't read, so read it child-by-child.
+                dictionary_for_init[k] = (
+                    read_mapping_with_coo(f["anndata"]["obsm"]) if k == "obsm" else ad.io.read_elem(f["anndata"][k])
+                )
         else:
             err = "The zarr store does not contain the 'anndata' group."
             raise ValueError(err)
@@ -74,7 +85,11 @@ def read_zarr(
             warnings.warn("The zarr store does not contain the 'tem' group.", stacklevel=2)
 
     elif encoding_type == "anndata":
-        dictionary_for_init = {k: ad.io.read_elem(f[k]) for k, v in dict(f).items() if not k.startswith("raw.")}
+        dictionary_for_init = {}
+        for k in dict(f):
+            if k.startswith("raw."):
+                continue
+            dictionary_for_init[k] = read_mapping_with_coo(f["obsm"]) if k == "obsm" else ad.io.read_elem(f[k])
 
     else:
         err = f"Unknown encoding-type '{encoding_type}'."
@@ -132,7 +147,7 @@ def write_zarr(
 
     store = zarr.open_group(filename, mode="a", use_consolidated=False, zarr_format=3)
 
-    adata = encode_for_disk(edata)
+    adata, coo_obsm = encode_for_disk(edata)
 
     if convert_strings_to_categoricals:
         adata.strings_to_categoricals(adata.obs)
@@ -172,6 +187,12 @@ def write_zarr(
             f"chunks={chunks} is not implemented. Currently, only chunks='auto' and chunks='ehrdata_auto' is supported."
         )
         raise NotImplementedError(err)
+
+    # ehrdata serializes sparse.COO tensors itself (anndata has no COO writer); see io._coo_codec.
+    if coo_obsm:
+        obsm_group = store["anndata"].require_group("obsm")
+        for key, coo in coo_obsm.items():
+            write_coo_zarr(obsm_group.require_group(key), coo)
 
     ad.io.write_elem(store, "tem", edata.tem)
 
