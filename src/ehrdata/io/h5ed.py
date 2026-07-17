@@ -146,17 +146,16 @@ def write_h5ed(
 
     edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
 
-    adata, coo_obsm = encode_for_disk(edata)
+    adata, sparse_3d_data = encode_for_disk(edata)
     adata.write_h5ad(
         filename,
         compression=compression,
         compression_opts=compression_opts,
     )
     with h5py.File(filename, "a") as f:
-        # ehrdata serializes sparse.COO tensors itself (anndata has no COO writer); see io._coo_codec.
-        if coo_obsm:
+        if sparse_3d_data:
             obsm_group = f.require_group("obsm")
-            for key, coo in coo_obsm.items():
+            for key, coo in sparse_3d_data.items():
                 write_coo_h5(
                     obsm_group.create_group(key), coo, compression=compression, compression_opts=compression_opts
                 )

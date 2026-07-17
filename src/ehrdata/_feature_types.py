@@ -298,7 +298,7 @@ def harmonize_missing_values(
     missing_values: Iterable[str] | None = ["nan", "np.nan", "<NA>", "pd.NA"],
     copy: bool = False,
 ) -> EHRData | None:
-    """Harmonize missing values in the :class:`~ehrdata.EHRData` object.
+    """Harmonize missing values in the :class:`~ehrdata.EHRDatatest` object.
 
     This function will replace strings that are considered to represent missing values with `np.nan`.
 
@@ -317,10 +317,8 @@ def harmonize_missing_values(
         edata = edata.copy()
     X = edata.X if layer is None else edata.layers[layer]
 
-    # Numeric and boolean arrays hold no strings to harmonize (sparse arrays are always one of
-    # these, e.g. a boolean `sparse.COO` from `coo != 0`), so they skip the string path below;
-    # only object/string dtypes fall through. Booleans are not a numpy `number` subtype, hence
-    # the explicit `bool_` check.
+    # note that every scipy sparse array is of a numeric dtype and will enter this if block
+    # further sparse.COO, while being allowed in theory to be str dtype, is only allowed numeric dtypes under binsparse specification which we follow closely
     if np.issubdtype(X.dtype, np.number) or np.issubdtype(X.dtype, np.bool_):
         logger.debug(f"ed.harmonize_missing_values does not affect numeric layer {'X' if layer is None else layer}.")
         return edata if copy else None

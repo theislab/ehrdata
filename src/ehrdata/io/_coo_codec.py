@@ -36,8 +36,7 @@ _BINSPARSE_KEY = "binsparse"
 _BINSPARSE_VERSION = "0.1"
 
 # numpy dtype -> binsparse data-type string (https://graphblas.org/binsparse-specification/#key_data_types).
-# Mirrors ivirshup/binsparse-python: booleans map to "bint8" (an unsigned 8-bit integer stored on
-# disk and reinterpreted as a boolean on read). Only these dtypes are representable in binsparse.
+# see also ivirshup/binsparse-python: https://github.com/ivirshup/binsparse-python/blob/6b286eea239af5eb40c1c4fd0d80c82bc6855c54/src/binsparse/_io/methods.py#L10
 _DTYPE_TO_BINSPARSE_STR = {
     np.dtype("int8"): "int8",
     np.dtype("int16"): "int16",
@@ -54,11 +53,12 @@ _DTYPE_TO_BINSPARSE_STR = {
 _BINSPARSE_BOOL_STR = "bint8"
 
 
+# analogous to ivirshup/binsparse-python https://github.com/ivirshup/binsparse-python/blob/6b286eea239af5eb40c1c4fd0d80c82bc6855c54/src/binsparse/_io/methods.py#L25
 def _binsparse_dtype_str(dtype: np.dtype) -> str:
     """Map a numpy dtype to its binsparse data-type string, raising on unsupported dtypes."""
     result = _DTYPE_TO_BINSPARSE_STR.get(np.dtype(dtype))
     if result is None:
-        msg = f"sparse.COO values of dtype {dtype!r} are not supported by the binsparse layout."
+        msg = f"dtype {dtype!r} are not supported by the binsparse layout."
         raise ValueError(msg)
     return result
 
@@ -110,23 +110,32 @@ def write_coo_h5(group, coo: sparse.COO, *, compression=None, compression_opts=N
     """Write a :class:`sparse.COO` into an (already-created) h5py group."""
     coords, data = _sorted_coords_and_data(coo)
     kwargs: dict[str, Any] = {}
+
+    coo_description = _coo_descriptor(coo.shape, data)  # checks if valid binsparse format
+
     if compression is not None:
         kwargs = {"compression": compression, "compression_opts": compression_opts}
     for i in range(coords.shape[0]):
         group.create_dataset(f"indices_{i}", data=np.ascontiguousarray(coords[i], dtype=np.int64), **kwargs)
+
     group.create_dataset("values", data=np.ascontiguousarray(_to_disk_array(data)), **kwargs)
     group.create_dataset("fill_value", data=_to_disk_array(np.asarray(coo.fill_value).reshape(1)))
-    _stamp(group, _coo_descriptor(coo.shape, data))
+
+    _stamp(group, coo_description)
 
 
 def write_coo_zarr(group, coo: sparse.COO) -> None:
     """Write a :class:`sparse.COO` into an (already-created) zarr group."""
     coords, data = _sorted_coords_and_data(coo)
+
+    coo_description = _coo_descriptor(coo.shape, data)  # checks if valid binsparse format
+
     for i in range(coords.shape[0]):
         group[f"indices_{i}"] = np.ascontiguousarray(coords[i], dtype=np.int64)
     group["values"] = np.ascontiguousarray(_to_disk_array(data))
     group["fill_value"] = _to_disk_array(np.asarray(coo.fill_value).reshape(1))
-    _stamp(group, _coo_descriptor(coo.shape, data))
+
+    _stamp(group, coo_description)
 
 
 def read_coo(group: GroupStorageType) -> sparse.COO:

@@ -222,11 +222,16 @@ def test_write_read_h5ed_sparse_coo_3d(slot, tmp_path):
         # ehrdata-owned marker (namespaced, not anndata's `encoding-type`) + binsparse layout
         assert group.attrs["ehrdata-encoding-type"] == "ehrdata-coo"
         descriptor = json.loads(group.attrs["binsparse"])
+        assert descriptor["version"] == "0.1"
         assert descriptor["format"] == "COO"
         assert descriptor["shape"] == [3, 2, 4]
         assert descriptor["number_of_stored_values"] == 2
-        assert descriptor["data_types"]["values"] == "float64"  # canonical binsparse dtype string
-        assert {"indices_0", "indices_1", "indices_2", "values"} <= set(group.keys())
+        assert descriptor["fill"] is True
+        # canonical binsparse dtype strings: values + one per index axis, all int64 indices
+        assert descriptor["data_types"]["values"] == "float64"
+        assert [descriptor["data_types"][f"indices_{i}"] for i in range(3)] == ["int64"] * 3
+        assert {"indices_0", "indices_1", "indices_2", "values", "fill_value"} <= set(group.keys())
+        assert group["indices_0"].dtype == np.int64  # indices are always written as int64 on disk
 
     edata_read = read_h5ed(path)
     restored = edata_read.X if slot == "X" else edata_read.layers["tem_data"]
@@ -273,6 +278,27 @@ def test_write_read_h5ed_sparse_coo_boolean(tmp_path):
     assert isinstance(restored, sparse.COO)
     assert restored.dtype == np.bool_
     assert np.array_equal(restored.todense(), coo.todense())
+
+
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
+@pytest.mark.parametrize("slot", ["X", "layer"])
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(np.array(["a", "bb"]), id="str"),  # dtype <U2
+        pytest.param(np.array([1 + 2j, 3 + 4j]), id="complex128"),
+    ],
+)
+def test_write_h5ed_sparse_coo_nonbinsparse_dtype_rejected(slot, data, tmp_path):
+    # binsparse defines only int/uint/float/bint8 dtypes; a sparse.COO with any other value dtype
+    # (e.g. strings, complex) cannot be persisted and must raise before/instead of a broken file.
+    coords = np.array([[0, 2], [0, 1], [1, 3]])
+    coo = sparse.COO(coords, data, shape=(3, 2, 4))
+
+    edata = EHRData(X=coo) if slot == "X" else EHRData(X=np.zeros((3, 2)), layers={"tem_data": coo})
+
+    with pytest.raises(ValueError, match="binsparse layout"):
+        write_h5ed(edata.copy(), tmp_path / "coo_reject.h5ed")
 
 
 def test_read_h5ed_legacy_v1_with_3d_in_layers(edata_333, tmp_path):

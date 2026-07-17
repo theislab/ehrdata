@@ -68,21 +68,19 @@ def _reject_stray_coo(edata: EHRData) -> None:
 def encode_for_disk(edata: EHRData) -> tuple[ad.AnnData, dict[str, sparse.COO]]:
     """Build an :class:`~anndata.AnnData` with 3D ``X``/``layers`` relocated into reserved ``.obsm`` keys.
 
-    Dense 3D arrays are placed into the AnnData's ``.obsm`` under the reserved keys; 3D
-    :class:`sparse.COO` arrays are pulled out into the returned ``coo_obsm`` mapping (keyed by
-    the same reserved ``.obsm`` keys) and *excluded* from the AnnData, since anndata cannot
-    write them. The caller writes ``coo_obsm`` itself via :mod:`ehrdata.io._coo_codec`.
+    Dense 3D arrays are placed into the AnnData's ``.obsm`` under the reserved keys.
+    Sparse 3D arrays, not writeable with AnnData, are pulled out into the returned ``sparse_3d_data`` mapping (keyed by the same reserved ``.obsm`` keys)
     """
     _reject_stray_coo(edata)
 
     obsm = dict(edata.obsm)
-    coo_obsm: dict[str, sparse.COO] = {}
+    sparse_3d_data: dict[str, sparse.COO] = {}
     layers = {}
 
     X = edata.X
     if _is_3d(X):
         if isinstance(X, sparse.COO):
-            coo_obsm[EHRDATA_OBSM_3D_X_KEY] = X
+            sparse_3d_data[EHRDATA_OBSM_3D_X_KEY] = X
         else:
             obsm[EHRDATA_OBSM_3D_X_KEY] = X
         X = None
@@ -93,7 +91,7 @@ def encode_for_disk(edata: EHRData) -> tuple[ad.AnnData, dict[str, sparse.COO]]:
         if _is_3d(value):
             target = _obsm_key_for_layer(key)
             if isinstance(value, sparse.COO):
-                coo_obsm[target] = value
+                sparse_3d_data[target] = value
             else:
                 obsm[target] = value
         else:
@@ -111,7 +109,7 @@ def encode_for_disk(edata: EHRData) -> tuple[ad.AnnData, dict[str, sparse.COO]]:
         varp=dict(edata.varp),
         shape=None if X is not None else (edata.n_obs, edata.n_vars),
     )
-    return adata, coo_obsm
+    return adata, sparse_3d_data
 
 
 def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:
