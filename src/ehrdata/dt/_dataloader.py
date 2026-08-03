@@ -67,7 +67,7 @@ def _download(
     *,
     overwrite: bool = False,
     timeout: int = 60,
-) -> None | Path:  # pragma: no cover
+) -> Path | None:  # pragma: no cover
     """Downloads a file irrespective of format.
 
     The download itself, including retries and caching, is delegated to
