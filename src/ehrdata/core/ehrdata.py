@@ -162,7 +162,7 @@ class AlignedMappingProperty3D(AlignedMappingProperty):
     and overridethe axes of the AlignedMapping in __get__.
     """
 
-    def __get__(self, obj: None | AnnData, objtype: type | None = None) -> T:
+    def __get__(self, obj: AnnData | None, objtype: type | None = None) -> T:
         if obj is None:
             # When accessed from the class, e.g. via `AnnData.obs`,
             # this needs to return a `property` instance, e.g. for Sphinx
