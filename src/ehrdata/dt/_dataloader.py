@@ -59,12 +59,12 @@ class _RichProgress:
 
 def _download(
     url: str,
+    *,
     output_filename: str | None = None,
     output_path: str | Path | None = None,
     archive_format: COMPRESSION_FORMATS | None = None,
     raw_format: RAW_FORMATS | None = None,
     block_size: int = 1024,
-    *,
     overwrite: bool = False,
     timeout: int = 60,
 ) -> Path | None:  # pragma: no cover

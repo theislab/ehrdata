@@ -157,7 +157,7 @@ def write_zarr(
     # write_sharded this is a slightly modified version from https://anndata.readthedocs.io/en/stable/tutorials/zarr-v3.html
     # write_sharded is intended as a future blueprint of implementing better chunking defaults for ehrdata based based on real usecases
     def write_sharded(group: zarr.Group, adata: ad.AnnData):
-        def callback(
+        def callback(  # noqa: PLR0917  # signature is fixed by ad.experimental.write_dispatched
             func: ad.experimental.Write,
             g: zarr.Group,
             k: str,
