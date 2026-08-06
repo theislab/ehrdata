@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 
-from ehrdata.core.constants import DEFAULT_DATA_PATH, DEFAULT_TEM_LAYER_NAME
+from ehrdata.core.constants import DEFAULT_DATA_PATH
 from ehrdata.dt._dataloader import _download
 from ehrdata.io import read_csv, read_h5ed
 from ehrdata.io.omop import setup_connection
@@ -19,8 +19,6 @@ if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
 
     from ehrdata import EHRData
-
-from scipy.sparse import csr_matrix
 
 
 def ehrdata_blobs(
@@ -40,12 +38,11 @@ def ehrdata_blobs(
     seasonality: bool = False,
     irregular_sampling: bool = False,
     missing_values: float = 0.0,
-    layer: str = DEFAULT_TEM_LAYER_NAME,
+    layer: str | None = None,
 ) -> EHRData:
     """Generates time series example dataset suited for alignment tasks.
 
     Args:
-        layer: The name of the layer to store the data in. If not specified, uses `X`.
         n_variables: Dimension of feature space.
         n_cat_vars: Number of categorical variables.
         n_categories: List of cardinalities for each categorical variable.
@@ -61,7 +58,7 @@ def ehrdata_blobs(
         seasonality: Whether to add seasonal patterns to time series.
         irregular_sampling: Whether sampling intervals vary between observations.
         missing_values: Fraction of random missing values in time series.
-        layer: The name of the layer to store the time series data in.
+        layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
 
     Examples:
         >>> import ehrdata as ed
@@ -102,9 +99,10 @@ def ehrdata_blobs(
     centers = rng.normal(0, 5, size=(n_centers, n_numeric))
     y = rng.integers(0, n_centers, size=n_observations)
 
-    # Generate base feature values (X)
-    X = np.zeros((n_observations, n_variables))
-    X[:, :n_numeric] = centers[y] + rng.normal(0, cluster_std, size=(n_observations, n_numeric))
+    # Generate base feature values the numeric time series are built from. These are an
+    # intermediate of the generator only; the returned object exposes the time series tensor.
+    base_values = np.zeros((n_observations, n_variables))
+    base_values[:, :n_numeric] = centers[y] + rng.normal(0, cluster_std, size=(n_observations, n_numeric))
 
     # Determine time series lengths for each observation
     if variable_length:
@@ -175,7 +173,7 @@ def ehrdata_blobs(
 
         # Generate patterns for this observation
         for v in range(n_numeric):
-            base_value = X[i, v]
+            base_value = base_values[i, v]
 
             # Time series with different patterns
             time_series = np.zeros(len(time_indices))
@@ -243,26 +241,8 @@ def ehrdata_blobs(
         not_nan_mask = ~np.isnan(tem_layer)
         tem_layer[missing_mask & not_nan_mask] = np.nan
 
-    # Ensure that X contains a snapshot of R at a common time index
-    # Use the middle timepoint if available for each observation
-    for i in range(n_observations):
-        valid_times = ~np.isnan(tem_layer[i, 0, :])
-        if np.any(valid_times):
-            # Find middle timepoint for this observation
-            valid_indices = np.where(valid_times)[0]
-            mid_idx = valid_indices[len(valid_indices) // 2]
-
-            # Update X to contain this snapshot
-            for v in range(n_variables):
-                X[i, v] = tem_layer[i, v, mid_idx]
-
     if sparse:
-        mask_x = rng.random(X.shape) > sparsity
-        data_x = X.copy()
-        data_x[~mask_x] = 0
-        X = csr_matrix(data_x)
-
-        # For tem_layer, handle both NaN and sparsity
+        # Handle both NaN and sparsity
         # First replace NaN with 0 where we're keeping values
         mask_r = rng.random(tem_layer.shape) > sparsity
         tem_layer_copy = tem_layer.copy()
@@ -279,12 +259,13 @@ def ehrdata_blobs(
 
     from ehrdata import EHRData
 
-    return EHRData(
-        X=X,
-        obs=pd.DataFrame({"cluster": pd.Categorical(y)}, index=pd.Index([str(i) for i in range(n_observations)])),
-        var=pd.DataFrame(index=pd.Index([f"feature_{i}" for i in range(n_variables)])),
-        layers={layer: tem_layer},
-        tem=t_df,
+    obs = pd.DataFrame({"cluster": pd.Categorical(y)}, index=pd.Index([str(i) for i in range(n_observations)]))
+    var = pd.DataFrame(index=pd.Index([f"feature_{i}" for i in range(n_variables)]))
+
+    return (
+        EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=t_df)
+        if layer is not None
+        else EHRData(X=tem_layer, obs=obs, var=var, tem=t_df)
     )
 
 

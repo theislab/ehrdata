@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import sparse
-from scipy.sparse import issparse
 from tests.conftest import _ANNDATA_ALLOWS_COO
 
 import ehrdata as ed
@@ -189,7 +188,6 @@ def test_physionet2019_arguments():
 def test_ehrdata_blobs(sparse_param):
     """Test the ehrdata_blobs function."""
     edata = ed.dt.ehrdata_blobs(
-        layer=DEFAULT_TEM_LAYER_NAME,
         n_observations=100,
         n_variables=5,
         base_timepoints=10,
@@ -204,17 +202,10 @@ def test_ehrdata_blobs(sparse_param):
     assert edata.n_vars == 5
     assert edata.n_t == 10
 
-    # Test X data
-    if not sparse_param:
-        assert isinstance(edata.X, np.ndarray)
-    else:
-        assert issparse(edata.X)
-    assert edata.X.shape == (100, 5)
-
-    # Test 3D data
-    tem = edata.layers[DEFAULT_TEM_LAYER_NAME]
-    assert isinstance(tem, np.ndarray if not sparse_param else sparse.COO)
-    assert tem.shape == (100, 5, 10)
+    # The time series is stored in the default 3D X
+    assert isinstance(edata.X, np.ndarray if not sparse_param else sparse.COO)
+    assert edata.X.shape == (100, 5, 10)
+    assert not edata.layers
 
     # Test obs DataFrame
     assert isinstance(edata.obs, pd.DataFrame)
@@ -229,6 +220,19 @@ def test_ehrdata_blobs(sparse_param):
     assert isinstance(edata.tem, pd.DataFrame)
     assert "timepoint" in edata.tem.columns
     assert edata.tem.shape == (10, 2)
+
+
+def test_ehrdata_blobs_layer():
+    """Passing a layer name stores the time series there instead of in X."""
+    edata = ed.dt.ehrdata_blobs(n_observations=20, n_variables=5, base_timepoints=10, layer=DEFAULT_TEM_LAYER_NAME)
+
+    assert edata.X is None
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (20, 5, 10)
+    assert edata.shape == (20, 5, 10)
+
+    # identical tensor either way, only the slot differs
+    in_x = ed.dt.ehrdata_blobs(n_observations=20, n_variables=5, base_timepoints=10)
+    np.testing.assert_allclose(in_x.X, edata.layers[DEFAULT_TEM_LAYER_NAME])
 
 
 def test_ehrdata_blobs_categories():
@@ -253,7 +257,7 @@ def test_ehrdata_blobs_categories():
 
     for cat_idx, k in enumerate([3, 2]):
         v = n_numeric + cat_idx
-        vals = edata.layers[DEFAULT_TEM_LAYER_NAME][:, v, :].ravel()
+        vals = edata.X[:, v, :].ravel()
         vals = vals[~np.isnan(vals)]
         assert vals.size > 0
         assert vals.min() >= 0
@@ -261,22 +265,14 @@ def test_ehrdata_blobs_categories():
         assert np.allclose(vals, np.round(vals))
 
     for i in range(100):
-        valid_times = ~np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][i, 0, :])
-        valid_idx = np.where(valid_times)[0]
+        valid_idx = np.where(~np.isnan(edata.X[i, 0, :]))[0]
         assert valid_idx.size > 0
-        mid_idx = valid_idx[len(valid_idx) // 2]
-        for cat_idx in range(2):
-            v = n_numeric + cat_idx
-            assert edata.X[i, v] == edata.layers[DEFAULT_TEM_LAYER_NAME][i, v, mid_idx]
 
     assert isinstance(edata, ed.EHRData)
     assert edata.shape == (100, 10, 10)
 
     assert isinstance(edata.X, np.ndarray)
-    assert edata.X.shape == (100, 10)
-
-    assert isinstance(edata.layers[DEFAULT_TEM_LAYER_NAME], np.ndarray)
-    assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (100, 10, 10)
+    assert edata.X.shape == (100, 10, 10)
 
 
 def test_ehrdata_blobs_distribution():
@@ -295,10 +291,11 @@ def test_ehrdata_blobs_distribution():
 
     clusters = edata.obs["cluster"].astype(int).values
 
-    # Test cluster separation in X
+    # Test cluster separation, taking the mid timepoint as a per-observation snapshot
+    snapshot = edata.X[:, :, edata.n_t // 2]
     for cluster_id in np.unique(clusters):
         cluster_mask = clusters == cluster_id
-        cluster_points = edata.X[cluster_mask]
+        cluster_points = snapshot[cluster_mask]
 
         cluster_center = np.mean(cluster_points, axis=0)
 
@@ -310,20 +307,20 @@ def test_ehrdata_blobs_distribution():
         expected_distance = 0.5 * np.sqrt(10)  # cluster_std * sqrt(dimensions)
         assert 0.3 * expected_distance < avg_distance < 3.0 * expected_distance
 
-    # Test time evolution in R
+    # Test time evolution
     # Check that variation increases with time
     time_variations = []
     for t in range(edata.n_t):
-        time_slice = edata.layers[DEFAULT_TEM_LAYER_NAME][:, :, t]
+        time_slice = edata.X[:, :, t]
         variation = np.std(time_slice)
         time_variations.append(variation)
 
     # Verify increasing variation trend
     assert time_variations[-1] > time_variations[0]
 
-    # Test that 3D data at t=0 is close to X
-    first_timepoint = edata.layers[DEFAULT_TEM_LAYER_NAME][:, :, 0]
-    correlation = np.corrcoef(first_timepoint.flatten(), edata.X.flatten())[0, 1]
+    # Test that the series is temporally coherent: the first timepoint tracks the mid snapshot
+    first_timepoint = edata.X[:, :, 0]
+    correlation = np.corrcoef(first_timepoint.flatten(), snapshot.flatten())[0, 1]
     assert correlation > 0.5
 
 
@@ -358,15 +355,15 @@ def test_ehrdata_ts_blobs_irregular():
     assert np.std(time_diffs) > 0.001
 
     # Test for missing values in 3D data
-    nan_count = np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME]).sum()
-    total_elements = np.prod(edata.layers[DEFAULT_TEM_LAYER_NAME].shape)
+    nan_count = np.isnan(edata.X).sum()
+    total_elements = np.prod(edata.X.shape)
     missing_ratio = nan_count / total_elements
     assert missing_ratio > 0.05
 
     # Test for variable length time series
     valid_counts = []
     for i in range(edata.n_obs):
-        valid_count = np.sum(~np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][i, 0, :]))
+        valid_count = np.sum(~np.isnan(edata.X[i, 0, :]))
         valid_counts.append(valid_count)
 
     valid_counts = np.array(valid_counts)
@@ -386,8 +383,8 @@ def test_ehrdata_ts_blobs_irregular():
             obs1 = obs_indices[0]
             obs2 = obs_indices[1]
 
-            valid_times1 = np.where(~np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][obs1, 0, :]))[0]
-            valid_times2 = np.where(~np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][obs2, 0, :]))[0]
+            valid_times1 = np.where(~np.isnan(edata.X[obs1, 0, :]))[0]
+            valid_times2 = np.where(~np.isnan(edata.X[obs2, 0, :]))[0]
 
             if len(valid_times1) > 0 and len(valid_times2) > 0:
                 first_time1 = valid_times1[0]
@@ -403,7 +400,7 @@ def test_ehrdata_ts_blobs_irregular():
     seasonal_pattern_found = False
     for i in range(min(10, edata.n_obs)):  # Check first 10 observations max
         for v in range(edata.n_vars):
-            values = edata.layers[DEFAULT_TEM_LAYER_NAME][i, v, :]
+            values = edata.X[i, v, :]
             valid_mask = ~np.isnan(values)
 
             if np.sum(valid_mask) >= 10:  # Need at least 10 valid points
