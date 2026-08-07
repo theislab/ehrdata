@@ -52,11 +52,20 @@ def gen_config(
         category=FutureWarning,
         stacklevel=2,
     )
-    vc = _gen_config(path, store, url, artifact, name, obs_sets, obs_embeddings, description)
+    vc = _gen_config(
+        path,
+        store=store,
+        url=url,
+        artifact=artifact,
+        name=name,
+        obs_sets=obs_sets,
+        obs_embeddings=obs_embeddings,
+        description=description,
+    )
     return vc
 
 
-def _gen_config(path, store, url, artifact, name, obs_sets, obs_embeddings, description):
+def _gen_config(path, *, store, url, artifact, name, obs_sets, obs_embeddings, description):
     """Generate a VitessceConfig for EHRData.
 
     Args:

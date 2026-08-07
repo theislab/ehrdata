@@ -156,6 +156,7 @@ def _generate_value_query(
 
 def _write_long_time_interval_table(
     backend_handle: duckdb.DuckDBPyConnection,
+    *,
     time_defining_table: str,
     data_table: str,
     time_precision: Literal["date", "datetime"],
