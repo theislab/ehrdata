@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from sphinx.application import Sphinx
 
 
-def skip_member_handler(
+def skip_member_handler(  # noqa: PLR0917  # signature is fixed by sphinx's autodoc-skip-member event
     app: Sphinx,
     what: Literal["module", "class", "exception", "function", "method", "attribute", "property"],
     name: str,

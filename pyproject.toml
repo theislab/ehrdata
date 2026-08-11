@@ -179,7 +179,8 @@ lint.ignore = [
 ]
 lint.per-file-ignores."*/__init__.py" = [ "F401" ]
 lint.per-file-ignores."docs/*" = [ "I" ]
-lint.per-file-ignores."tests/*" = [ "D" ]
+# pytest injects fixtures and parametrized values by keyword, so the positional-argument count of a test function is not a design choice.
+lint.per-file-ignores."tests/*" = [ "D", "PLR0917" ]
 lint.pydocstyle.convention = "google"
 
 [tool.pytest]
