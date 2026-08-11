@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Fixed
+ - {func}`~ehrdata.dt.ehrdata_blobs` now defaults `layer` to `None` and stores the generated time series tensor in `.X`. Previously it always wrote to `.layers["tem_data"]` regardless of the `layer` argument, so code that omitted `layer` silently analyzed a static 2D snapshot instead of the intended 3D time series. Pass `layer=` explicitly to keep the tensor in a named layer instead. ([#284](https://github.com/theislab/ehrdata/issues/284)) @sueoglu
+
 ## [0.4.0]
 
 ### Added
