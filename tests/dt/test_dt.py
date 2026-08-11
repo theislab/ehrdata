@@ -3,8 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import sparse
-from scipy.sparse import issparse
-from tests.conftest import _ANNDATA_ALLOWS_COO
+from tests.conftest import _ANNDATA_ALLOWS_COO, _ANNDATA_ALLOWS_ND_X
 
 import ehrdata as ed
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
@@ -188,6 +187,7 @@ def test_physionet2019_arguments():
 )
 def test_ehrdata_blobs(sparse_param):
     """Test the ehrdata_blobs function."""
+    # a named layer keeps this runnable on anndata <0.13, which rejects a >2D X at construction
     edata = ed.dt.ehrdata_blobs(
         layer=DEFAULT_TEM_LAYER_NAME,
         n_observations=100,
@@ -204,14 +204,8 @@ def test_ehrdata_blobs(sparse_param):
     assert edata.n_vars == 5
     assert edata.n_t == 10
 
-    # Test X data
-    if not sparse_param:
-        assert isinstance(edata.X, np.ndarray)
-    else:
-        assert issparse(edata.X)
-    assert edata.X.shape == (100, 5)
-
-    # Test 3D data
+    # A named layer holds the time series, and X stays empty
+    assert edata.X is None
     tem = edata.layers[DEFAULT_TEM_LAYER_NAME]
     assert isinstance(tem, np.ndarray if not sparse_param else sparse.COO)
     assert tem.shape == (100, 5, 10)
@@ -231,6 +225,20 @@ def test_ehrdata_blobs(sparse_param):
     assert edata.tem.shape == (10, 2)
 
 
+@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 rejects a >2D X at construction")
+def test_ehrdata_blobs_default_x():
+    """Without a layer name, the time series is stored in the default 3D X."""
+    edata = ed.dt.ehrdata_blobs(n_observations=20, n_variables=5, base_timepoints=10)
+
+    assert edata.X.shape == (20, 5, 10)
+    assert edata.shape == (20, 5, 10)
+    assert not edata.layers
+
+    # identical tensor either way, only the slot differs
+    in_layer = ed.dt.ehrdata_blobs(n_observations=20, n_variables=5, base_timepoints=10, layer=DEFAULT_TEM_LAYER_NAME)
+    np.testing.assert_allclose(edata.X, in_layer.layers[DEFAULT_TEM_LAYER_NAME])
+
+
 def test_ehrdata_blobs_categories():
     with pytest.raises(
         ValueError, match=r"Number of categorical variables cannot be greater than number of variables."
@@ -240,6 +248,7 @@ def test_ehrdata_blobs_categories():
         ed.dt.ehrdata_blobs(n_variables=5, n_cat_vars=2, n_categories=[2, 3, 4])
 
     edata = ed.dt.ehrdata_blobs(
+        layer=DEFAULT_TEM_LAYER_NAME,
         n_observations=100,
         n_variables=10,
         n_cat_vars=2,
@@ -261,26 +270,20 @@ def test_ehrdata_blobs_categories():
         assert np.allclose(vals, np.round(vals))
 
     for i in range(100):
-        valid_times = ~np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][i, 0, :])
-        valid_idx = np.where(valid_times)[0]
+        valid_idx = np.where(~np.isnan(edata.layers[DEFAULT_TEM_LAYER_NAME][i, 0, :]))[0]
         assert valid_idx.size > 0
-        mid_idx = valid_idx[len(valid_idx) // 2]
-        for cat_idx in range(2):
-            v = n_numeric + cat_idx
-            assert edata.X[i, v] == edata.layers[DEFAULT_TEM_LAYER_NAME][i, v, mid_idx]
 
     assert isinstance(edata, ed.EHRData)
     assert edata.shape == (100, 10, 10)
 
-    assert isinstance(edata.X, np.ndarray)
-    assert edata.X.shape == (100, 10)
-
+    assert edata.X is None
     assert isinstance(edata.layers[DEFAULT_TEM_LAYER_NAME], np.ndarray)
     assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (100, 10, 10)
 
 
 def test_ehrdata_blobs_distribution():
     edata = ed.dt.ehrdata_blobs(
+        layer=DEFAULT_TEM_LAYER_NAME,
         n_observations=500,
         n_variables=10,
         n_centers=3,
@@ -295,10 +298,11 @@ def test_ehrdata_blobs_distribution():
 
     clusters = edata.obs["cluster"].astype(int).values
 
-    # Test cluster separation in X
+    # Test cluster separation, taking the mid timepoint as a per-observation snapshot
+    snapshot = edata.layers[DEFAULT_TEM_LAYER_NAME][:, :, edata.n_t // 2]
     for cluster_id in np.unique(clusters):
         cluster_mask = clusters == cluster_id
-        cluster_points = edata.X[cluster_mask]
+        cluster_points = snapshot[cluster_mask]
 
         cluster_center = np.mean(cluster_points, axis=0)
 
@@ -310,7 +314,7 @@ def test_ehrdata_blobs_distribution():
         expected_distance = 0.5 * np.sqrt(10)  # cluster_std * sqrt(dimensions)
         assert 0.3 * expected_distance < avg_distance < 3.0 * expected_distance
 
-    # Test time evolution in R
+    # Test time evolution
     # Check that variation increases with time
     time_variations = []
     for t in range(edata.n_t):
@@ -321,14 +325,15 @@ def test_ehrdata_blobs_distribution():
     # Verify increasing variation trend
     assert time_variations[-1] > time_variations[0]
 
-    # Test that 3D data at t=0 is close to X
+    # Test that the series is temporally coherent: the first timepoint tracks the mid snapshot
     first_timepoint = edata.layers[DEFAULT_TEM_LAYER_NAME][:, :, 0]
-    correlation = np.corrcoef(first_timepoint.flatten(), edata.X.flatten())[0, 1]
+    correlation = np.corrcoef(first_timepoint.flatten(), snapshot.flatten())[0, 1]
     assert correlation > 0.5
 
 
 def test_ehrdata_ts_blobs_irregular():
     edata = ed.dt.ehrdata_blobs(
+        layer=DEFAULT_TEM_LAYER_NAME,
         n_observations=300,
         n_variables=8,
         n_centers=4,
