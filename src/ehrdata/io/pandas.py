@@ -326,8 +326,7 @@ def to_pandas(
         >>> EHRData object with n_obs × n_vars × n_t = 2 × 2 × 3
         >>> obs: "cluster"
         >>> tem: '0', '1', '2'
-        >>> shape of .X: (2, 2)
-        >>> shape of .R: (2, 2, 3)
+        >>> shape of .X: (2, 2, 3)
 
         >>> df_wide = ed.io.to_pandas(edata, format="wide")
         >>> df_wide
