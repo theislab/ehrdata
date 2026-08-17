@@ -195,11 +195,11 @@ ini_options.markers = [
 ini_options.xfail_strict = true
 
 [tool.coverage]
+run.source = [ "ehrdata" ]
 run.omit = [
   "**/test_*.py",
 ]
 run.patch = [ "subprocess" ]
-run.source = [ "ehrdata" ]
 
 [tool.cruft]
 skip = [
