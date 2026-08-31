@@ -14,46 +14,6 @@ from ehrdata.dt import mimic_iv_omop
 from ehrdata.io.omop import setup_connection
 
 
-def _anndata_allows_nd_x() -> bool:
-    import warnings
-
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            ad.AnnData(np.zeros((1, 1, 1), dtype=float))
-    except ValueError:
-        return False
-    return True
-
-
-# Does AnnData allow a 3D ``X`` in memory; <0.13 raises at construction, so 3D-``X`` tests are skipped for lower anndata version.
-_ANNDATA_ALLOWS_ND_X = _anndata_allows_nd_x()
-
-
-def _anndata_has_acc() -> bool:
-    try:
-        from anndata.acc import A  # noqa: F401
-    except ImportError:
-        return False
-    return True
-
-
-# Does anndata expose the ``acc`` accessor references (``A.X[:, k]``); added in 0.13, absent below.
-_ANNDATA_HAS_ACC = _anndata_has_acc()
-
-
-def _anndata_allows_coo() -> bool:
-    try:
-        ad.AnnData(np.zeros((1, 1)), obsm={"c": sparse.COO.from_numpy(np.zeros((1, 1, 1)))})
-    except (ValueError, TypeError):
-        return False
-    return True
-
-
-# Does anndata accept a pydata-sparse ``COO`` in memory; rejected as an array type before 0.13.1.
-_ANNDATA_ALLOWS_COO = _anndata_allows_coo()
-
-
 def _assert_shape_matches(
     edata: EHRData,
     shape: tuple[int, int, int],
@@ -215,15 +175,7 @@ def edata_333(X_numpy_33, X_numpy_333, obs_31, var_31, tem_31):
     return EHRData(X=X_numpy_33, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_333}, obs=obs_31, var=var_31, tem=tem_31)
 
 
-@pytest.fixture(
-    params=[
-        "layer",
-        pytest.param(
-            "X",
-            marks=pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 rejects a >2D X at construction"),
-        ),
-    ]
-)
+@pytest.fixture(params=["layer", "X"])
 def edata_3d_slot(request, X_numpy_33, X_numpy_333, obs_31, var_31, tem_31):
     """A (3, 3, 3) EHRData with the 3D tensor in the layer or in ``.X``.
 

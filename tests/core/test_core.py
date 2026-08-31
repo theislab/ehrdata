@@ -4,14 +4,10 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
-from tests.conftest import _ANNDATA_ALLOWS_COO, _ANNDATA_ALLOWS_ND_X, _ANNDATA_HAS_ACC, _assert_shape_matches
+from tests.conftest import _assert_shape_matches
 
 from ehrdata import EHRData
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
-
-# anndata >=0.13 unifies `.X` into `layers[None]`, which changes view `.X`-assignment semantics: <0.13 broadcasts a view's `.X = value` back into the parent; >=0.13 initialises the view as an actual object and leaves the parent unchanged.
-# Detect the mode by feature (the `None` layers key) rather than by version string.
-_ANNDATA_X_UNIFIED = None in set(ad.AnnData(np.zeros((1, 1), dtype=float)).layers.keys())
 
 
 def _assert_fields_are_view(edata: EHRData):
@@ -65,7 +61,7 @@ def test_ehrdata_init_vanilla_3dlayer(X_numpy_322):
 
 
 def test_ehrdata_3dlayer_emits_no_2d_spec_warning(X_numpy_322):
-    # anndata >=0.13 warns ("... must be 2-dimensional ...") when a >2D array is stored in X/layers.
+    # anndata warns ("... must be 2-dimensional ...") when a >2D array is stored in X/layers.
     with warnings.catch_warnings():
         warnings.filterwarnings("error", message=r".*must be 2-dimensional.*")
         edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
@@ -74,9 +70,7 @@ def test_ehrdata_3dlayer_emits_no_2d_spec_warning(X_numpy_322):
     assert edata.layers["another_3d"].shape == (3, 2, 2)
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 rejects a >2D X at construction")
 def test_ehrdata_3d_X_emits_no_2d_spec_warning(X_numpy_322):
-    # Same as above for a 3D `X`; only reachable on anndata that permits a >2D X in memory (>=0.13).
     with warnings.catch_warnings():
         warnings.filterwarnings("error", message=r".*must be 2-dimensional.*")
         edata = EHRData(X=X_numpy_322)
@@ -297,10 +291,7 @@ def test_ehrdata_set_aligneddataframes(X_numpy_322):
     [
         "X_numpy_322",
         "X_dask_322",
-        pytest.param(
-            "X_sparse_322",
-            marks=pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory"),
-        ),
+        "X_sparse_322",
     ],
 )
 def test_ehrdata_X_data_types(X_fixture_name, request):
@@ -371,27 +362,21 @@ def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
 def test_ehrdata_view_X_scalar_broadcast(X_numpy_32, X_numpy_322):
     """Assigning a scalar (or any value without `.shape`) to a view's X is a valid broadcast.
 
-    The resulting semantics depend on the anndata version (see ``_ANNDATA_X_UNIFIED``): anndata >=0.13 initialises the view as an actual object holding the broadcast values and leaves the parent unchanged, while anndata <0.13 writes the broadcast back into the parent.
+    Since `.X` is unified into `layers[None]`, this initialises the view as an actual object, holding the broadcast values and leaves the parent unchanged.
     """
     edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
 
     view = edata[:, [0]]
     view.X = 1
-    if _ANNDATA_X_UNIFIED:
-        assert not view.is_view
-        assert np.all(np.asarray(view.X)[:, 0] == 1)
-        assert np.array_equal(edata.X, X_numpy_32)  # parent unchanged
-    else:
-        assert np.all(np.asarray(edata.X)[:, 0] == 1)  # broadcast into the parent
+    assert not view.is_view
+    assert np.all(np.asarray(view.X)[:, 0] == 1)
+    assert np.array_equal(edata.X, X_numpy_32)  # parent unchanged
 
     view = edata[:, [1]]
     view.X = [10, 20, 30]
-    if _ANNDATA_X_UNIFIED:
-        assert not view.is_view
-        assert np.array_equal(np.asarray(view.X)[:, 0], [10, 20, 30])
-        assert np.array_equal(edata.X[:, 1], X_numpy_32[:, 1])  # parent unchanged
-    else:
-        assert np.array_equal(np.asarray(edata.X)[:, 1], [10, 20, 30])
+    assert not view.is_view
+    assert np.array_equal(np.asarray(view.X)[:, 0], [10, 20, 30])
+    assert np.array_equal(edata.X[:, 1], X_numpy_32[:, 1])  # parent unchanged
 
 
 def test_assign_X_to_layers_only(X_numpy_32, X_numpy_322):
@@ -513,9 +498,8 @@ def test_ehrdata_subset_obsvar_names_repeated(edata_3d_slot):
     assert np.array_equal(np.asarray(_slot_tensor(edata_a, slot)), ref[:, 2, :].reshape(3, -1, 3))
 
 
-@pytest.mark.skipif(not _ANNDATA_HAS_ACC, reason="anndata <0.13 has no accessor references")
 def test_ehrdata_getitem_forwards_accessor_ref(X_numpy_32, obs_31, var_21):
-    """An anndata 0.13+ accessor ref (``A.X[:, k]``) must resolve to an array, not a slice.
+    """An anndata accessor ref (``A.X[:, k]``) must resolve to an array, not a slice.
 
     ``EHRData.__getitem__`` has to forward accessor refs to ``AnnData`` rather than treating
     them as an obs/var/t index; otherwise ``obs_vector``/``var_vector`` (used e.g. by scanpy

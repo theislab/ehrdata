@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Changed
+ - ehrdata now requires `anndata>=0.13.1`, the first release providing everything {class}`~ehrdata.EHRData` builds on: a 3D `.X`, `.X` unified into `layers[None]`, and pydata-sparse `COO` arrays in memory. The last ehrdata still tolerated `anndata<0.13`, while already supporting it. ([#277](https://github.com/theislab/ehrdata/issues/277)) @eroell
+
 ### Fixed
  - ehrdata no longer imports the storage type aliases (`H5Array`, `H5Group`, `ZarrArray`, `ZarrGroup`) from the private `anndata.compat`, which dropped them in anndata 0.13.3. ([#293](https://github.com/theislab/ehrdata/issues/293)) @eroell
  - {func}`~ehrdata.dt.mimic_2` now downloads the raw data from the scverse example data mirror (`https://exampledata.scverse.org/ehrapy/full_cohort_data.csv`) instead of physionet, which is unreachable from some sandboxed environments. The data is unchanged. ([#256](https://github.com/theislab/ehrdata/issues/256)) @eroell @Zethson

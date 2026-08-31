@@ -1,7 +1,6 @@
 import anndata as ad
 import numpy as np
 import pytest
-from tests.conftest import _ANNDATA_ALLOWS_ND_X
 
 import ehrdata as ed
 
@@ -181,7 +180,6 @@ def test_gen_default_config_illegal_arguments(edata_blobs_small, tmp_path):
         )
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
 def test_gen_default_config_3d_in_X(edata_blobs_small, tmp_path):
     """3D time series stored directly in edata.X (no named layer) is reduced to a timestep and written 2D."""
 
