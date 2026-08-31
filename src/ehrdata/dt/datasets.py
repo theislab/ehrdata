@@ -1,0 +1,1004 @@
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal
+
+import numpy as np
+import pandas as pd
+
+from ehrdata.core.constants import DEFAULT_DATA_PATH
+from ehrdata.dt._dataloader import _download
+from ehrdata.io import read_csv, read_h5ed
+from ehrdata.io.omop import setup_connection
+from ehrdata.io.omop._queries import _generate_timedeltas
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from duckdb import DuckDBPyConnection
+
+    from ehrdata import EHRData
+
+
+def ehrdata_blobs(
+    *,
+    n_variables: int = 11,
+    n_cat_vars: int = 0,
+    n_categories: list[int] | None = None,
+    n_centers: int = 5,
+    cluster_std: float = 1.0,
+    n_observations: int = 1000,
+    base_timepoints: int = 100,
+    random_state: int | np.random.Generator = 0,
+    sparse: bool = False,
+    sparsity: float = 0.9,
+    variable_length: bool = False,
+    time_shifts: bool = False,
+    seasonality: bool = False,
+    irregular_sampling: bool = False,
+    missing_values: float = 0.0,
+    layer: str | None = None,
+) -> EHRData:
+    """Generates time series example dataset suited for alignment tasks.
+
+    Args:
+        n_variables: Dimension of feature space.
+        n_cat_vars: Number of categorical variables.
+        n_categories: List of cardinalities for each categorical variable.
+        n_centers: Number of cluster centers.
+        cluster_std: Standard deviation of clusters.
+        n_observations: Number of observations.
+        base_timepoints: Base number of time points (actual may vary per observation).
+        random_state: Determines random number generation for dataset creation.
+        sparse: Whether to use sparse matrices.
+        sparsity: Target sparsity level when sparse=True.
+        variable_length: Whether observations have different time series lengths.
+        time_shifts: Whether to add time shifts between similar observations.
+        seasonality: Whether to add seasonal patterns to time series.
+        irregular_sampling: Whether sampling intervals vary between observations.
+        missing_values: Fraction of random missing values in time series.
+        layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.ehrdata_blobs(
+        ...     variable_length=True, time_shifts=True, seasonality=True, irregular_sampling=True
+        ... )
+
+    results in a dataset like:
+
+    .. image:: /_static/tutorial_images/ehrdata_blobs.png
+       :alt: EHR data blobs visualization
+
+    Categorical variables can be generated with different cardinalities per variable
+    (e.g. 2, 3, 4 categories). Different clusters (groups) can also exhibit different
+    category distributions:
+
+    .. image:: /_static/tutorial_images/ehrdata_blobs_categorical_5_groups.png
+       :alt: Histograms of categorical variables by group (5 clusters)
+
+    .. image:: /_static/tutorial_images/ehrdata_blobs_categorical_20_groups.png
+       :alt: Histograms of categorical variables by group (20 clusters)
+    """
+    rng = np.random.default_rng(random_state if isinstance(random_state, int) else None)
+
+    if n_cat_vars > 0:
+        if n_cat_vars > n_variables:
+            msg = "Number of categorical variables cannot be greater than number of variables."
+            raise ValueError(msg)
+        if n_categories is None:
+            n_categories = rng.integers(2, 4, size=n_cat_vars).tolist()
+        if n_categories is not None and len(n_categories) != n_cat_vars:
+            msg = f"Length of n_categories ({len(n_categories)}) must match n_cat_vars ({n_cat_vars})"
+            raise ValueError(msg)
+
+    n_numeric = n_variables - n_cat_vars
+
+    # Generate cluster centers and assignments
+    centers = rng.normal(0, 5, size=(n_centers, n_numeric))
+    y = rng.integers(0, n_centers, size=n_observations)
+
+    # Generate base feature values the numeric time series are built from. These are an
+    # intermediate of the generator only; the returned object exposes the time series tensor.
+    base_values = np.zeros((n_observations, n_variables))
+    base_values[:, :n_numeric] = centers[y] + rng.normal(0, cluster_std, size=(n_observations, n_numeric))
+
+    # Determine time series lengths for each observation
+    if variable_length:
+        # Vary length from 50% to 150% of base_timepoints
+        lengths = rng.integers(max(10, int(base_timepoints * 0.5)), int(base_timepoints * 1.5), size=n_observations)
+    else:
+        lengths = np.full(n_observations, base_timepoints)
+
+    max_length = int(lengths.max())
+
+    # Create time points for each observation (potentially irregular)
+    all_timepoints = []
+    for i in range(n_observations):
+        length = lengths[i]
+
+        if irregular_sampling:
+            # Create non-uniform time spacing
+            if time_shifts and i > 0:
+                # Add random shift for similar clusters
+                shift = rng.uniform(0, 0.3 * base_timepoints)
+                start = shift if y[i] == y[i - 1] else 0
+            else:
+                start = 0
+
+            # Irregular intervals with increasing spacing
+            intervals = rng.exponential(scale=1.0, size=length)
+            intervals = intervals / intervals.sum() * (max_length - start)
+            timepoints = np.cumsum(intervals) + start
+        else:
+            # Regular intervals
+            if time_shifts and i > 0:  # noqa: SIM108
+                # Add cluster-based shifts
+                shift = rng.uniform(0, 0.3 * base_timepoints) if y[i] == y[i - 1] else 0
+            else:
+                shift = 0
+
+            timepoints = np.linspace(shift, max_length + shift, length)
+
+        all_timepoints.append(timepoints)
+
+    # Create time index - use all unique timepoints from all observations
+    all_unique_times = np.unique(np.concatenate(all_timepoints))
+    all_unique_times.sort()
+
+    n_total_timepoints = len(all_unique_times)
+    t_index = pd.Index([str(i) for i in range(n_total_timepoints)])
+
+    # Create time DataFrame with actual time values
+    t_df = pd.DataFrame(
+        {
+            "timepoint": range(n_total_timepoints),
+            "time_value": all_unique_times,
+        },
+        index=t_index,
+    )
+
+    # Prepare 3D array to store all time series
+    tem_layer = np.zeros((n_observations, n_variables, n_total_timepoints))
+    tem_layer.fill(np.nan)
+
+    # Generate numeric time series for each observation
+    for i in range(n_observations):
+        # Map this observation's time points to the global time index
+        obs_timepoints = all_timepoints[i]
+
+        # Find indices of these timepoints in the global time array
+        time_indices = np.searchsorted(all_unique_times, obs_timepoints)
+
+        # Generate patterns for this observation
+        for v in range(n_numeric):
+            base_value = base_values[i, v]
+
+            # Time series with different patterns
+            time_series = np.zeros(len(time_indices))
+
+            # Add trend component (linear increase based on variable value)
+            trend = np.linspace(0, base_value * 0.5, len(time_indices))
+            time_series += trend
+
+            # Add seasonality if enabled
+            if seasonality:
+                freq = rng.uniform(3, 15)
+
+                # Phase shift based on cluster
+                phase = y[i] * np.pi / n_centers
+
+                # Amplitude based on variable value
+                amplitude = np.abs(base_value) * 0.3
+
+                # Add seasonal component
+                seasonal = amplitude * np.sin(freq * np.pi * np.arange(len(time_indices)) / len(time_indices) + phase)
+                time_series += seasonal
+
+            # Add noise increasing with time
+            for t_idx, t in enumerate(time_indices):
+                noise_scale = cluster_std / 2 * (0.5 + t / n_total_timepoints)
+                time_series[t_idx] += rng.normal(0, noise_scale)
+
+            time_series += base_value
+
+            tem_layer[i, v, time_indices] = time_series
+
+    # Generate categorical time series if requested
+    if n_cat_vars > 0:
+        for i in range(n_observations):
+            obs_timepoints = all_timepoints[i]
+            time_indices = np.searchsorted(all_unique_times, obs_timepoints)
+            cluster = y[i]
+
+            for cat_idx in range(n_cat_vars):
+                # Variable index in the layer
+                v = n_numeric + cat_idx
+                cardinality = n_categories[cat_idx]
+
+                # Determine cluster-preferred state for this categorical variable
+                preferred_state = cluster % cardinality
+
+                # Smaller cluster standard deviation = higher concentration around that cluster
+                concentration = 1.0 / (1.0 + cluster_std)
+
+                # Generate probabilities biased (concentration) toward the preferred state, rest split uniformly
+                probs = (
+                    np.ones(cardinality) * (1 - concentration) / (cardinality - 1) if cardinality > 1 else np.ones(1)
+                )
+                probs[preferred_state] = concentration
+
+                # Randomly assign categorical values with cluster bias
+                random_states = rng.choice(cardinality, size=len(time_indices), p=probs)
+
+                tem_layer[i, v, time_indices] = random_states.astype(float)
+
+    # Add random missing values if requested
+    if missing_values > 0:
+        # Create a mask for random missing values (ignoring already missing values)
+        missing_mask = rng.random(tem_layer.shape) < missing_values
+        not_nan_mask = ~np.isnan(tem_layer)
+        tem_layer[missing_mask & not_nan_mask] = np.nan
+
+    if sparse:
+        # Handle both NaN and sparsity
+        # First replace NaN with 0 where we're keeping values
+        mask_r = rng.random(tem_layer.shape) > sparsity
+        tem_layer_copy = tem_layer.copy()
+        tem_layer_copy[np.isnan(tem_layer)] = 0
+        tem_layer_copy[~mask_r] = 0
+
+        # Get coordinates and values for non-zero entries
+        coords = np.where(tem_layer_copy != 0)
+        values = tem_layer_copy[coords]
+
+        from sparse import COO
+
+        tem_layer = COO(np.asarray(coords), values, shape=tem_layer.shape)
+
+    from ehrdata import EHRData
+
+    obs = pd.DataFrame({"cluster": pd.Categorical(y)}, index=pd.Index([str(i) for i in range(n_observations)]))
+    var = pd.DataFrame(index=pd.Index([f"feature_{i}" for i in range(n_variables)]))
+
+    return (
+        EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=t_df)
+        if layer is not None
+        else EHRData(X=tem_layer, obs=obs, var=var, tem=t_df)
+    )
+
+
+def _setup_eunomia_datasets(
+    data_url: str,
+    backend_handle: DuckDBPyConnection,
+    data_path: Path,
+    nested_omop_tables_folder: str | None = None,
+    dataset_prefix: str = "",
+) -> None:
+    """Loads the Eunomia datasets in the OMOP Common Data model."""
+    _download(
+        data_url,
+        output_path=data_path,
+    )
+
+    if nested_omop_tables_folder:
+        for file_path in (data_path / nested_omop_tables_folder).glob("*.csv"):
+            shutil.move(file_path, data_path)
+
+    setup_connection(
+        data_path,
+        backend_handle,
+        prefix=dataset_prefix,
+    )
+
+
+def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+    """Loads the MIMIC-IV demo data in the OMOP Common Data model.
+
+    Loads the MIMIC-IV demo dataset from its `physionet repository <https://physionet.org/content/mimic-iv-demo-omop/0.9/#files-panel>`_ :cite:`kallfelz2021mimic` :cite:`goldberger2000physiobank`.
+
+    Args:
+        backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+        data_path: Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+
+    Returns:
+        Nothing. Adds the tables to the backend via the handle.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> import duckdb
+        >>> con = duckdb.connect()
+        >>> ed.dt.mimic_iv_omop(backend_handle=con)
+        >>> con.execute("SHOW TABLES;").fetchall()
+    """
+    data_url = "https://physionet.org/static/published-projects/mimic-iv-demo-omop/mimic-iv-demo-data-in-the-omop-common-data-model-0.9.zip"
+    if data_path is None:
+        data_path = DEFAULT_DATA_PATH / "mimic-iv-demo-data-in-the-omop-common-data-model-0.9"
+
+    _setup_eunomia_datasets(
+        data_url=data_url,
+        backend_handle=backend_handle,
+        data_path=data_path,
+        nested_omop_tables_folder="mimic-iv-demo-data-in-the-omop-common-data-model-0.9/1_omop_data_csv",
+        dataset_prefix="2b_",
+    )
+
+
+def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+    """Loads the GiBleed dataset in the OMOP Common Data model.
+
+    Loads the GIBleed dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>`_.
+    More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/GiBleed.
+
+    Args:
+        backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+        data_path: Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+
+    Returns:
+        Nothing. Adds the tables to the backend via the handle.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> import duckdb
+        >>> con = duckdb.connect()
+        >>> ed.dt.gibleed_omop(backend_handle=con)
+        >>> con.execute("SHOW TABLES;").fetchall()
+    """
+    data_url = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/GiBleed/GiBleed_5.3.zip"
+
+    if data_path is None:
+        data_path = DEFAULT_DATA_PATH / "GiBleed_5.3"
+
+    _setup_eunomia_datasets(
+        data_url=data_url,
+        backend_handle=backend_handle,
+        data_path=data_path,
+        nested_omop_tables_folder="GiBleed_5.3",
+    )
+
+
+def synthea27nj_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
+    """Loads the Synthea27Nj dataset in the OMOP Common Data model.
+
+    This function loads the Synthea27Nj dataset from the `EunomiaDatasets repository <https://github.com/OHDSI/EunomiaDatasets>`_.
+    More details: https://github.com/OHDSI/EunomiaDatasets/tree/main/datasets/Synthea27Nj.
+
+    Args:
+        backend_handle: A handle to the backend which shall be used. Only duckdb connection supported at the moment.
+        data_path: Path to the tables. If the path exists, the data is loaded from there. Else, the data is downloaded.
+
+    Returns:
+        Nothing. Adds the tables to the backend via the handle.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> import duckdb
+        >>> con = duckdb.connect()
+        >>> ed.dt.synthea27nj_omop(backend_handle=con)
+        >>> con.execute("SHOW TABLES;").fetchall()
+    """
+    data_url = "https://github.com/OHDSI/EunomiaDatasets/raw/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip"
+
+    if data_path is None:
+        data_path = DEFAULT_DATA_PATH / "Synthea27Nj_5.4"
+
+    _setup_eunomia_datasets(
+        data_url=data_url,
+        backend_handle=backend_handle,
+        data_path=data_path,
+    )
+
+
+def physionet2012(
+    data_path: Path | str | None = None,
+    *,
+    interval_length_number: int = 1,
+    interval_length_unit: str = "h",
+    num_intervals: int = 48,
+    aggregation_strategy: str = "last",
+    drop_samples: Iterable[str] | None = [
+        "147514",
+        "142731",
+        "145611",
+        "140501",
+        "155655",
+        "143656",
+        "156254",
+        "150309",
+        "140936",
+        "141264",
+        "150649",
+        "142998",
+    ],
+    layer: str | None = None,
+) -> EHRData:
+    """Loads the dataset of the `PhysioNet challenge 2012 (v1.0.0) <https://physionet.org/content/challenge-2012/1.0.0/>`_.
+
+    This dataset was designed to encourage the development of algorithms for mortality rate prediction using physiological data :cite:`silva2012predicting` :cite:`goldberger2000physiobank`.
+
+    If `interval_length_number` is 1, `interval_length_unit` is `"h"` (hour), and `num_intervals` is 48, this is the same as the `SAITS <https://arxiv.org/pdf/2202.08516>`_ preprocessing :cite:`du2023saits`.
+    Truncated if a sample has more `num_intervals` steps; Padded if a sample has less than `num_intervals` steps.
+    Further, by default the following 12 samples are dropped since they have no time series information at all: 147514, 142731, 145611, 140501, 155655, 143656, 156254, 150309,
+    140936, 141264, 150649, 142998.
+    Taken the defaults of `interval_length_number`, `interval_length_unit`, `num_intervals`, and `drop_samples`, the tensor stored in `.layers[layer_name]` of `edata` is the same as when doing the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ preprocessing :cite:`du2023pypots`.
+    A simple deviation is that the tensor in `ehrdata` is of shape `n_obs x n_vars x n_intervals` (with defaults, 3000x37x48) while the tensor in PyPOTS is of shape `n_obs x n_intervals x n_vars` (3000x48x37).
+    The tensor stored in `.layers[layer_name]` is hence also fully compatible with the PyPOTS package, as the `.layers` field of EHRData objects generally is.
+    Note: In the original dataset, some missing values are encoded with a -1 for some entries of the variables `'DiasABP'`, `'NIDiasABP'`, and `'Weight'`. Here, these are replaced with `NaN` s.
+
+    Args:
+       data_path: Path to the raw data. If the path exists, the data is loaded from there.
+           Else, the data is downloaded.
+       interval_length_number: Numeric value of the length of one interval.
+       interval_length_unit: Unit belonging to the interval length.
+       num_intervals: Number of intervals.
+       aggregation_strategy: Aggregation strategy for the time series data when multiple
+           measurements for a person's parameter within a time interval is available.
+           Available are `'first'` and `'last'`, as used in :meth:`~pandas.DataFrame.drop_duplicates`.
+       drop_samples: Samples to drop from the dataset (indicate their RecordID).
+       layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
+
+    Returns:
+        The processed physionet2012 dataset.
+        The raw data is also downloaded, stored and available under the ``data_path``.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.physionet_2012()
+        >>> edata
+        EHRData object with n_obs × n_vars × n_t = 11988 × 37 × 48
+            obs: 'set', 'Age', 'Gender', 'Height', 'ICUType', 'SAPS-I', 'SOFA', 'Length_of_stay', 'Survival', 'In-hospital_death'
+            var: 'Parameter'
+            tem: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47'
+            shape of .X: (11988, 37, 48)
+
+        Inspect static information
+
+        >>> edata.obs.head()
+                set	Age	Gender	Height	ICUType	SAPS-I	SOFA	Length_of_stay	Survival	In-hospital_death
+        RecordID
+        132539	set-a	54.0	0.0	-1.0	4.0	6	1	5	-1	0
+        132540	set-a	76.0	1.0	175.3	2.0	16	8	8	-1	0
+        132541	set-a	44.0	0.0	-1.0	3.0	21	11	19	-1	0
+        132543	set-a	68.0	1.0	180.3	3.0	7	1	9	575	0
+        132545	set-a	88.0	0.0	-1.0	3.0	17	2	4	918	0
+
+        Inspect the 48-hour trajectory of the variable ``RespRate``:
+
+        >>> edata[edata.obs.index == "132539", edata.var_names == "RespRate"].X
+        [[[19., 18., 19., 20., 20., 17., nan, 15., 14., 17., 15., 15.,
+             12., 15., 15., 12., 14., 13., 18., 13., 12., 20., 15., 24.,
+             nan, 16., 19., 18., nan, 16., nan, 18., nan, 18., nan, 20.,
+             nan, 24., 21., 16., 18., 14., 23., 17., 20., 20., 20., 23.]]]
+    """
+    EXPECTED_PARAMETERS = [
+        "ALP",
+        "ALT",
+        "AST",
+        "Albumin",
+        "BUN",
+        "Bilirubin",
+        "Cholesterol",
+        "Creatinine",
+        "DiasABP",
+        "FiO2",
+        "GCS",
+        "Glucose",
+        "HCO3",
+        "HCT",
+        "HR",
+        "K",
+        "Lactate",
+        "MAP",
+        "MechVent",
+        "Mg",
+        "NIDiasABP",
+        "NIMAP",
+        "NISysABP",
+        "Na",
+        "PaCO2",
+        "PaO2",
+        "Platelets",
+        "RespRate",
+        "SaO2",
+        "SysABP",
+        "Temp",
+        "TroponinI",
+        "TroponinT",
+        "Urine",
+        "WBC",
+        "Weight",
+        "pH",
+    ]
+    if data_path is None:
+        data_path = DEFAULT_DATA_PATH / "physionet2012"
+
+    elif isinstance(data_path, str):
+        data_path = Path(data_path)
+
+    outcome_filenames = ["Outcomes-a.txt", "Outcomes-b.txt", "Outcomes-c.txt"]
+    data_set_names = ["set-a", "set-b", "set-c"]
+
+    for filename in data_set_names:
+        _download(
+            url=f"https://physionet.org/files/challenge-2012/1.0.0/{filename}.tar.gz?download",
+            output_path=data_path,
+            output_filename=f"{filename}.tar.gz",
+            archive_format="tar.gz",
+        )
+
+    for filename in outcome_filenames:
+        _download(
+            url=f"https://physionet.org/files/challenge-2012/1.0.0/{filename}?download",
+            output_path=data_path,
+        )
+
+    person_outcome_df = pd.concat([pd.read_csv(data_path / filename) for filename in outcome_filenames])
+
+    static_features = ["Age", "Gender", "ICUType", "Height"]
+
+    person_long_across_set_collector = []
+    for data_subset_dir in data_set_names:
+        person_long_within_set_collector = []
+
+        # each txt file is the data of a person, in long format
+        # the columns in the txt files are: Time, Parameter, Value
+        for txt_file in (data_path / data_subset_dir).glob("*.txt"):
+            person_long = pd.read_csv(txt_file)
+            # drop the first row, which has the RecordID
+            person_long = person_long.iloc[1:]
+
+            # add RecordID (=person id in this dataset) to all data points of this person
+            person_long["RecordID"] = int(txt_file.stem)
+            person_long_within_set_collector.append(person_long)
+
+        person_long_within_set_df = pd.concat(person_long_within_set_collector)
+
+        person_long_within_set_df["set"] = data_subset_dir
+        person_long_across_set_collector.append(person_long_within_set_df)
+
+    person_long_across_set_df = pd.concat(person_long_across_set_collector)
+
+    # gather the static_features together with RecordID and set for each person into the obs table
+    obs = (
+        person_long_across_set_df[person_long_across_set_df["Parameter"].isin(static_features)]
+        .pivot(index=["RecordID", "set"], columns=["Parameter"], values=["Value"])
+        .reset_index(level="set", col_level=1)
+    )
+    obs.columns = obs.columns.droplevel(0)
+
+    obs = obs.merge(person_outcome_df, how="left", left_on="RecordID", right_on="RecordID")
+    obs.set_index("RecordID", inplace=True)
+
+    # in order to conveniently save the produced EHRData object: infer to avoid h5ad error b.c. object columns
+    obs = obs.infer_objects()
+
+    # consider only time series features from now
+    df_dynamic_long = person_long_across_set_df[~person_long_across_set_df["Parameter"].isin(static_features)]
+
+    return _create_edata_from_physionet_long_format(
+        df_dynamic_long=df_dynamic_long,
+        obs=obs,
+        expected_parameters=EXPECTED_PARAMETERS,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
+        drop_samples=drop_samples,
+        layer=layer,
+        dataset="physionet2012",
+    )
+
+
+def physionet2019(
+    data_path: Path | str | None = None,
+    *,
+    interval_length_number: int = 1,
+    interval_length_unit: str = "h",
+    num_intervals: int = 48,
+    aggregation_strategy: str = "last",
+    drop_samples: Iterable[str] | None = None,
+    n_samples: int | None = None,
+    subsample_seed: int | None = 0,
+    layer: str | None = None,
+) -> EHRData:
+    """Loads the dataset of the `PhysioNet challenge 2019 (v1.0.0) <https://physionet.org/content/challenge-2019/1.0.0/>`_.
+
+    This dataset was designed to encourage the development of algorithms for sepsis prediction using physiological data :cite:`reyna2020early` :cite:`goldberger2000physiobank`.
+
+    The data consists of 35 time dependent features and 5 static features (`Age`, `Gender`, `Unit1`, `Unit2`, `HospAdmTime`).
+    More information on the features can be found on the link above.
+
+    The full dataset consists of 40'336 patients, with values for the 35 dynamic features recorded hourly, and indicated missing if the value is not available.
+    This amounts to a final dataset shape of 40'336 x 35 x number of considered time steps.
+
+    The generated `EHRData` object truincates samples if a sample has more `num_intervals` steps; and pads with missing values if a sample has less than `num_intervals` steps.
+
+    The tensor stored in `.layers[layer_name]` is fully compatible with e.g. the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ :cite:`du2023pypots` package, as the `.layers` field of EHRData objects generally is.
+
+    Args:
+       data_path: Path to the raw data. If the path exists, the data is loaded from there.
+           Else, the data is downloaded. Hint: if you have downloaded the data already from the link above, set this path to the `training` folder.
+       interval_length_number: Numeric value of the length of one interval.
+       interval_length_unit: Unit belonging to the interval length.
+       num_intervals: Number of intervals.
+       aggregation_strategy: Aggregation strategy for the time series data when multiple
+           measurements for a person's parameter within a time interval is available.
+           Available are `'first'` and `'last'`, as used in :meth:`~pandas.DataFrame.drop_duplicates`.
+       drop_samples: Samples to drop from the dataset (indicate their RecordID).
+       n_samples: Number of samples to subsample from the dataset. If not specified, all samples are used.
+       subsample_seed: Seed for the subsampling. If not specified, a random seed is used.
+       layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
+
+    Returns:
+        The processed physionet2019 dataset.
+        The raw data is also downloaded, stored and available under the ``data_path``.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.physionet_2019()
+        >>> edata
+        EHRData object with n_obs × n_vars × n_t = 40336 × 35 × 48
+            obs: 'Age', 'Gender', 'Unit1', 'Unit2', 'HospAdmTime', 'training_Set'
+            var: 'Parameter'
+            tem: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47'
+            shape of .X: (40336, 35, 48)
+
+        Inspect static information
+
+        >>> edata.obs.head()
+                    Age  Gender  Unit1  Unit2  HospAdmTime   training_Set
+        RecordID
+        p014977     77.27     1.0    0.0    1.0       -69.14  training_setA
+        p000902     65.55     1.0    NaN    NaN        -0.02  training_setA
+        p009098     52.16     0.0    NaN    NaN        -0.03  training_setA
+        p008386     24.35     1.0    NaN    NaN        -0.03  training_setA
+        p018195     82.51     1.0    1.0    0.0      -907.88  training_setA
+
+        Inspect the 48-hour trajectory of the variable ``SepsisLabel``:
+
+        >>> edata[edata.obs.index == "p020378", edata.var_names == "SepsisLabel"].X
+        [[[nan,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+              0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+              0.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1., nan,
+             nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan]]]
+    """
+    EXPECTED_PARAMETERS = [
+        "AST",
+        "Alkalinephos",
+        "BUN",
+        "BaseExcess",
+        "Bilirubin_direct",
+        "Bilirubin_total",
+        "Calcium",
+        "Chloride",
+        "Creatinine",
+        "DBP",
+        "EtCO2",
+        "FiO2",
+        "Fibrinogen",
+        "Glucose",
+        "HCO3",
+        "HR",
+        "Hct",
+        "Hgb",
+        "Lactate",
+        "MAP",
+        "Magnesium",
+        "O2Sat",
+        "PTT",
+        "PaCO2",
+        "Phosphate",
+        "Platelets",
+        "Potassium",
+        "Resp",
+        "SBP",
+        "SaO2",
+        "SepsisLabel",
+        "Temp",
+        "TroponinI",
+        "WBC",
+        "pH",
+    ]
+
+    if data_path is None:
+        data_path = DEFAULT_DATA_PATH / "physionet2019"
+
+    elif isinstance(data_path, str):
+        data_path = Path(data_path)
+
+    _download(
+        url="https://exampledata.scverse.org/ehrapy/training.zip",
+        output_path=data_path,
+        output_filename="training.zip",
+        archive_format="zip",
+    )
+
+    temp_data_set_names = ["training_setA", "training_setB"]
+
+    static_features = ["Age", "Gender", "Unit1", "Unit2", "HospAdmTime"]
+
+    person_collector_static = {}
+    person_collector_dynamic = {}
+
+    for data_subset_dir in temp_data_set_names:
+        if not (data_path / "training" / data_subset_dir).exists():
+            err = f"Data path {data_path / 'training' / data_subset_dir} does not exist. Please make sure you point `data_path` to the 'training' folder of the downloaded data."
+            raise FileNotFoundError(err)
+
+    all_files = []
+    for data_subset_dir in temp_data_set_names:
+        all_files.extend((data_path / "training" / data_subset_dir).glob("*.psv"))
+
+    all_files = sorted(all_files)
+
+    if drop_samples is not None:
+        drop_samples_set = set(drop_samples)
+        all_files = [f for f in all_files if f.stem not in drop_samples_set]
+
+    if n_samples is not None:
+        if n_samples > len(all_files):
+            msg = f"n_samples ({n_samples}) cannot be greater than the available number of samples ({len(all_files)})"
+            raise ValueError(msg)
+        rng = np.random.default_rng(subsample_seed)
+        selected_files = np.sort(rng.choice(len(all_files), size=n_samples, replace=False, shuffle=False)).tolist()
+        all_files = np.array(all_files)[selected_files].tolist()
+
+    # Now read only the selected files
+    for txt_file in all_files:
+        data_subset_dir = txt_file.parent.name
+
+        # each txt file is the data of a person, in wide format
+        # the columns in the txt files are both the dynamic columns and the static columns (the latter repating the information for every recorded timepoint)
+        person_wide = pd.read_csv(txt_file, sep="|")
+
+        person_static = person_wide[static_features].loc[0]
+        person_static["RecordID"] = txt_file.stem
+        person_static["training_Set"] = data_subset_dir
+        person_collector_static[txt_file.stem] = person_static
+
+        person_dynamic_long = person_wide.iloc[:, ~person_wide.columns.isin(static_features)].melt(
+            id_vars=["ICULOS"], var_name="Parameter", value_name="Value"
+        )
+        person_dynamic_long.dropna(inplace=True)
+        person_dynamic_long["training_Set"] = data_subset_dir
+        person_dynamic_long["RecordID"] = txt_file.stem
+
+        person_collector_dynamic[txt_file.stem] = person_dynamic_long
+
+    obs = pd.concat(person_collector_static.values(), axis=1).T.set_index("RecordID")
+    df_dynamic_long = pd.concat(person_collector_dynamic.values())
+
+    return _create_edata_from_physionet_long_format(
+        df_dynamic_long=df_dynamic_long,
+        obs=obs,
+        expected_parameters=EXPECTED_PARAMETERS,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
+        drop_samples=drop_samples,
+        layer=layer,
+        dataset="physionet2019",
+    )
+
+
+def _create_edata_from_physionet_long_format(
+    df_dynamic_long: pd.DataFrame,
+    obs: pd.DataFrame,
+    *,
+    expected_parameters: Iterable[str],
+    interval_length_number: int,
+    interval_length_unit: str,
+    num_intervals: int,
+    aggregation_strategy: str,
+    drop_samples: Iterable[str] | None,
+    layer: str | None,
+    dataset: Literal["physionet2012", "physionet2019"] = "physionet2012",
+) -> EHRData:
+    """Create an EHRData object from prepared physionet2012 or physionet2019 data parts.
+
+    Creates an EHRData object from:
+    1. a long dataframe
+    2. a prepared obs dataframe
+    3. instructions taken in the physionet2012 and physionet2019 dataset preparation functions
+    """
+    from ehrdata import EHRData
+
+    interval_df = _generate_timedeltas(
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+    )
+
+    if dataset == "physionet2012":
+        df_long_time_seconds = np.array(pd.to_timedelta(df_dynamic_long["Time"] + ":00").dt.total_seconds())
+    elif dataset == "physionet2019":
+        df_long_time_seconds = np.array(pd.to_timedelta(df_dynamic_long["ICULOS"], unit="h").dt.total_seconds())
+    else:
+        msg = f"Dataset {dataset} not supported."
+        raise ValueError(msg)
+
+    interval_df_interval_end_offset_seconds = np.array(interval_df["interval_end_offset"].dt.total_seconds())
+
+    # need to throw out entries that are later in time than the observation time
+    outside_observation_time_mask = df_long_time_seconds <= interval_df_interval_end_offset_seconds.max()
+    df_dynamic_long = df_dynamic_long[outside_observation_time_mask]
+    df_long_time_seconds = df_long_time_seconds[outside_observation_time_mask]
+
+    df_long_interval_step = np.argmax(df_long_time_seconds[:, None] <= interval_df_interval_end_offset_seconds, axis=1)
+    df_dynamic_long.loc[:, ["interval_step"]] = df_long_interval_step
+
+    # if one person for one feature (=Parameter) within one interval_step has multiple measurements, decide which one to keep
+    df_long = df_dynamic_long.drop_duplicates(
+        subset=["RecordID", "Parameter", "interval_step"], keep=aggregation_strategy
+    )
+
+    xa = df_long.set_index(["RecordID", "Parameter", "interval_step"]).to_xarray()
+
+    # persons whose dynamic measurements all fall outside the observation window are dropped from the long->xarray  pivot;
+    # reindex to every person in obs (in obs order) so the layer stays aligned with obs and missing persons are padded with missing values instead of producing a shape mismatch
+    xa = xa.reindex(
+        RecordID=obs.index.values,
+        fill_value=np.nan,
+    )
+    # since NaNs are dropped, it can happen that a Parameter is completely dropped when it has no values for the subset of persons considered
+    # to provide a full set of Parameters everytime, we reindex to add the missing Parameters back in, just with missing values
+    xa = xa.reindex(
+        Parameter=expected_parameters,
+        fill_value=np.nan,
+    )
+    # to provide a full set of interval_steps everytime, evenif all the samples have less than num_interval steps, we add the missing steps and pad with missing values
+    xa = xa.reindex(
+        interval_step=np.arange(num_intervals),
+        fill_value=np.nan,
+    )
+    var = xa["Parameter"].to_dataframe()
+    tem = interval_df.set_index("interval_step")
+    tem_layer = xa["Value"].values
+
+    obs.index = obs.index.astype(str)
+    var.index = var.index.astype(str)
+
+    # in order to conveniently save the produced EHRData object: cast problematic types in .obs and .tem
+    obs = obs.infer_objects()
+    for col in tem.columns:
+        tem[col] = tem[col].astype(str)
+
+    edata = (
+        EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=tem)
+        if layer is not None
+        else EHRData(X=tem_layer, obs=obs, var=var, tem=tem)
+    )
+
+    return edata[~edata.obs.index.isin(drop_samples or [])].copy()
+
+
+def mimic_2(
+    columns_obs_only: Iterable[str] | None = None,
+) -> EHRData:
+    """Loads the MIMIC-II dataset.
+
+    This dataset was created for the purpose of a case study in the book: `Secondary Analysis of Electronic Health Records <https://link.springer.com/book/10.1007/978-3-319-43742-2>`_ :cite:`critical2016secondary`.
+    In particular, the dataset was used to investigate the effectiveness of indwelling arterial catheters in hemodynamically stable patients with respiratory failure for mortality outcomes.
+    The dataset is derived from MIMIC-II, the publicly-accessible critical care database.
+    It contains summary clinical data and outcomes for 1,776 patients.
+
+    More details on the data can be found on `physionet <https://physionet.org/content/mimic2-iaccd/1.0/>`_.
+
+    Args:
+        columns_obs_only: Columns to include only in obs and not X.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.mimic_2()
+    """
+    _download(
+        "https://exampledata.scverse.org/ehrapy/full_cohort_data.csv",
+        output_path=DEFAULT_DATA_PATH,
+        output_filename="ehrapy_mimic2.csv",
+    )
+    edata = read_csv(
+        filename=f"{DEFAULT_DATA_PATH}/ehrapy_mimic2.csv",
+        columns_obs_only=columns_obs_only,
+    )
+
+    # In the raw dataset, the variable censor_flg is encoded inversely (0=death, 1=censored)
+    # We flip it here so it follows the standard convention (0=censored, 1=event happened)
+
+    censor_col = "censor_flg"
+    if censor_col in edata.var.index:
+        censor_idx = edata.var.index.get_loc(censor_col)
+        edata.X[:, censor_idx] = np.where(edata.X[:, censor_idx] == 0, 1, 0)
+    elif censor_col in edata.obs.columns:
+        edata.obs[censor_col] = np.where(edata.obs[censor_col] == 0, 1, 0)
+
+    return edata
+
+
+def mimic_2_preprocessed() -> EHRData:
+    """Loads the preprocessed MIMIC-II dataset.
+
+    This dataset is a preprocessed version of :func:`~ehrdata.dt.mimic_2`.
+    The dataset was preprocessed according to: https://github.com/theislab/ehrapy-datasets/tree/main/mimic_2.
+
+    This dataset was created for the purpose of a case study in the book: `Secondary Analysis of Electronic Health Records <https://link.springer.com/book/10.1007/978-3-319-43742-2>`_ :cite:`critical2016secondary`.
+    In particular, the dataset was used to investigate the effectiveness of indwelling arterial catheters in hemodynamically stable patients with respiratory failure for mortality outcomes.
+    The dataset is derived from MIMIC-II, the publicly-accessible critical care database.
+    It contains summary clinical data and outcomes for 1,776 patients.
+
+    More details on the data can be found on `physionet <https://physionet.org/content/mimic2-iaccd/1.0/>`_.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.mimic_2_preprocessed()
+    """
+    _download(
+        url="https://exampledata.scverse.org/ehrapy/mimic_2_preprocessed.h5ad",
+        output_path=DEFAULT_DATA_PATH,
+        output_filename="mimic_2_preprocessed.h5ad",
+        raw_format="h5ad",
+    )
+    edata = read_h5ed(
+        filename=f"{DEFAULT_DATA_PATH}/mimic_2_preprocessed.h5ad",
+    )
+
+    return edata
+
+
+def diabetes_130_raw(
+    columns_obs_only: Iterable[str] | None = None,
+) -> EHRData:
+    """Loads the raw diabetes-130 dataset.
+
+    More details and the original dataset can be found `here <http://archive.ics.uci.edu/ml/datasets/Diabetes+130-US+hospitals+for+years+1999-2008>`_ :cite:`strack2014impact`.
+
+    Args:
+        columns_obs_only: Columns to include in `obs` only and not `X`.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.diabetes_130_raw()
+    """
+    _download(
+        url="https://exampledata.scverse.org/ehrapy/diabetes_130_raw.csv",
+        output_path=DEFAULT_DATA_PATH,
+        output_filename="diabetes_130_raw.csv",
+        raw_format="csv",
+    )
+    adata = read_csv(
+        filename=f"{DEFAULT_DATA_PATH}/diabetes_130_raw.csv",
+        columns_obs_only=columns_obs_only,
+    )
+
+    return adata
+
+
+def diabetes_130_fairlearn(
+    columns_obs_only: Iterable[str] | None = None,
+) -> EHRData:
+    """Loads the preprocessed diabetes-130 dataset by fairlearn.
+
+    This loads the dataset from the `fairlearn.datasets.fetch_diabetes_hospital <https://fairlearn.org/v0.10/api_reference/generated/fairlearn.datasets.fetch_diabetes_hospital.html#fairlearn.datasets.fetch_diabetes_hospital>`_ function. :cite:`bird2020fairlearn`
+
+    More details and the original dataset can be found `here <http://archive.ics.uci.edu/ml/datasets/Diabetes+130-US+hospitals+for+years+1999-2008>`_.
+
+    Args:
+        columns_obs_only: Columns to include in `obs` only and not `X`.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.diabetes_130_fairlearn()
+    """
+    _download(
+        url="https://exampledata.scverse.org/ehrapy/diabetes_130_fairlearn.csv",
+        output_path=DEFAULT_DATA_PATH,
+        output_filename="diabetes_130_fairlearn.csv",
+        raw_format="csv",
+    )
+    edata = read_csv(
+        filename=f"{DEFAULT_DATA_PATH}/diabetes_130_fairlearn.csv",
+        columns_obs_only=columns_obs_only,
+    )
+
+    return edata

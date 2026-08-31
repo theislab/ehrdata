@@ -1,26 +1,20 @@
-# Configuration file for the Sphinx documentation builder.
-
-# This file only contains a selection of the most common options. For a full
-# list see the documentation:
-# https://www.sphinx-doc.org/page/usage/configuration.html
+from __future__ import annotations
 
 # -- Path setup --------------------------------------------------------------
-import shutil
 import sys
+import warnings
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
 
-from sphinxcontrib import katex
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "extensions"))
+warnings.filterwarnings("ignore", message="Extra installs are necessary to use", category=UserWarning)
 
 
 # -- Project information -----------------------------------------------------
 
-# NOTE: If you installed your project in editable mode, this might be stale.
-#       If this is the case, reinstall it to refresh the metadata
 info = metadata("ehrdata")
 project = info["Name"]
 author = info["Author"]
@@ -37,14 +31,6 @@ templates_path = ["_templates"]
 nitpicky = True  # Warn about broken links
 needs_sphinx = "4.0"
 
-html_context = {
-    "display_github": True,  # Integrate GitHub
-    "github_user": "theislab",
-    "github_repo": project,
-    "github_version": "main",
-    "conf_py_path": "/docs/",
-}
-
 # -- General configuration ---------------------------------------------------
 
 # Add any Sphinx extension module names here, as strings.
@@ -57,20 +43,25 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinxcontrib.bibtex",
-    "sphinxcontrib.katex",
     "sphinx_autodoc_typehints",
     "sphinx_design",
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinxext.opengraph",
-    "scverse_misc.sphinx_ext",
+    "scanpydoc.elegant_typehints",
+    "scanpydoc.definition_list_typed_field",
     *[p.stem for p in (HERE / "extensions").glob("*.py")],
 ]
 
 autosummary_generate = True
 autodoc_member_order = "groupwise"
+autodoc_type_aliases = {
+    "Index": "Index",
+    "Index1D": "Index1D",
+    "XDataType": "XDataType",
+}
 default_role = "literal"
-napoleon_google_docstring = False
-napoleon_numpy_docstring = True
+napoleon_google_docstring = True
+napoleon_numpy_docstring = False
 napoleon_include_init_with_doc = False
 napoleon_use_rtype = True  # having a separate entry generally helps readability
 napoleon_use_param = True
@@ -88,7 +79,6 @@ nb_output_stderr = "remove"
 nb_execution_mode = "off"
 nb_merge_streams = True
 typehints_defaults = "braces"
-always_use_bars_union = True  # use `|` instead of `Union` in types even when building with Python ≤3.14
 
 source_suffix = {
     ".rst": "restructuredtext",
@@ -97,10 +87,20 @@ source_suffix = {
 }
 
 intersphinx_mapping = {
+    "anndata": ("https://anndata.readthedocs.io/en/stable", None),
+    "dask": ("https://docs.dask.org/en/stable/", None),
+    "fsspec": ("https://filesystem-spec.readthedocs.io/en/stable", None),
+    "h5py": ("https://docs.h5py.org/en/latest", None),
+    "lamin": ("https://docs.lamin.ai", None),
+    "numpy": ("https://numpy.org/doc/stable", None),
+    "pandas": ("https://pandas.pydata.org/docs", None),
     "python": ("https://docs.python.org/3", None),
-    "anndata": ("https://anndata.scverse.org/en/stable/", None),
-    "scanpy": ("https://scanpy.scverse.org/en/stable/", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
+    "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy", None),
+    "torch": ("https://docs.pytorch.org/docs/main", None),
+    "vitessce": ("https://python-docs.vitessce.io", None),
+    "zarr": ("https://zarr.readthedocs.io/en/stable", None),
+    "ehrapy": ("https://ehrapy.readthedocs.io/en/latest", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -111,27 +111,60 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 
 # -- Options for HTML output -------------------------------------------------
 
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
-#
-html_theme = "sphinx_book_theme"
+html_theme = "scanpydoc"
 html_static_path = ["_static"]
 html_css_files = ["css/custom.css"]
-
 html_title = project
-
+html_logo = "_static/tutorial_images/ehrdata_logo.png"
 html_theme_options = {
     "repository_url": repository_url,
     "use_repository_button": True,
     "path_to_docs": "docs/",
     "navigation_with_keys": False,
 }
+html_context = {
+    "display_github": True,  # Integrate GitHub
+    "github_user": "theislab",
+    "github_repo": project,
+    "github_version": "main",
+    "conf_py_path": "/docs/",
+}
 
 pygments_style = "default"
-katex_prerender = shutil.which(katex.NODEJS_BINARY) is not None
 
+# If building the documentation fails because of a missing link that is outside your control,
+# you can add an exception to this list:
 nitpick_ignore = [
-    # If building the documentation fails because of a missing link that is outside your control,
-    # you can add an exception to this list.
-    #     ("py:class", "igraph.Graph"),
+    ("py:class", "pathlib._local.Path"),
+    ("py:class", "types.EllipsisType"),
+    ("py:data", "types.EllipsisType"),
+    # TODO: remove once https://github.com/sphinx-doc/sphinx/pull/13508 is released
+    ("py:class", "ehrdata._types.TypeAliasType"),
+    # typing.Union fails in tutorials/tutorial_time_series_with_pypots
+    ("py:data", "typing.Union"),
+    # https://github.com/duckdb/duckdb-web/issues/3806
+    ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
+    ("py:class", "_duckdb.DuckDBPyConnection"),
+    # Is documented as a py:attribute instead
+    ("py:class", "numpy.int64"),
+    ("py:class", "numpy._typing._array_like.GenericAlias"),
+    # For now not in public facing API
+    ("py:class", "awkward.highlevel.Array"),
+    ("py:class", "h5py._hl.dataset.Dataset"),
+    ("py:class", "zarr.core.Array"),
+    ("py:class", "zarr.core.buffer.core.Buffer"),
+    ("py:class", "ehrdata._compat.ZappyArray"),
+    ("py:class", "anndata.compat.CupyArray"),
+    ("py:class", "anndata.compat.CupySparseMatrix"),
+    ("py:class", "sparse.numba_backend._coo.core.COO"),
+    ("py:class", "sparse._coo.core.COO"),
+    ("py:class", "pandas.core.arrays.base.ExtensionArray"),
 ]
+
+# Redirect broken parameter annotation classes
+qualname_overrides = {
+    "zarr.storage._common.StorePath": "zarr.storage.StorePath",
+    "zarr.core.group.Group": "zarr.group.Group",
+    "lnschema_core.models.Artifact": "lamindb.Artifact",
+    "pandas.core.series.Series": "pandas.Series",
+}

@@ -1,0 +1,4 @@
+visit_occurrence_id,person_id,visit_concept_id,visit_start_date,visit_start_datetime,visit_end_date,visit_end_datetime,visit_type_concept_id,provider_id,care_site_id,visit_source_value,visit_source_concept_id,admitting_source_concept_id,admitting_source_value,discharge_to_concept_id,discharge_to_source_value,preceding_visit_occurrence_id
+1,1,8870,2100-01-01,2100-01-01 00:00:00,2100-01-31,2100-01-31 00:00:00,,,,10014354|2147-07-08,2000001801,,,,,
+2,2,8870,2100-01-01,2100-01-01 00:00:00,2100-01-31,2100-01-31 00:00:00,,,,10014354|2147-07-08,2000001801,,,,,
+3,3,8870,2100-01-01,2100-01-01 00:00:00,2100-01-31,2100-01-31 00:00:00,,,,10014354|2147-07-08,2000001801,,,,,

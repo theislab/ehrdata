@@ -1,0 +1,593 @@
+from __future__ import annotations
+
+import warnings
+from collections.abc import Iterable
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
+
+import numpy as np
+import pandas as pd
+from anndata import AnnData
+from anndata._core.aligned_mapping import (
+    AlignedActual,
+    AlignedMapping,
+    AlignedMappingProperty,
+    AlignedView,
+    Layers,
+    LayersBase,
+    Value,
+    convert_to_dict,
+)
+from anndata._core.views import (
+    DataFrameView,
+    ElementRef,
+    _resolve_idx,
+    as_view,
+)
+
+try:  # anndata 0.13: aliases moved to anndata.typing
+    from anndata.typing import Index as ADIndex
+    from anndata.typing import Index1D
+except ImportError:
+    from anndata.compat import Index as ADIndex
+    from anndata.compat import Index1D
+
+try:  # anndata 0.13: view indices wrapped in IndexManager (materialised in _subset)
+    from anndata.compat import IndexManager as _IndexManager
+
+    _INDEX_MANAGER_TYPES: tuple[type, ...] = (_IndexManager,)
+except ImportError:  # anndata <0.13 has no IndexManager; isinstance(x, ()) is always False, so nothing converts
+    _INDEX_MANAGER_TYPES = ()
+
+try:  # anndata 0.13: accessor references (A.X[:, k], A.obs[k], …) resolve to arrays, not slices
+    from anndata.acc import AdRef, MapAcc, RefAcc
+
+    _ACCESSOR_INDEX_TYPES: tuple[type, ...] = (AdRef, RefAcc, MapAcc)
+except ImportError:  # anndata <0.13 has no accessor references
+    _ACCESSOR_INDEX_TYPES = ()
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+    from os import PathLike
+
+    from ehrdata._types import XDataType
+
+Index = ADIndex | tuple[Index1D, Index1D, Index1D]
+
+T = TypeVar("T", bound=AlignedMapping)
+
+
+@contextmanager
+def _silence_anndata_nd_warning():
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=r".*must be 2-dimensional.*", category=UserWarning)
+        yield
+
+
+def _validate_layers_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
+    # `n_t` is transiently None while the X setter runs
+    if obj.n_t is not None and obj.n_t > 1 and _get_layers_3d_dim(value) != obj.n_t:
+        msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
+        raise ValueError(msg)
+
+
+def _validate_array_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None:
+    # `n_t` is transiently None while the X setter runs.
+    if obj.n_t is not None and obj.n_t > 1 and _get_array_3d_dim(value) > 1 and _get_array_3d_dim(value) != obj.n_t:
+        msg = f"Length of passed value is {len(value)}, but this EHRData has shape: {obj.shape}"
+        raise ValueError(msg)
+
+
+def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
+    # anndata 0.13: IndexManager isn't Iterable — materialise it so the np.ix_ branches below select by index combination (outer product), not coordinate pairs.
+    if isinstance(subset_idx, tuple):
+        subset_idx = tuple(np.asarray(x) if isinstance(x, _INDEX_MANAGER_TYPES) else x for x in subset_idx)
+    # Select as combination of indexes, not coordinates
+    # Correcting for indexing behaviour of np.ndarray
+    if (len(subset_idx) == 2 and all(isinstance(x, Iterable) for x in subset_idx)) or (
+        len(subset_idx) == 3 and all(isinstance(x, Iterable) for x in subset_idx)
+    ):
+        subset_idx = np.ix_(*subset_idx)
+        return a[subset_idx]
+    elif len(subset_idx) == 3 and all(isinstance(x, Iterable) for x in subset_idx[:2]):
+        return a[np.ix_(*subset_idx[:2])][subset_idx[2]]
+    else:
+        return a[subset_idx]
+
+
+class AlignedActual3D(AlignedActual):
+    """AlignedActual for 3D data."""
+
+    def __setitem__(self, key: str | None, value: Value) -> None:
+        # anndata 0.13: key None is the unified `.X` slot; its 3D/n_t/tem bookkeeping is owned by the EHRData.X setter, so just store it (the base class also runs anndata's 2D-spec warning).
+        if key is None:
+            super().__setitem__(key, value)
+            return
+        _validate_array_3d(self.parent, value)
+        self.parent._n_t = max(self.parent._n_t, _get_array_3d_dim(value))
+        # only if the new aligned object is not 1 anymore and the original object was, create a new minimal tem
+        if len(self.parent.tem) == 1 and _get_array_3d_dim(value) > 1:
+            self.parent.tem = pd.DataFrame(index=pd.RangeIndex(self.parent._n_t).astype(str))
+        super().__setitem__(key, value)
+
+
+class Layers3D(AlignedActual3D, Layers):
+    """Layers for 3D data."""
+
+    def _validate_value(self, val: Value, key: str | None) -> Value:
+        with _silence_anndata_nd_warning():
+            return super()._validate_value(val, key)
+
+
+class AlignedView3D(AlignedView):
+    """AlignedView for 3D data."""
+
+    def __getitem__(self, key: str | None) -> Value:
+        # anndata 0.13: key None is the unified `.X` slot, None when X is unset.
+        elem = self.parent_mapping[key]
+        if elem is None:
+            return None
+        # 2D arrays (`.X` and 2D layers) index on the first two axes; 3D layers index on all three.
+        subset_idx = self.subset_idx if getattr(elem, "ndim", 2) == 3 else self.subset_idx[:2]
+        return as_view(
+            _subset(elem, subset_idx),
+            ElementRef(self.parent, self.attrname, (key,)),
+        )
+
+
+class LayersView3D(AlignedView3D, LayersBase):
+    """LayersView for 3D data."""
+
+    def _validate_value(self, val: Value, key: str | None) -> Value:
+        with _silence_anndata_nd_warning():
+            return super()._validate_value(val, key)
+
+    def __init__(self, parent_mapping: LayersBase, parent_view: AnnData, subset_idx: Any) -> None:
+        super().__init__(parent_mapping, parent_view, subset_idx)
+        # anndata 0.13: X delegates `isbacked` to the layers store, so mirror anndata's own LayersView and expose it on 3D layer views too (absent on <0.13, hence the guard).
+        if hasattr(parent_mapping, "isbacked"):
+            self.isbacked = parent_mapping.isbacked
+
+
+# overwrite the view class of LayersBase allows to use the required __getitem__ method of AlignedView3D
+LayersBase._view_class = LayersView3D
+
+
+@dataclass
+class AlignedMappingProperty3D(AlignedMappingProperty):
+    """A :class:`property` that subclasses the AlignedMappingproperty of AnnData.
+
+     The subclass is used to add the _tidx for subsetting,
+    and overridethe axes of the AlignedMapping in __get__.
+    """
+
+    def __get__(self, obj: AnnData | None, objtype: type | None = None) -> T:
+        if obj is None:
+            # When accessed from the class, e.g. via `AnnData.obs`,
+            # this needs to return a `property` instance, e.g. for Sphinx
+            return self  # type: ignore
+        if not obj.is_view:
+            return self.construct(obj, store=getattr(obj, f"_{self.name}"))
+        parent_anndata = obj._adata_ref
+        idxs = (obj._oidx, obj._vidx, obj._tidx)
+        parent: AlignedMapping = getattr(parent_anndata, self.name)
+        return parent._view(obj, (tuple(idxs[ax] for ax in (0, 1, 2))))
+
+    def __set__(self, obj: AnnData, value: Mapping[str, Value] | Iterable[tuple[str, Value]]) -> None:
+        _validate_layers_3d(obj, value)
+        obj._n_t = _get_layers_3d_dim(value)
+        value = convert_to_dict(value)
+        _ = self.construct(obj, store=value)  # Validate
+        if obj.is_view:
+            obj._init_as_actual(obj.copy())
+        setattr(obj, f"_{self.name}", value)
+
+
+def _get_array_3d_dim(X: XDataType | None) -> int:
+    """Get the 3rd dimension of an array.
+
+    Returns 1 for anything that isn't a 3D array (including scalars, lists, and any
+    other value without a ``.shape`` attribute), so this can safely be called on
+    arbitrary values passed to the ``.X`` setter (e.g. broadcast scalars).
+    """
+    if X is not None and hasattr(X, "shape") and len(X.shape) == 3:
+        return X.shape[2]
+
+    else:
+        return 1
+
+
+def _get_layers_3d_dim(layers: Mapping[str, Any] | None) -> int:
+    """Get the 3rd dimension consensus of all arrays in the layers.
+
+    All arrays in layers need to match on the first two axes, which is checked in AnnData.
+    Further, all arrays in layers need to have the same 3rd axis dimension, unless they are 2D or the 3rd axis dimension is 1.
+    """
+    if layers is None or len(layers) == 0:
+        return 1
+
+    else:
+        shape_3d = {}
+
+        for key, value in layers.items():
+            shape_3d[key] = _get_array_3d_dim(value)
+
+        shape_3d_values = set(shape_3d.values())
+
+        if len(shape_3d_values) == 1:
+            return shape_3d_values.pop()
+
+        elif 1 in shape_3d_values and len(shape_3d_values) == 2:
+            shape_3d_values.discard(1)
+            return shape_3d_values.pop()
+
+        else:
+            msg = f"The 3rd dimension of layers is not consistent: {', '.join(f'{key} : {value}' for key, value in shape_3d.items())}."
+
+            raise ValueError(msg)
+
+
+class EHRData(AnnData):
+    """Model two and three dimensional electronic health record data.
+
+    .. figure:: /_static/tutorial_images/ehrdata_logo.png
+       :width: 260px
+       :align: right
+       :class: dark-light
+
+    EHRData stores a data array :attr:`~ehrdata.EHRData.X` together with annotations of observations
+    :attr:`~ehrdata.EHRData.obs` (:attr:`~ehrdata.EHRData.obsm`, :attr:`~ehrdata.EHRData.obsp`), variables
+    :attr:`~ehrdata.EHRData.var` (:attr:`~ehrdata.EHRData.varm`, :attr:`~ehrdata.EHRData.varp`), time
+    :attr:`~ehrdata.EHRData.tem`, and unstructured annotations :attr:`~ehrdata.EHRData.uns`.
+
+    Extends :class:`~anndata.AnnData` to further support time-series data.
+
+    Args:
+        X: A #observations × #variables (× #time) data array.
+        obs: Key-indexed one-dimensional observations annotation of length #observations.
+        var: Key-indexed one-dimensional variables annotation of length #variables.
+        tem: Key-indexed one-dimensional time annotation of length #time.
+        uns: Key-indexed unstructured annotation.
+        obsm: Key-indexed multi-dimensional observations annotation of length #observations.
+            If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
+        varm: Key-indexed multi-dimensional variables annotation of length #variables.
+            If passing a :class:`numpy.ndarray`, it needs to have a structured datatype.
+        obsp: Pairwise annotation of observations, a mutable mapping with array-like values.
+        varp: Pairwise annotation of variables/features, a mutable mapping with array-like values.
+        layers: Key-indexed multi-dimensional #observations × #variables (× #time) data arrays, aligned to dimensions of `X`.
+        shape: Shape tuple (#observations, #variables, #time). Can only be provided if `X` is None.
+        filename: Name of backing file. See :class:`h5py.File`.
+        filemode: Open mode of backing file. See :class:`h5py.File`.
+        oidx: Observation index for initialising as a view.
+        vidx: Variable index for initialising as a view.
+        tidx: Time index for initialising as a view.
+    """
+
+    _t: pd.DataFrame | None
+    _n_t: int
+
+    # Use keyword arguments so this works across the 0.12.x dataclass-field re-ordering:
+    # 0.12.6-0.12.11 require `(name, cls)`; 0.12.12+ make `name` optional (populated by
+    # `__set_name__`) and only require `cls`. Passing both by keyword satisfies both.
+    layers: AlignedMappingProperty3D = AlignedMappingProperty3D(name="layers", cls=Layers3D)
+    """Key-indexed multi-dimensional #observations × #variables (× #time) data arrays, aligned to dimensions of `X`."""
+
+    is_view: bool
+    """`True` if object is view of another EHRData object, `False` otherwise."""
+
+    filename: PathLike[str] | str | None
+    """Change to backing mode by setting the filename of a `.h5ed` file."""
+
+    obsm: np.ndarray | Mapping[str, Sequence[Any]] | None
+    """Key-indexed multi-dimensional observations annotation of length #observations.
+
+    If passing a :class:`~numpy.ndarray`, it needs to have a structured datatype.
+    """
+
+    varm: np.ndarray | Mapping[str, Sequence[Any]] | None
+    """Key-indexed multi-dimensional variables annotation of length #variables.
+
+    If passing a :class:`~numpy.ndarray`, it needs to have a structured datatype.
+    """
+
+    obsp: np.ndarray | Mapping[str, Sequence[Any]] | None
+    """Pairwise annotation of observations, a mutable mapping with array-like values."""
+
+    varp: np.ndarray | Mapping[str, Sequence[Any]] | None
+    """Pairwise annotation of variables/features, a mutable mapping with array-like values."""
+
+    def __init__(
+        self,
+        X: XDataType | pd.DataFrame | None = None,
+        *,
+        obs: pd.DataFrame | Mapping[str, Iterable[Any]] | None = None,
+        var: pd.DataFrame | Mapping[str, Iterable[Any]] | None = None,
+        tem: pd.DataFrame | None = None,
+        uns: Mapping[str, Any] | None = None,
+        obsm: np.ndarray | Mapping[str, Sequence[Any]] | None = None,
+        varm: np.ndarray | Mapping[str, Sequence[Any]] | None = None,
+        layers: Mapping[str, np.ndarray] | None = None,
+        raw: Mapping[str, Any] | None = None,
+        shape: tuple[int, int] | None = None,
+        filename: PathLike[str] | str | None = None,
+        filemode: Literal["r", "r+"] | None = None,
+        asview: bool = False,
+        obsp: np.ndarray | Mapping[str, Sequence[Any]] | None = None,
+        varp: np.ndarray | Mapping[str, Sequence[Any]] | None = None,
+        oidx: Index1D | None = None,
+        vidx: Index1D | None = None,
+        tidx: Index1D | None = None,
+    ):
+        self._tidx = None
+        self._n_t = _get_layers_3d_dim(layers)
+
+        super().__init__(
+            X=X,
+            obs=obs,
+            var=var,
+            uns=uns,
+            obsm=obsm,
+            varm=varm,
+            layers=layers,
+            raw=raw,
+            shape=shape,
+            filename=filename,
+            filemode=filemode,
+            asview=asview,
+            obsp=obsp,
+            varp=varp,
+            oidx=oidx,
+            vidx=vidx,
+        )
+
+        self._tidx = tidx
+
+        if tem is None:
+            self.tem = pd.DataFrame(index=pd.RangeIndex(self.n_t).astype(str))
+        else:
+            self.tem = tem
+
+    @classmethod
+    def from_adata(
+        cls,
+        adata: AnnData,
+        *,
+        tem: pd.DataFrame | None = None,
+        tidx: slice | None = None,
+    ) -> EHRData:
+        """Create an EHRData object from an AnnData object.
+
+        Args:
+            adata: Annotated data object.
+            tem: Time dataframe for describing third axis, see tem attribute.
+            tidx: A slice for the 3rd dimension. Usually, this will be None here.
+
+        Returns:
+            An EHRData object extending the AnnData object.
+        """
+        instance = cls(shape=adata.shape)
+
+        if adata.is_view:
+            # use _init_as_view of adata, but don't subset since already sliced in __getitem__
+            instance._init_as_view(adata, slice(None), slice(None))
+
+            # The tidx is not part of AnnData, so we need to set it separately. Setting it is required for the getter of r
+            instance._tidx = tidx
+            # _n_t is not part of AnnData, so need to set it separately
+            instance._n_t = 1 if tem is None else len(tem)
+
+            # tem is not part of AnnData, so we need to set it separately
+            if tem is not None:
+                instance.tem = DataFrameView(tem, tem.index)
+
+        else:
+            # For actual objects, initialize normally
+            instance._init_as_actual(
+                X=adata.X,
+                obs=adata.obs,
+                var=adata.var,
+                uns=adata.uns,
+                obsm=adata.obsm,
+                varm=adata.varm,
+                obsp=adata.obsp,
+                varp=adata.varp,
+                raw=adata.raw,
+                layers=adata.layers,
+                shape=adata.shape if adata.X is None else None,
+                filename=adata.filename,
+                filemode=adata.file._filemode,
+            )
+
+            if tem is not None:
+                instance.tem = tem
+
+            # Make a backed-reconstructed EHRData report `isbacked == True` so X is read from disk.
+            # `isbacked` requires the materialised X to be absent: from the layers store on anndata 0.13 (X is `layers[None]`) and from the `_X` slot on <0.13.
+            # Each line no-ops on the other.
+            if adata.isbacked:
+                instance._layers.pop(None, None)
+                instance._X = None
+
+        return instance
+
+    @property
+    def tem(self) -> pd.DataFrame:
+        """One-dimensional annotation of time (`pd.DataFrame`)."""
+        return self._tem
+
+    @tem.setter
+    def tem(self, input: pd.DataFrame) -> None:
+        if not isinstance(input, pd.DataFrame):
+            msg = "Can only assign pd.DataFrame to tem."
+            raise ValueError(msg)
+        if (self.n_t != len(input)) and (self.n_t != 1):
+            msg = f"Length of passed value for tem is {len(input)}, but this EHRData has shape: {self.shape}"
+            raise ValueError(msg)
+
+        self._tem = input
+        self._n_t = len(input)
+
+    @property
+    def n_t(self) -> int:
+        """Number of time points."""
+        return self._n_t if hasattr(self, "_n_t") else 1
+
+    @property
+    def _tidx(self) -> slice | None:
+        return self.__tidx
+
+    @_tidx.setter
+    def _tidx(self, input) -> None:
+        self.__tidx = input
+
+    @property
+    def X(self):
+        """A #observations × #variables (× #time) data array."""
+        X = super().X
+        if X is not None and self.is_view and self._tidx is not None and getattr(X, "ndim", 2) == 3:
+            X = _subset(X, (slice(None), slice(None), self._tidx))
+        return X
+
+    @X.setter
+    def X(self, value):
+        # On a view whose parent has no X, AnnData's setter writes into None and raises TypeError.
+        # Materialise the view first so the assignment lands on a real object, as for obs/var on X-less views.
+        if self.is_view and self._adata_ref is not None and self._adata_ref.X is None:
+            self._init_as_actual(self.copy())
+
+        # Validate that a 3D X's trailing axis is consistent with the existing n_t,
+        # mirroring `AlignedActual3D.__setitem__` for non-X layers.
+        _validate_array_3d(self, value)
+        new_n_t = max(self.n_t, _get_array_3d_dim(value))
+
+        # this is a bit hacky, but anndata checks its own shape to match the shape of X
+        self._n_t = None  # type: ignore
+
+        with _silence_anndata_nd_warning():
+            super(EHRData, self.__class__).X.fset(self, value)
+
+        self._n_t = new_n_t
+
+        # If a 3D X grows n_t beyond a previously trivial tem (length 1), refresh
+        # tem to match. Mirrors the layers __setitem__ behaviour. Guarded by a
+        # _tem check because during __init__ the X setter runs before tem is set.
+        if hasattr(self, "_tem") and len(self.tem) == 1 and _get_array_3d_dim(value) > 1:
+            self.tem = pd.DataFrame(index=pd.RangeIndex(new_n_t).astype(str))
+
+    @property
+    def shape(self) -> tuple[int, int] | tuple[int, int, int]:
+        """Shape tuple (#observations, #variables, #time)."""
+        # this is a bit hacky: self._n_t is supposed to never be None. For a flat EHRData, it is 1.
+        # it is only temporarily set to None when setting X
+        return (self.n_obs, self.n_vars) if self._n_t is None else (self.n_obs, self.n_vars, self.n_t)
+
+    def __repr__(self) -> str:
+        parent_repr = super().__repr__()
+
+        if "View of" in parent_repr:
+            parent_repr = parent_repr.replace("View of AnnData", "View of EHRData")
+        else:
+            parent_repr = parent_repr.replace("AnnData", "EHRData")
+
+        lines_anndata = parent_repr.splitlines()
+
+        lines_ehrdata = []
+        position_of_t = 1
+        for line in lines_anndata:
+            if self.n_t is not None and "n_obs × n_vars" in line:
+                line_splits = line.split("object with")
+                line = line_splits[0] + f"object with n_obs × n_vars × n_t = {self.n_obs} × {self.n_vars} × {self.n_t}"
+
+            if "obs:" in line or "var:" in line:
+                position_of_t += 1
+
+            # clean repr with anndata >=0.13 storing `.X` as the `None`-keyed layer
+            if line.lstrip().startswith("layers:"):
+                real_layers = [key for key in self.layers if key is not None]
+                if not real_layers:
+                    continue
+                indent = line[: len(line) - len(line.lstrip())]
+                line = f"{indent}layers: {str(real_layers)[1:-1]}"
+
+            lines_ehrdata.append(line)
+
+        if not self.tem.empty:
+            lines_ehrdata.insert(
+                position_of_t, f"    tem: {list(self.tem.index.astype(str))}".replace("[", "").replace("]", "")
+            )
+
+        shape_info = []
+        if self.X is not None:
+            shape_info.append(f"shape of .X: {self.X.shape}")
+        shape_info.extend(
+            f"shape of .{layer}: {self.layers[layer].shape}" for layer in self.layers if layer is not None
+        )
+
+        if shape_info:
+            lines_ehrdata.extend(["    " + info for info in shape_info])
+
+        return "\n".join(lines_ehrdata)
+
+    def __getitem__(self, index: Index | None) -> EHRData:
+        """Slice the EHRData object along 1-3 axes.
+
+        Args:
+            index: 1D, 2D, or 3D index.
+
+        Returns:
+            An EHRData view object.
+        """
+        # anndata 0.13: an accessor ref (e.g. A.X[:, k]) resolves to an array via AnnData;
+        # forward it instead of treating it as an obs/var/t slice, so obs_vector/var_vector work.
+        if _ACCESSOR_INDEX_TYPES and isinstance(index, _ACCESSOR_INDEX_TYPES):
+            return super().__getitem__(index)
+
+        oidx, vidx, tidx = self._unpack_index(index)
+
+        adata_sliced = super().__getitem__((oidx, vidx))
+
+        tem_sliced = None if self.tem is None else self.tem.iloc[tidx]
+
+        if self._tidx is None:
+            # the input tidx might be of various kinds, and we want to store
+            # a resolved version in AnnData style
+            tidx = _resolve_idx(slice(None), tidx, self.n_t)
+        else:
+            # When this is a view, get n_t from the parent if it's an EHRData object
+            # Otherwise use self.n_t (handles case where _adata_ref is None or is AnnData)
+            parent_n_t = (
+                self._adata_ref.n_t
+                if self.is_view and self._adata_ref is not None and hasattr(self._adata_ref, "n_t")
+                else self.n_t
+            )
+            tidx = _resolve_idx(self._tidx, tidx, parent_n_t)
+
+        # if tidx is an integer, numpy's automatic dimension reduction by drops an axis
+        if isinstance(tidx, (int | np.integer)):
+            tidx = slice(tidx, tidx + 1)
+
+        return EHRData.from_adata(adata=adata_sliced, tem=tem_sliced, tidx=tidx)
+
+    def _unpack_index(self, index: Index) -> tuple[Index1D, Index1D, Index1D]:
+        if not isinstance(index, tuple):
+            return index, slice(None), slice(None)
+        elif len(index) == 3:
+            return index
+        elif len(index) == 2:
+            return index[0], index[1], slice(None)
+        elif len(index) == 1:
+            return index[0], slice(None), slice(None)
+        else:
+            msg = "invalid number of indices"
+            raise IndexError(msg)
+
+    def copy(self) -> EHRData:
+        """Returns a copy of the EHRData object."""
+        with _silence_anndata_nd_warning():
+            adata_copy = super().copy()
+        return EHRData.from_adata(
+            adata_copy,
+            tem=None if self.tem is None else self.tem.copy(),
+            tidx=self._tidx,
+        )

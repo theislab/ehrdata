@@ -1,0 +1,5 @@
+observation_id,person_id,observation_concept_id,observation_date,observation_datetime,observation_type_concept_id,value_as_number,value_as_string,value_as_concept_id,qualifier_concept_id,unit_concept_id,provider_id,visit_occurrence_id,visit_detail_id,observation_source_value,observation_source_concept_id,unit_source_value,qualifier_source_value
+1,1,3001062,2100-01-01,2100-01-01 12:00:00,32817,,Anemia,0,,8587,,,,225059,2000030108,mL,
+2,1,3001062,2100-01-02,2100-01-02 12:00:00,32817,,Anemia,0,,9665,,,,225059,2000030108,uL,
+3,1,3034263,2100-01-01,2100-01-01 12:00:00,32817,5,,,,8587,,,,224409,2000030058,mL,
+4,1,3034263,2100-01-02,2100-01-02 12:00:00,32817,5,,,,9665,,,,224409,2000030058,uL,

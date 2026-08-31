@@ -2,3 +2,9 @@
 div.cell_output table.dataframe {
     font-size: 0.8em;
 }
+
+.bd-sidebar .caption-text {
+    color: #54c285;
+    font-weight: 600;
+    text-transform: uppercase;
+}
