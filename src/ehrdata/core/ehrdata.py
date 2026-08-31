@@ -25,27 +25,11 @@ from anndata._core.views import (
     _resolve_idx,
     as_view,
 )
+from anndata.acc import AdRef, MapAcc, RefAcc
+from anndata.typing import Index as ADIndex
+from anndata.typing import Index1D, IndexManager
 
-try:  # anndata 0.13: aliases moved to anndata.typing
-    from anndata.typing import Index as ADIndex
-    from anndata.typing import Index1D
-except ImportError:
-    from anndata.compat import Index as ADIndex
-    from anndata.compat import Index1D
-
-try:  # anndata 0.13: view indices wrapped in IndexManager (materialised in _subset)
-    from anndata.compat import IndexManager as _IndexManager
-
-    _INDEX_MANAGER_TYPES: tuple[type, ...] = (_IndexManager,)
-except ImportError:  # anndata <0.13 has no IndexManager; isinstance(x, ()) is always False, so nothing converts
-    _INDEX_MANAGER_TYPES = ()
-
-try:  # anndata 0.13: accessor references (A.X[:, k], A.obs[k], …) resolve to arrays, not slices
-    from anndata.acc import AdRef, MapAcc, RefAcc
-
-    _ACCESSOR_INDEX_TYPES: tuple[type, ...] = (AdRef, RefAcc, MapAcc)
-except ImportError:  # anndata <0.13 has no accessor references
-    _ACCESSOR_INDEX_TYPES = ()
+_ACCESSOR_INDEX_TYPES: tuple[type, ...] = (AdRef, RefAcc, MapAcc)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -80,9 +64,9 @@ def _validate_array_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None
 
 
 def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
-    # anndata 0.13: IndexManager isn't Iterable — materialise it so the np.ix_ branches below select by index combination (outer product), not coordinate pairs.
+    # An IndexManager isn't Iterable — materialise it so the np.ix_ branches below select by index combination (outer product), not coordinate pairs.
     if isinstance(subset_idx, tuple):
-        subset_idx = tuple(np.asarray(x) if isinstance(x, _INDEX_MANAGER_TYPES) else x for x in subset_idx)
+        subset_idx = tuple(np.asarray(x) if isinstance(x, IndexManager) else x for x in subset_idx)
     # Select as combination of indexes, not coordinates
     # Correcting for indexing behaviour of np.ndarray
     if (len(subset_idx) == 2 and all(isinstance(x, Iterable) for x in subset_idx)) or (
@@ -100,7 +84,7 @@ class AlignedActual3D(AlignedActual):
     """AlignedActual for 3D data."""
 
     def __setitem__(self, key: str | None, value: Value) -> None:
-        # anndata 0.13: key None is the unified `.X` slot; its 3D/n_t/tem bookkeeping is owned by the EHRData.X setter, so just store it (the base class also runs anndata's 2D-spec warning).
+        # Key None is the unified `.X` slot; its 3D/n_t/tem bookkeeping is owned by the EHRData.X setter, so just store it (the base class also runs anndata's 2D-spec warning).
         if key is None:
             super().__setitem__(key, value)
             return
@@ -124,7 +108,7 @@ class AlignedView3D(AlignedView):
     """AlignedView for 3D data."""
 
     def __getitem__(self, key: str | None) -> Value:
-        # anndata 0.13: key None is the unified `.X` slot, None when X is unset.
+        # Key None is the unified `.X` slot, None when X is unset.
         elem = self.parent_mapping[key]
         if elem is None:
             return None
@@ -145,9 +129,8 @@ class LayersView3D(AlignedView3D, LayersBase):
 
     def __init__(self, parent_mapping: LayersBase, parent_view: AnnData, subset_idx: Any) -> None:
         super().__init__(parent_mapping, parent_view, subset_idx)
-        # anndata 0.13: X delegates `isbacked` to the layers store, so mirror anndata's own LayersView and expose it on 3D layer views too (absent on <0.13, hence the guard).
-        if hasattr(parent_mapping, "isbacked"):
-            self.isbacked = parent_mapping.isbacked
+        # `X` delegates `isbacked` to the layers store, so mirror anndata's own LayersView and expose it on 3D layer views too.
+        self.isbacked = parent_mapping.isbacked
 
 
 # overwrite the view class of LayersBase allows to use the required __getitem__ method of AlignedView3D
@@ -267,10 +250,7 @@ class EHRData(AnnData):
     _t: pd.DataFrame | None
     _n_t: int
 
-    # Use keyword arguments so this works across the 0.12.x dataclass-field re-ordering:
-    # 0.12.6-0.12.11 require `(name, cls)`; 0.12.12+ make `name` optional (populated by
-    # `__set_name__`) and only require `cls`. Passing both by keyword satisfies both.
-    layers: AlignedMappingProperty3D = AlignedMappingProperty3D(name="layers", cls=Layers3D)
+    layers: AlignedMappingProperty3D = AlignedMappingProperty3D(cls=Layers3D)
     """Key-indexed multi-dimensional #observations × #variables (× #time) data arrays, aligned to dimensions of `X`."""
 
     is_view: bool
@@ -402,12 +382,10 @@ class EHRData(AnnData):
             if tem is not None:
                 instance.tem = tem
 
-            # Make a backed-reconstructed EHRData report `isbacked == True` so X is read from disk.
-            # `isbacked` requires the materialised X to be absent: from the layers store on anndata 0.13 (X is `layers[None]`) and from the `_X` slot on <0.13.
-            # Each line no-ops on the other.
+            # Make a backed-reconstructed EHRData report `isbacked == True` so X is read from disk:
+            # that requires the materialised X to be absent from the layers store (X is `layers[None]`).
             if adata.isbacked:
                 instance._layers.pop(None, None)
-                instance._X = None
 
         return instance
 
@@ -502,7 +480,7 @@ class EHRData(AnnData):
             if "obs:" in line or "var:" in line:
                 position_of_t += 1
 
-            # clean repr with anndata >=0.13 storing `.X` as the `None`-keyed layer
+            # clean repr, given `.X` is stored as the `None`-keyed layer
             if line.lstrip().startswith("layers:"):
                 real_layers = [key for key in self.layers if key is not None]
                 if not real_layers:
@@ -538,9 +516,9 @@ class EHRData(AnnData):
         Returns:
             An EHRData view object.
         """
-        # anndata 0.13: an accessor ref (e.g. A.X[:, k]) resolves to an array via AnnData;
+        # An accessor ref (e.g. A.X[:, k]) resolves to an array via AnnData;
         # forward it instead of treating it as an obs/var/t slice, so obs_vector/var_vector work.
-        if _ACCESSOR_INDEX_TYPES and isinstance(index, _ACCESSOR_INDEX_TYPES):
+        if isinstance(index, _ACCESSOR_INDEX_TYPES):
             return super().__getitem__(index)
 
         oidx, vidx, tidx = self._unpack_index(index)

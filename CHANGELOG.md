@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Changed
+ - ehrdata now requires `anndata>=0.13.1`, the first release providing everything {class}`~ehrdata.EHRData` builds on: a 3D `.X`, `.X` unified into `layers[None]`, and pydata-sparse `COO` arrays in memory. The last ehrdata still tolerated `anndata<0.13`, while already supporting it. ([#277](https://github.com/theislab/ehrdata/issues/277)) @eroell
+
 ### Fixed
  - ehrdata no longer imports the storage type aliases (`H5Array`, `H5Group`, `ZarrArray`, `ZarrGroup`) from the private `anndata.compat`, which dropped them in anndata 0.13.3. ([#293](https://github.com/theislab/ehrdata/issues/293)) @eroell
  - {func}`~ehrdata.dt.ehrdata_blobs` now defaults `layer` to `None` and stores the generated time series tensor in `.X`. Previously it always wrote to `.layers["tem_data"]` regardless of the `layer` argument, so code that omitted `layer` silently analyzed a static 2D snapshot instead of the intended 3D time series. Pass `layer=` explicitly to keep the tensor in a named layer instead. ([#284](https://github.com/theislab/ehrdata/issues/284)) @sueoglu
