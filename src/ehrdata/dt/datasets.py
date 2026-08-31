@@ -894,7 +894,7 @@ def mimic_2(
         >>> edata = ed.dt.mimic_2()
     """
     _download(
-        "https://www.physionet.org/files/mimic2-iaccd/1.0/full_cohort_data.csv?download",
+        "https://exampledata.scverse.org/ehrapy/full_cohort_data.csv",
         output_path=DEFAULT_DATA_PATH,
         output_filename="ehrapy_mimic2.csv",
     )
