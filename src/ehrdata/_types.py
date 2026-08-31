@@ -19,11 +19,6 @@ else:
 from fast_array_utils.conv import to_dense
 from numpy import ma
 
-# from anndata.abc import CSCDataset, CSRDataset
-# `h5py` and `zarr` are used directly: both are hard dependencies (h5py via anndata), so
-# aliases would only rename them. These names used to come from the private `anndata.compat`,
-# which dropped the storage aliases in anndata 0.13.3
-# (see https://github.com/scverse/cellrank/issues/1377).
 from ehrdata._compat import CupyArray, CupySparseMatrix, ZappyArray
 
 type ArrayStorageType = zarr.Array | h5py.Dataset
