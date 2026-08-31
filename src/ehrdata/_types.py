@@ -1,13 +1,12 @@
 from importlib.util import find_spec
 from typing import TYPE_CHECKING, Literal
 
+import h5py
 import numpy as np
 import scipy
 import scipy.sparse as sp
 import sparse
-
-# from anndata.abc import CSCDataset, CSRDataset
-from anndata.compat import CupyArray, CupySparseMatrix, H5Array, H5Group, ZarrArray, ZarrGroup
+import zarr
 
 if TYPE_CHECKING:
     # can only see core.Array
@@ -20,10 +19,15 @@ else:
 from fast_array_utils.conv import to_dense
 from numpy import ma
 
-from ehrdata._compat import ZappyArray
+# from anndata.abc import CSCDataset, CSRDataset
+# `h5py` and `zarr` are used directly: both are hard dependencies (h5py via anndata), so
+# aliases would only rename them. These names used to come from the private `anndata.compat`,
+# which dropped the storage aliases in anndata 0.13.3
+# (see https://github.com/scverse/cellrank/issues/1377).
+from ehrdata._compat import CupyArray, CupySparseMatrix, ZappyArray
 
-type ArrayStorageType = ZarrArray | H5Array
-type GroupStorageType = ZarrGroup | H5Group
+type ArrayStorageType = zarr.Array | h5py.Dataset
+type GroupStorageType = zarr.Group | h5py.Group
 type StorageType = ArrayStorageType | GroupStorageType
 
 CSMatrix = scipy.sparse.csr_matrix | scipy.sparse.csc_matrix
@@ -35,8 +39,8 @@ type XDataType = (
     | CSMatrix
     | CSArray
     | sparse.COO
-    | H5Array
-    | ZarrArray
+    | h5py.Dataset
+    | zarr.Array
     | ZappyArray
     # | CSRDataset
     # | CSCDataset

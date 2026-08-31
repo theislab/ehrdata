@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning][].
 ## [Unreleased]
 
 ### Fixed
+ - ehrdata no longer imports the storage type aliases (`H5Array`, `H5Group`, `ZarrArray`, `ZarrGroup`) from the private `anndata.compat`, which dropped them in anndata 0.13.3 and made `import ehrdata` fail with `ImportError: cannot import name 'H5Array' from 'anndata.compat'`. `h5py.Dataset`/`h5py.Group` and `zarr.Array`/`zarr.Group` are now used directly instead. `h5py`, which ehrdata imports directly but so far only got transitively via anndata, is now a declared dependency. ([#293](https://github.com/theislab/ehrdata/issues/293)) @eroell
  - {func}`~ehrdata.dt.ehrdata_blobs` now defaults `layer` to `None` and stores the generated time series tensor in `.X`. Previously it always wrote to `.layers["tem_data"]` regardless of the `layer` argument, so code that omitted `layer` silently analyzed a static 2D snapshot instead of the intended 3D time series. Pass `layer=` explicitly to keep the tensor in a named layer instead. ([#284](https://github.com/theislab/ehrdata/issues/284)) @sueoglu
 
 ## [0.4.0]
