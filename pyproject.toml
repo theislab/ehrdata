@@ -26,6 +26,7 @@ dependencies = [
   "anndata>=0.12.6",
   "duckdb",
   "fast-array-utils[sparse]",
+  "h5py",
   "pooch",
   "rich",
   "sparse",
