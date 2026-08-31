@@ -108,7 +108,6 @@ class AlignedView3D(AlignedView):
     """AlignedView for 3D data."""
 
     def __getitem__(self, key: str | None) -> Value:
-        # Key None is the unified `.X` slot, None when X is unset.
         elem = self.parent_mapping[key]
         if elem is None:
             return None
@@ -480,7 +479,6 @@ class EHRData(AnnData):
             if "obs:" in line or "var:" in line:
                 position_of_t += 1
 
-            # clean repr, given `.X` is stored as the `None`-keyed layer
             if line.lstrip().startswith("layers:"):
                 real_layers = [key for key in self.layers if key is not None]
                 if not real_layers:
@@ -516,8 +514,6 @@ class EHRData(AnnData):
         Returns:
             An EHRData view object.
         """
-        # An accessor ref (e.g. A.X[:, k]) resolves to an array via AnnData;
-        # forward it instead of treating it as an obs/var/t slice, so obs_vector/var_vector work.
         if isinstance(index, _ACCESSOR_INDEX_TYPES):
             return super().__getitem__(index)
 

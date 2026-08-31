@@ -71,7 +71,6 @@ def test_ehrdata_3dlayer_emits_no_2d_spec_warning(X_numpy_322):
 
 
 def test_ehrdata_3d_X_emits_no_2d_spec_warning(X_numpy_322):
-    # Same as above for a 3D `X`.
     with warnings.catch_warnings():
         warnings.filterwarnings("error", message=r".*must be 2-dimensional.*")
         edata = EHRData(X=X_numpy_322)
@@ -363,8 +362,7 @@ def test_ehrdata_assignments_view(X_numpy_32, X_numpy_322, obs_31, var_21):
 def test_ehrdata_view_X_scalar_broadcast(X_numpy_32, X_numpy_322):
     """Assigning a scalar (or any value without `.shape`) to a view's X is a valid broadcast.
 
-    Since `.X` is unified into `layers[None]`, this initialises the view as an actual object
-    holding the broadcast values and leaves the parent unchanged.
+    Since `.X` is unified into `layers[None]`, this initialises the view as an actual object, holding the broadcast values and leaves the parent unchanged.
     """
     edata = EHRData(X=X_numpy_32, layers={DEFAULT_TEM_LAYER_NAME: X_numpy_322})
 
