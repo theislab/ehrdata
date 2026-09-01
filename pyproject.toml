@@ -37,8 +37,8 @@ optional-dependencies.dask = [
   "dask",
 ]
 optional-dependencies.dev = [
-  "pre-commit",
-  "twine",
+  "prek",
+  "twine>=4.0.2",
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
@@ -49,11 +49,11 @@ optional-dependencies.doc = [
   "numpy<2.5",                       # numba (via sparse) caps numpy<2.5; lamindb otherwise pulls 2.5.1, forcing uv to backtrack numba into an unbuildable llvmlite and break the RTD build. Relax when numba supports newer numpy.
   "pandas",
   "scanpydoc",
-  "sphinx>=4,<9",
+  "sphinx>=8.1,<9",
   "sphinx-autodoc-typehints",
   "sphinx-book-theme>=1",
   "sphinx-copybutton",
-  "sphinx-tabs",
+  "sphinx-design",
   "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
   "vitessce",
@@ -100,7 +100,7 @@ urls.Source = "https://github.com/theislab/ehrdata"
 envs.default.installer = "uv"
 envs.default.features = [ "dev" ]
 envs.docs.features = [ "doc" ]
-envs.docs.scripts.build = "sphinx-build -M html docs docs/_build {args}"
+envs.docs.scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.hatch-test.features = [ "test" ]
@@ -204,6 +204,7 @@ run.patch = [ "subprocess" ]
 
 [tool.cruft]
 skip = [
+  ".git",
   "tests",
   "src/**/__init__.py",
   "src/**/basic.py",
