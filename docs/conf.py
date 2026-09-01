@@ -140,6 +140,7 @@ nitpick_ignore = [
     ("py:data", "types.EllipsisType"),
     # TODO: remove once https://github.com/sphinx-doc/sphinx/pull/13508 is released
     ("py:class", "ehrdata._types.TypeAliasType"),
+    ("py:class", "zarr.storage._common.TypeAliasType"),
     # typing.Union fails in tutorials/tutorial_time_series_with_pypots
     ("py:data", "typing.Union"),
     # https://github.com/duckdb/duckdb-web/issues/3806
