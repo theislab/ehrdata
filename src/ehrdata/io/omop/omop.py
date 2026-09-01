@@ -357,14 +357,19 @@ def setup_variables(
         num_intervals: Number of intervals.
         concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
         aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
+            For `'last'` and `'first'`, only data points that have a value in the data field of interest
+            (the first field of `data_field_to_keep`) are considered; all kept fields are read from that
+            very data point, so that e.g. the units describe the value that is kept.
         enrich_var_with_feature_info: Whether to enrich the var table with feature
            information. If a concept_id is not found in the concept table, their respective alternate `concept_id` included in the concept_relationship table is retrieved to add the available feature information.
            Otherwise the feature information will be NaN.
         enrich_var_with_unit_info: Whether to enrich the var table with unit information.
             Raises an Error if multiple units per feature are found for at least one
-            feature. For entire missing data points, the units are ignored. For observed
-            data points with missing unit information (NULL in either 'unit_concept_id'
-            or 'unit_source_value'), the value NULL/NaN is considered a single unit.
+            feature. For entire missing data points, and for data points that do not
+            contribute a value (see `aggregation_strategy`), the units are ignored. For
+            observed data points with missing unit information (NULL in either
+            'unit_concept_id' or 'unit_source_value'), the value NULL/NaN is considered
+            a single unit.
         instantiate_tensor: Whether to instantiate the tensor into the .r field of the EHRData object.
 
     Returns:
@@ -619,6 +624,9 @@ def setup_interval_variables(
        num_intervals: Number of intervals.
        concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
        aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
+           For `'last'` and `'first'`, only data points that have a value in the data field of interest
+           (the first field of `data_field_to_keep`) are considered; all kept fields are read from that
+           very data point, so that e.g. the units describe the value that is kept.
        enrich_var_with_feature_info: Whether to enrich the var table with feature
            information. If a concept_id is not found in the concept table, their respective alternate `concept_id` included in the concept_relationship table is retrieved to add the available feature information.
            Otherwise the feature information will be NaN.

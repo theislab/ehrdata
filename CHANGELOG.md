@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Changed
  - ehrdata now requires `anndata>=0.13.1`, the first release providing everything {class}`~ehrdata.EHRData` builds on: a 3D `.X`, `.X` unified into `layers[None]`, and pydata-sparse `COO` arrays in memory. The last ehrdata still tolerated `anndata<0.13`, while already supporting it. ([#277](https://github.com/theislab/ehrdata/issues/277)) @eroell
+ - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with `aggregation_strategy="last"` (or `"first"`) no longer return a missing value when the last (or first) record of an interval has no value in the kept field. The aggregation now considers only the records that do carry a value, so the last (or first) *observed* value is kept. Consequently, records without a value no longer contribute a unit to the unit report, and `is_present` of the long format table marks the intervals in which a value was observed. ([#298](https://github.com/theislab/ehrdata/issues/298)) @eroell
 
 ### Fixed
  - ehrdata no longer imports the storage type aliases (`H5Array`, `H5Group`, `ZarrArray`, `ZarrGroup`) from the private `anndata.compat`, which dropped them in anndata 0.13.3. ([#293](https://github.com/theislab/ehrdata/issues/293)) @eroell
