@@ -1663,6 +1663,109 @@ def test_setup_interval_variables_aggregation_ignores_rows_without_value(omop_co
     assert edata.layers[DEFAULT_TEM_LAYER_NAME][0, 1, 0] == 31
 
 
+@pytest.mark.parametrize(
+    ("aggregation_strategy", "expected_value"),
+    [
+        ("last", 23),
+        ("first", 22),
+        ("mean", pytest.approx(68 / 3)),
+        ("median", 23),
+        ("mode", 23),
+        ("sum", 68),
+        ("count", 3),
+        ("min", 22),
+        ("max", 23),
+        ("std", pytest.approx(0.5773502691896258)),
+    ],
+)
+def test_setup_variables_aggregation_strategies_carry_the_unit(
+    omop_connection_vanilla, aggregation_strategy, expected_value
+):
+    """Every aggregation strategy works, and the units are carried along instead of being aggregated, see issue #300."""
+    con = omop_connection_vanilla
+
+    # person 3 has value_as_number 22 (12:00) and 23 (13:00) of concept 3031147, in unit 9557/mEq/L;
+    # a third value makes the aggregates of the interval free of ties
+    con.execute(
+        """INSERT INTO measurement
+            (measurement_id, person_id, measurement_concept_id, measurement_date, measurement_datetime,
+             value_as_number, unit_concept_id, unit_source_value)
+        VALUES (10, 3, 3031147, '2100-01-01', '2100-01-01 14:00:00', 23, 9557, 'mEq/L')"""
+    )
+
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        time_precision="datetime",
+        num_intervals=2,
+        aggregation_strategy=aggregation_strategy,
+    )
+
+    # obs 2 is visit_occurrence 3 of person 3, var 1 is concept 3031147, interval 0 is 2100-01-01
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME][2, 1, 0] == expected_value
+
+    long_format_row = con.execute(
+        """SELECT * FROM long_person_timestamp_feature_value_measurement
+        WHERE obs_id = 3 AND data_table_concept_id = 3031147 AND interval_step = 0"""
+    ).df()
+    assert long_format_row["unit_concept_id"].item() == 9557
+    assert long_format_row["unit_source_value"].item() == "mEq/L"
+
+
+@pytest.mark.parametrize("aggregation_strategy", ["mean", "std"])
+def test_setup_variables_combining_aggregation_raises_on_multiple_units(
+    omop_connection_multiple_units, aggregation_strategy
+):
+    """Values of different units must not be combined into a single value, see issue #300."""
+    con = omop_connection_multiple_units
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+
+    # concept 3034263 has a value_as_number in unit 8587/mL and one in unit 9665/uL
+    with pytest.raises(NotImplementedError, match="requires a single unit per feature"):
+        ed.io.omop.setup_variables(
+            edata,
+            backend_handle=con,
+            layer=DEFAULT_TEM_LAYER_NAME,
+            data_tables=["observation"],
+            data_field_to_keep=["value_as_number"],
+            interval_length_number=1,
+            interval_length_unit="day",
+            num_intervals=2,
+            aggregation_strategy=aggregation_strategy,
+        )
+
+
+@pytest.mark.parametrize(
+    ("aggregation_strategy", "data_field_to_keep"),
+    [("count", "value_as_number"), ("last", "value_as_number"), ("mean", "is_present")],
+)
+def test_setup_variables_unitless_aggregation_allows_multiple_units(
+    omop_connection_multiple_units, aggregation_strategy, data_field_to_keep
+):
+    """Numbers of data points carry no unit, and a single kept data point mixes none, see issue #300."""
+    con = omop_connection_multiple_units
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["observation"],
+        data_field_to_keep=[data_field_to_keep],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=2,
+        aggregation_strategy=aggregation_strategy,
+    )
+    assert edata.shape == (1, 2, 2)
+
+
 def test_multiple_visit_occurrences_for_single_patient(omop_connection_multiple_visit_occurrences):
     """Test that multiple visits for a single patient are handled correctly.
 
