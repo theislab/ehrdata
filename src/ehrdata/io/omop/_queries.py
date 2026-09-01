@@ -144,8 +144,17 @@ def _generate_value_query(
     # is_present is 1 in all rows of the data_table; but need an aggregation operation, so use LAST ordered by datetime
     # For temporal ordering, we use LAST/FIRST with ORDER BY to ensure chronological order
     if aggregation_strategy in ["LAST", "FIRST"]:
-        is_present_query = f"LAST(is_present ORDER BY {datetime_column}) as is_present, "
-        value_query = f"{', '.join([f'{aggregation_strategy}({column} ORDER BY {datetime_column}) AS {column}' for column in data_field_to_keep])}"
+        # A row whose value is NULL carries no measured value, so it must not mask an actually
+        # observed value of the same interval. Restricting the aggregation to rows with an observed
+        # value makes LAST/FIRST pick the last/first observed value instead of a trailing/leading NULL.
+        # The filter is on the field that is read out (the first one, the one instantiated into the tensor),
+        # and is applied to every kept column - including unit_concept_id and unit_source_value.
+        # This way all kept columns are read from that very same row, and e.g. the unit describes
+        # the value that is kept, and not the one of some other row.
+        value_field = data_field_to_keep[0]
+        row_filter = f"FILTER (WHERE {value_field} IS NOT NULL)"
+        is_present_query = f"LAST(is_present ORDER BY {datetime_column}) {row_filter} as is_present, "
+        value_query = f"{', '.join([f'{aggregation_strategy}({column} ORDER BY {datetime_column}) {row_filter} AS {column}' for column in data_field_to_keep])}"
     else:
         # For other aggregation strategies (mean, median, sum, etc.), ordering doesn't matter
         is_present_query = "LAST(is_present) as is_present, "

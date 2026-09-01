@@ -1581,7 +1581,86 @@ def test_multiple_units(omop_connection_multiple_units, caplog):
         enrich_var_with_unit_info=False,
     )
     # assert edata.shape == (1, 0)
-    assert "multiple units for features: [[0]\n [1]]\n" in caplog.text
+    # only feature 3034263 is flagged: the value_as_number of feature 3001062 is NULL in all its rows,
+    # so none of its rows contributes a value - and hence no unit - to the extraction
+    assert "multiple units for features: [[0]]\n" in caplog.text
+
+
+@pytest.mark.parametrize("aggregation_strategy", ["last", "first"])
+def test_setup_variables_aggregation_ignores_rows_without_value(omop_connection_vanilla, aggregation_strategy):
+    """A row without a value must not shadow an observed value of the same interval, see issue #298."""
+    con = omop_connection_vanilla
+
+    # person 1 has value_as_number 18 (12:00) and 19 (13:00) of concept 3031147, in unit 9557/mEq/L;
+    # surround them by rows without a value_as_number, carrying a deviating unit
+    con.execute(
+        """INSERT INTO measurement
+            (measurement_id, person_id, measurement_concept_id, measurement_date, measurement_datetime,
+             value_as_number, unit_concept_id, unit_source_value)
+        VALUES
+            (10, 1, 3031147, '2100-01-01', '2100-01-01 11:00:00', NULL, 8888, 'deviating_unit'),
+            (11, 1, 3031147, '2100-01-01', '2100-01-01 14:00:00', NULL, 8888, 'deviating_unit')"""
+    )
+
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        time_precision="datetime",
+        num_intervals=2,
+        aggregation_strategy=aggregation_strategy,
+    )
+
+    # obs 0 is visit_occurrence 1 of person 1, var 1 is concept 3031147, interval 0 is 2100-01-01
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME][0, 1, 0] == (19 if aggregation_strategy == "last" else 18)
+
+    # the unit is the one of the value that is kept, not the one of a row without a value
+    long_format_row = con.execute(
+        """SELECT * FROM long_person_timestamp_feature_value_measurement
+        WHERE obs_id = 1 AND data_table_concept_id = 3031147 AND interval_step = 0"""
+    ).df()
+    assert long_format_row["unit_concept_id"].item() == 9557
+    assert long_format_row["unit_source_value"].item() == "mEq/L"
+
+
+@pytest.mark.parametrize("aggregation_strategy", ["last", "first"])
+def test_setup_interval_variables_aggregation_ignores_rows_without_value(omop_connection_vanilla, aggregation_strategy):
+    """A row without a value must not shadow an observed value of the same interval, see issue #298."""
+    con = omop_connection_vanilla
+
+    # person 1 has days_supply 31 (12:00) of concept 19073183 starting on 2100-01-01;
+    # surround it by rows without a days_supply
+    con.execute(
+        """INSERT INTO drug_exposure
+            (drug_exposure_id, person_id, drug_concept_id, drug_exposure_start_date, drug_exposure_start_datetime,
+             drug_exposure_end_date, drug_exposure_end_datetime, days_supply)
+        VALUES
+            (10, 1, 19073183, '2100-01-01', '2100-01-01 11:00:00', '2100-01-31', '2100-01-31 00:00:00', NULL),
+            (11, 1, 19073183, '2100-01-01', '2100-01-01 13:00:00', '2100-01-31', '2100-01-31 00:00:00', NULL)"""
+    )
+
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        time_precision="datetime",
+        num_intervals=2,
+        aggregation_strategy=aggregation_strategy,
+        keep_date="start",
+    )
+
+    # obs 0 is visit_occurrence 1 of person 1, var 1 is concept 19073183, interval 0 is 2100-01-01
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME][0, 1, 0] == 31
 
 
 def test_multiple_visit_occurrences_for_single_patient(omop_connection_multiple_visit_occurrences):
