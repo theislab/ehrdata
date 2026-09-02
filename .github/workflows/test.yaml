@@ -31,13 +31,13 @@ jobs:
     outputs:
       envs: ${{ steps.get-envs.outputs.envs }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           filter: blob:none
           fetch-depth: 0
           persist-credentials: false
       - name: Install uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Get test environments
         id: get-envs
         run: |
@@ -69,13 +69,13 @@ jobs:
     continue-on-error: ${{ contains(matrix.env.name, 'pre') }} # make "all-green" pass even if the pre-release job fails
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           filter: blob:none
           fetch-depth: 0
           persist-credentials: false
       - name: Install uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: ${{ matrix.env.python }}
           cache-dependency-glob: pyproject.toml
@@ -87,7 +87,7 @@ jobs:
       # The key is static so the cache is reused across runs; bump the version when a dataset URL changes.
       - name: Restore datasets cache
         id: data-cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ehrapy_data
           key: ehrapy-data-tests-v2
@@ -102,7 +102,7 @@ jobs:
       # Only persist the cache after a green run that had to download (cache miss), so a partial/failed download is never saved under the (immutable) key.
       - name: Save datasets cache
         if: steps.data-cache.outputs.cache-hit != 'true' && success()
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ehrapy_data
           key: ehrapy-data-tests-v2
@@ -128,6 +128,6 @@ jobs:
       - test
     runs-on: ubuntu-latest
     steps:
-        - uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
+        - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
           with:
             jobs: ${{ toJSON(needs) }}
