@@ -6,6 +6,7 @@ import pytest
 
 import ehrdata as ed
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
+from ehrdata.io.omop._queries import _get_unit_fields
 
 # constants for toy_omop/vanilla
 VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY = {
@@ -1684,8 +1685,8 @@ def test_setup_variables_aggregation_strategies_carry_the_unit(
     """Every aggregation strategy works, and the units are carried along instead of being aggregated, see issue #300."""
     con = omop_connection_vanilla
 
-    # person 3 has value_as_number 22 (12:00) and 23 (13:00) of concept 3031147, in unit 9557/mEq/L;
-    # a third value makes the aggregates of the interval free of ties
+    # person 3 has value_as_number 22 (12:00) and 23 (13:00) of concept 3031147, in unit 9557/mEq/L
+    # a third value of the same unit makes the aggregates of the interval free of ties
     con.execute(
         """INSERT INTO measurement
             (measurement_id, person_id, measurement_concept_id, measurement_date, measurement_datetime,
@@ -1764,6 +1765,125 @@ def test_setup_variables_unitless_aggregation_allows_multiple_units(
         aggregation_strategy=aggregation_strategy,
     )
     assert edata.shape == (1, 2, 2)
+
+
+@pytest.mark.parametrize(
+    ("aggregation_strategy", "expected_value"),
+    [
+        ("last", 20),
+        ("first", 10),
+        ("mean", 15),
+        ("median", 15),
+        ("sum", 30),
+        ("count", 2),
+        ("min", 10),
+        ("max", 20),
+        ("std", pytest.approx(7.071067811865476)),
+    ],
+)
+def test_setup_interval_variables_aggregation_strategies_carry_the_unit(
+    omop_connection_vanilla, aggregation_strategy, expected_value
+):
+    """The units are carried along in setup_interval_variables, too, see issue #300."""
+    con = omop_connection_vanilla
+
+    # person 1 has dose_value 10 of drug 902427 in unit 8576 in two dose_eras, starting 2100-01-01 and 2100-02-01
+    # make the two differ, so that the aggregates of the interval holding both are free of ties
+    con.execute("UPDATE dose_era SET dose_value = 20 WHERE dose_era_id = 2")
+
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["dose_era"],
+        data_field_to_keep=["dose_value"],
+        interval_length_number=60,
+        interval_length_unit="day",
+        num_intervals=1,
+        aggregation_strategy=aggregation_strategy,
+        keep_date="start",
+    )
+
+    # obs 0 is visit_occurrence 1 of person 1, var 1 is drug 902427, interval 0 holds both dose_eras
+    assert edata.layers[DEFAULT_TEM_LAYER_NAME][0, 1, 0] == expected_value
+
+    # dose_era has a unit_concept_id, but no unit_source_value
+    long_format_row = con.execute(
+        """SELECT * FROM long_person_timestamp_feature_value_dose_era
+        WHERE obs_id = 1 AND data_table_concept_id = 902427 AND interval_step = 0"""
+    ).df()
+    assert long_format_row["unit_concept_id"].item() == 8576
+    assert "unit_source_value" not in long_format_row.columns
+
+
+@pytest.mark.parametrize("aggregation_strategy", ["mean", "std"])
+def test_setup_interval_variables_combining_aggregation_raises_on_multiple_units(
+    omop_connection_vanilla, aggregation_strategy
+):
+    """Values of different units must not be combined into a single value here either, see issue #300."""
+    con = omop_connection_vanilla
+
+    # give the two dose_eras of drug 902427 of person 1 a deviating unit each
+    con.execute("UPDATE dose_era SET unit_concept_id = 8587 WHERE dose_era_id = 2")
+
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    with pytest.raises(NotImplementedError, match="requires a single unit per feature"):
+        ed.io.omop.setup_interval_variables(
+            edata,
+            backend_handle=con,
+            layer=DEFAULT_TEM_LAYER_NAME,
+            data_tables=["dose_era"],
+            data_field_to_keep=["dose_value"],
+            interval_length_number=60,
+            interval_length_unit="day",
+            num_intervals=1,
+            aggregation_strategy=aggregation_strategy,
+            keep_date="start",
+        )
+
+
+@pytest.mark.parametrize(
+    ("data_table", "data_field_to_keep"),
+    [("drug_exposure", "days_supply"), ("drug_era", "drug_exposure_count")],
+)
+def test_setup_interval_variables_without_unit_concept_id_allows_combining_aggregation(
+    omop_connection_vanilla, data_table, data_field_to_keep
+):
+    """A data table that tells no unit_concept_id has no unit to disagree on, see issue #300."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=[data_table],
+        data_field_to_keep=[data_field_to_keep],
+        interval_length_number=60,
+        interval_length_unit="day",
+        num_intervals=1,
+        aggregation_strategy="mean",
+        keep_date="start",
+    )
+
+    long_format_columns = con.execute(f"DESCRIBE long_person_timestamp_feature_value_{data_table}").df()["column_name"]
+    assert not any("unit" in column for column in long_format_columns)
+
+
+def test_get_unit_fields_adapts_to_the_data_table(omop_connection_vanilla):
+    """The unit fields of a data table depend on the table and on the OMOP CDM version, see issue #300."""
+    con = omop_connection_vanilla
+
+    assert _get_unit_fields(con, "measurement") == ("unit_concept_id", "unit_source_value")
+    assert _get_unit_fields(con, "device_exposure") == ("unit_concept_id", "unit_source_value")
+    assert _get_unit_fields(con, "dose_era") == ("unit_concept_id",)
+    assert _get_unit_fields(con, "drug_exposure") == ()
+
+    # device_exposure has the unit fields in OMOP CDM 5.4, but not in 5.3
+    con.execute("ALTER TABLE device_exposure DROP COLUMN unit_concept_id")
+    con.execute("ALTER TABLE device_exposure DROP COLUMN unit_source_value")
+    assert _get_unit_fields(con, "device_exposure") == ()
 
 
 def test_multiple_visit_occurrences_for_single_patient(omop_connection_multiple_visit_occurrences):
