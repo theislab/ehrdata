@@ -88,6 +88,9 @@ def _get_datetime_key(
     return value
 
 
+# The unit fields carried along the aggregation, if the data table has them - see _get_unit_fields.
+UNIT_FIELDS = ("unit_concept_id", "unit_source_value")
+
 AGGREGATION_STRATEGY_KEY = {
     "last": "LAST",
     "first": "FIRST",
@@ -98,8 +101,23 @@ AGGREGATION_STRATEGY_KEY = {
     "count": "COUNT",
     "min": "MIN",
     "max": "MAX",
-    "std": "STD",
+    "std": "STDDEV_SAMP",
 }
+
+# Strategies that keep the value of a single row, rather than combining the values of several rows.
+SINGLE_ROW_AGGREGATION_STRATEGIES = ("last", "first")
+
+# Strategies whose result is a number of data points, and hence carries no unit.
+UNITLESS_AGGREGATION_STRATEGIES = ("count",)
+
+
+def _get_unit_fields(backend_handle: duckdb.DuckDBPyConnection, data_table: str) -> tuple[str, ...]:
+    """Get the fields of UNIT_FIELDS that data_table has.
+
+    Not every data table has a unit, and those that do don't have the same unit fields across OMOP CDM versions: 'device_exposure' has them in 5.4, but not in 5.3.
+    """
+    columns = set(backend_handle.execute(f"DESCRIBE {data_table}").df()["column_name"])
+    return tuple(field for field in UNIT_FIELDS if field in columns)
 
 
 def _generate_timedeltas(interval_length_number: int, interval_length_unit: str, num_intervals: int) -> pd.DataFrame:
@@ -139,26 +157,45 @@ def _drop_timedeltas(backend_handle: duckdb.DuckDBPyConnection):
 
 
 def _generate_value_query(
-    data_table: str, data_field_to_keep: Sequence, aggregation_strategy: str, datetime_column: str
+    data_table: str,
+    data_field_to_keep: Sequence,
+    aggregation_strategy: str,
+    datetime_column: str,
+    unit_fields: Sequence[str] = (),
 ) -> str:
-    # is_present is 1 in all rows of the data_table; but need an aggregation operation, so use LAST ordered by datetime
-    # For temporal ordering, we use LAST/FIRST with ORDER BY to ensure chronological order
-    if aggregation_strategy in ["LAST", "FIRST"]:
-        # A row whose value is NULL carries no measured value, so it must not mask an actually
-        # observed value of the same interval. Restricting the aggregation to rows with an observed
-        # value makes LAST/FIRST pick the last/first observed value instead of a trailing/leading NULL.
-        # The filter is on the field that is read out (the first one, the one instantiated into the tensor),
-        # and is applied to every kept column - including unit_concept_id and unit_source_value.
-        # This way all kept columns are read from that very same row, and e.g. the unit describes
-        # the value that is kept, and not the one of some other row.
-        value_field = data_field_to_keep[0]
-        row_filter = f"FILTER (WHERE {value_field} IS NOT NULL)"
-        is_present_query = f"LAST(is_present ORDER BY {datetime_column}) {row_filter} as is_present, "
-        value_query = f"{', '.join([f'{aggregation_strategy}({column} ORDER BY {datetime_column}) {row_filter} AS {column}' for column in data_field_to_keep])}"
+    # A row whose data_field_to_keep is NULL carries no value.
+    # Such a row must neither mask a value observed in the same interval, nor have a say in the unit of the kept value.
+    # Hence the filter below on is_present and on the unit fields; the values themselves need none, as SQL aggregates ignore NULL inputs anyway.
+    value_field = data_field_to_keep[0]
+    row_filter = f"FILTER (WHERE {value_field} IS NOT NULL)"
+
+    single_row_aggregation = aggregation_strategy in [
+        AGGREGATION_STRATEGY_KEY[strategy] for strategy in SINGLE_ROW_AGGREGATION_STRATEGIES
+    ]
+
+    # is_present is 1 in all rows of the data_table; but need an aggregation operation, so use LAST.
+    # LAST/FIRST need ORDER BY for chronological order; for the other strategies, ordering doesn't matter.
+    order_by = f" ORDER BY {datetime_column}" if single_row_aggregation else ""
+    is_present_query = f"LAST(is_present{order_by}) {row_filter} as is_present, "
+
+    if single_row_aggregation:
+        # One single row is kept, so all kept columns, the units included, are read from that very row.
+        value_query = ", ".join(
+            f"{aggregation_strategy}({column}{order_by}) {row_filter} AS {column}"
+            for column in [*data_field_to_keep, *unit_fields]
+        )
     else:
-        # For other aggregation strategies (mean, median, sum, etc.), ordering doesn't matter
-        is_present_query = "LAST(is_present) as is_present, "
-        value_query = f"{', '.join([f'{aggregation_strategy}({column}) AS {column}' for column in data_field_to_keep])}"
+        value_query = ", ".join(f"{aggregation_strategy}({column}) AS {column}" for column in data_field_to_keep)
+
+        # These strategies combine several rows into one value, so there is no single row to read the unit from.
+        # A unit is carried along if the rows carrying a value agree on it, and is NULL if they do not: no unit describes a value that mixes units.
+        # A row without a unit is no disagreement, it simply does not tell one - COUNT(DISTINCT) and MIN ignore NULL.
+        # Differing unit_concept_id is ruled out up front by _check_one_unit_per_feature_for_aggregation, but unit_source_value can still differ within one unit_concept_id (e.g. 'bpm' and 'beats/min').
+        unit_query = ", ".join(
+            f"CASE WHEN COUNT(DISTINCT {column}) {row_filter} > 1 THEN NULL ELSE MIN({column}) {row_filter} END AS {column}"
+            for column in unit_fields
+        )
+        value_query = f"{value_query}, {unit_query}" if unit_query else value_query
 
     return is_present_query + value_query
 
@@ -174,6 +211,7 @@ def _write_long_time_interval_table(
     num_intervals: int,
     aggregation_strategy: str,
     data_field_to_keep: Sequence[str] | str,
+    unit_fields: Sequence[str] = (),
     keep_date: str = "",
 ) -> None:
     if isinstance(data_field_to_keep, str):
@@ -245,7 +283,7 @@ def _write_long_time_interval_table(
     if keep_date in ["timepoint", "start", "end"]:
         datetime_col = _get_datetime_key(keep_date, data_table, time_precision)
         select_query = f"""
-        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col)} \
+        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col, unit_fields)} \
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{datetime_col} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col} < lfi.interval_end \
         GROUP BY lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
@@ -255,7 +293,7 @@ def _write_long_time_interval_table(
         datetime_col_start = _get_datetime_key("start", data_table, time_precision)
         datetime_col_end = _get_datetime_key("end", data_table, time_precision)
         select_query = f"""
-        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col_start)} \
+        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col_start, unit_fields)} \
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id \
                 AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id \

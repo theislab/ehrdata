@@ -31,7 +31,15 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_variable_data_tables,
     _warn_time_precision_interval_mismatch,
 )
-from ehrdata.io.omop._queries import _get_ordered_table, _get_table_join, _write_long_time_interval_table
+from ehrdata.io.omop._queries import (
+    DATA_TABLE_CONCEPT_ID_TRUNK,
+    SINGLE_ROW_AGGREGATION_STRATEGIES,
+    UNITLESS_AGGREGATION_STRATEGIES,
+    _get_ordered_table,
+    _get_table_join,
+    _get_unit_fields,
+    _write_long_time_interval_table,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -142,6 +150,52 @@ def _check_one_unit_per_feature(backend_handle, data_table, unit_key="unit_conce
 
     # print(f"no units for features: {np.argwhere(num_units == 0)}")
     logging.warning(f"multiple units for features: {np.argwhere(num_units > 1)}")
+
+
+def _check_one_unit_per_feature_for_aggregation(
+    backend_handle, data_table, value_field, aggregation_strategy, unit_fields
+) -> None:
+    """Verify that the data table allows the chosen aggregation strategy to combine values.
+
+    A strategy that is not one of SINGLE_ROW_AGGREGATION_STRATEGIES combines the values of several rows into one, which is only meaningful if these values share a unit.
+    Only the rows carrying a value are considered, as only those enter the aggregation; among these, a missing unit (NULL) is a unit of its own, as in the unit report.
+    Unitless aggregations are exempt: 'is_present' has no unit to begin with, and UNITLESS_AGGREGATION_STRATEGIES yield a number of data points.
+    Data tables that do not have a 'unit_concept_id' are exempt, too: they tell no unit that could disagree.
+    """
+    if (
+        aggregation_strategy in SINGLE_ROW_AGGREGATION_STRATEGIES
+        or aggregation_strategy in UNITLESS_AGGREGATION_STRATEGIES
+        or value_field == "is_present"
+        or "unit_concept_id" not in unit_fields
+    ):
+        return
+
+    concept_id_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id"
+    feature_unit_pairs = backend_handle.execute(
+        f"""
+        SELECT DISTINCT {concept_id_key}, unit_concept_id FROM {data_table}
+        WHERE {value_field} IS NOT NULL
+        """
+    ).fetchall()
+
+    feature_units: dict = {}
+    for feature, unit in feature_unit_pairs:
+        feature_units.setdefault(feature, []).append(unit)
+    multiple_units = {feature: sorted(units, key=str) for feature, units in feature_units.items() if len(units) > 1}
+
+    if multiple_units:
+        shown = list(multiple_units.items())[:5]
+        listing = ", ".join(f"{feature}: {units}" for feature, units in shown)
+        if len(multiple_units) > len(shown):
+            listing += f", ... ({len(multiple_units) - len(shown)} more)"
+        msg = (
+            f"aggregation_strategy='{aggregation_strategy}' combines the values of several rows into one "
+            f"value, which requires a single unit per feature. In '{data_table}', {len(multiple_units)} "
+            f"feature(s) have more than one unit_concept_id among the rows carrying a '{value_field}' "
+            f"({listing}). Use aggregation_strategy='last' or 'first', which keep the value of a single "
+            f"row, or harmonize the units of these features in the database."
+        )
+        raise NotImplementedError(msg)
 
 
 def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.DataFrame:
@@ -331,12 +385,11 @@ def setup_variables(
 
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
-    It will fail if there is more than one `unit_concept_id` per variable.
     Writes a unit report of the features to `edata.uns['unit_report_<data_tables>']`.
     Writes the setup arguments into `edata.uns['omop_io_variable_setup']`.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
-    This table is instantiated into `edata.r` if `instantiate_tensor` is set to `True`;
+    This table is instantiated into `.X`/`.layers` if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
 
     Args:
@@ -357,9 +410,11 @@ def setup_variables(
         num_intervals: Number of intervals.
         concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
         aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
-            For `'last'` and `'first'`, only data points that have a value in the data field of interest
-            (the first field of `data_field_to_keep`) are considered; all kept fields are read from that
-            very data point, so that e.g. the units describe the value that is kept.
+            For `'last'` and `'first'`, only data points that have a value in the data field of interest (the first field of `data_field_to_keep`) are considered.
+            All kept fields are read from that very data point, so that e.g. the units describe the value that is kept.
+            Every other strategy combines the values of several data points into one, which requires a single unit per feature.
+            A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points carrying a value (a missing unit is a unit of its own here).
+            Exempt are `'count'` and `data_field_to_keep='is_present'`, whose values are numbers of data points and hence carry no unit.
         enrich_var_with_feature_info: Whether to enrich the var table with feature
            information. If a concept_id is not found in the concept table, their respective alternate `concept_id` included in the concept_relationship table is retrieved to add the available feature information.
            Otherwise the feature information will be NaN.
@@ -370,10 +425,10 @@ def setup_variables(
             observed data points with missing unit information (NULL in either
             'unit_concept_id' or 'unit_source_value'), the value NULL/NaN is considered
             a single unit.
-        instantiate_tensor: Whether to instantiate the tensor into the .r field of the EHRData object.
+        instantiate_tensor: Whether to instantiate the tensor within the `EHRData` object.
 
     Returns:
-        An :class:`~ehrdata.EHRData` object with populated `.r` and `.var` field.
+        An :class:`~ehrdata.EHRData` object with populated `.X`/`.layers` and `.var` field.
 
     Examples:
         >>> import ehrdata as ed
@@ -424,8 +479,6 @@ def setup_variables(
 
     _check_valid_birthdates_for_person_table(backend_handle, time_defining_table)
 
-    data_field_to_keep = {k: [*list(v), "unit_concept_id", "unit_source_value"] for k, v in data_field_to_keep.items()}
-
     var_collector = {}
     r_collector = {}
     unit_report_collector = {}
@@ -439,12 +492,18 @@ def setup_variables(
             empty_table_counter += 1
             continue
 
+        unit_fields = _get_unit_fields(backend_handle, data_table)
+        _check_one_unit_per_feature_for_aggregation(
+            backend_handle, data_table, data_field_to_keep[data_table][0], aggregation_strategy, unit_fields
+        )
+
         _write_long_time_interval_table(
             backend_handle=backend_handle,
             time_defining_table=time_defining_table,
             data_table=data_table,
             time_precision=time_precision,
             data_field_to_keep=data_field_to_keep[data_table],
+            unit_fields=unit_fields,
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
@@ -600,10 +659,12 @@ def setup_interval_variables(
     The variables are sorted by the `concept_id` for each `data_table` in ascending order, and stacked together in the order that the `data_tables` are specified.
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
-    In contrast to `setup_variables`, tables without unit unformation can be present here. Hence, this function will not verify that a single unit per feature (=`concept_id`) is used. Also, it will not write a unit report. Should this be relevant for your work, please do open an issue on https://github.com/theislab/ehrdata.
+    In contrast to `setup_variables`, tables without unit information can be present here.
+    Those tell no unit to verify or to carry along; the tables that do have a `unit_concept_id` are treated as in `setup_variables`.
+    This function will not write a unit report. Should this be relevant for your work, please do open an issue on https://github.com/theislab/ehrdata.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
-    This table is instantiated into `edata.r` if `instantiate_tensor` is set to `True`;
+    This table is instantiated in the `EHRData` object if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
 
     Args:
@@ -624,17 +685,19 @@ def setup_interval_variables(
        num_intervals: Number of intervals.
        concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
        aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
-           For `'last'` and `'first'`, only data points that have a value in the data field of interest
-           (the first field of `data_field_to_keep`) are considered; all kept fields are read from that
-           very data point, so that e.g. the units describe the value that is kept.
+           For `'last'` and `'first'`, only data points that have a value in the data field of interest (the first field of `data_field_to_keep`) are considered.
+           All kept fields are read from that very data point, so that e.g. the units describe the value that is kept.
+           Every other strategy combines the values of several data points into one, which requires a single unit per feature.
+           A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points carrying a value (a missing unit is a unit of its own here).
+           Exempt are `'count'`, `data_field_to_keep='is_present'`, and the data tables that have no `unit_concept_id` at all.
        enrich_var_with_feature_info: Whether to enrich the var table with feature
            information. If a concept_id is not found in the concept table, their respective alternate `concept_id` included in the concept_relationship table is retrieved to add the available feature information.
            Otherwise the feature information will be NaN.
        keep_date: Whether to keep the start or end date, or the interval span.
-       instantiate_tensor: Whether to instantiate the tensor into the .r field of the EHRData object.
+       instantiate_tensor: Whether to instantiate the tensor into the `EHRData` object.
 
     Returns:
-        An EHRData object with fields.
+        An `EHRData` object with fields.
 
     Examples:
         >>> import ehrdata as ed
@@ -696,12 +759,18 @@ def setup_interval_variables(
             empty_table_counter += 1
             continue
 
+        unit_fields = _get_unit_fields(backend_handle, data_table)
+        _check_one_unit_per_feature_for_aggregation(
+            backend_handle, data_table, data_field_to_keep[data_table][0], aggregation_strategy, unit_fields
+        )
+
         _write_long_time_interval_table(
             backend_handle=backend_handle,
             time_defining_table=time_defining_table,
             data_table=data_table,
             time_precision=time_precision,
             data_field_to_keep=data_field_to_keep[data_table],
+            unit_fields=unit_fields,
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
