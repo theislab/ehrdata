@@ -2145,3 +2145,32 @@ def test_setup_variables_parquet(omop_connection_vanilla_parquet):
         [[np.nan, np.nan, np.nan, np.nan], [23.0, np.nan, np.nan, np.nan]],
     ]
     assert np.allclose(edata.layers[DEFAULT_TEM_LAYER_NAME], np.array(expected_data), equal_nan=True)
+
+
+@pytest.mark.parametrize("observation_table", VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY)
+def test_write_read_h5ed_of_omop_setup(omop_connection_vanilla, observation_table, tmp_path):
+    # the datetime columns and the columns the OMOP tables leave empty must not block writing
+    # what setup_obs and setup_variables built (https://github.com/theislab/ehrdata/issues/303)
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table)
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        layer=DEFAULT_TEM_LAYER_NAME,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=4,
+        enrich_var_with_feature_info=True,
+        enrich_var_with_unit_info=True,
+    )
+    path = tmp_path / f"{observation_table}.h5ed"
+
+    ed.io.write_h5ed(edata, path)
+    edata_read = ed.io.read_h5ed(path)
+
+    assert edata_read.shape == edata.shape
+    assert list(edata_read.obs.columns) == list(edata.obs.columns)
+    assert list(edata_read.var.columns) == list(edata.var.columns)
+    assert np.allclose(edata_read.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME], equal_nan=True)

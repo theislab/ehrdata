@@ -20,6 +20,7 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION,
     EHRDATA_ONDISK_VERSION_KEY,
 )
+from ehrdata.io._array_casting import _cast_dataframe_columns_to_writable_dtype
 from ehrdata.io._coo_codec import is_coo_group, read_coo
 
 if TYPE_CHECKING:
@@ -70,6 +71,7 @@ def encode_for_disk(edata: EHRData) -> tuple[ad.AnnData, dict[str, sparse.COO]]:
 
     Dense 3D arrays are placed into the AnnData's ``.obsm`` under the reserved keys.
     Sparse 3D arrays, not writeable with AnnData, are pulled out into the returned ``sparse_3d_data`` mapping (keyed by the same reserved ``.obsm`` keys)
+    Columns of ``.obs`` and ``.var`` of a dtype anndata cannot write are cast, see ``_cast_dataframe_columns_to_writable_dtype``.
     """
     _reject_stray_coo(edata)
 
@@ -99,8 +101,8 @@ def encode_for_disk(edata: EHRData) -> tuple[ad.AnnData, dict[str, sparse.COO]]:
 
     adata = ad.AnnData(
         X=X,
-        obs=edata.obs.copy(),
-        var=edata.var.copy(),
+        obs=_cast_dataframe_columns_to_writable_dtype(edata.obs, "obs"),
+        var=_cast_dataframe_columns_to_writable_dtype(edata.var, "var"),
         uns=dict(edata.uns),
         obsm=obsm,
         varm=dict(edata.varm),
