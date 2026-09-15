@@ -56,6 +56,40 @@ def _assert_dtype_object_array_with_missing_values_equal(a: np.ndarray, b: np.nd
     assert np.array_equal(a, b)
 
 
+def _edata_with_columns_anndata_cannot_write() -> EHRData:
+    """An EHRData whose `.obs`, `.var` and `.tem` hold the column dtypes anndata cannot write.
+
+    Datetime columns, and `object` columns holding something else than strings: an all-null column as a
+    database read leaves it behind, and integers next to a missing value.
+    """
+    obs = pd.DataFrame(
+        {
+            "birth_datetime": pd.to_datetime(["2000-01-01 01:02:03", None, "2001-02-03 04:05:06"]),
+            "location_id": np.array([None, None, None], dtype=object),
+            "care_site_id": np.array([1, None, 3], dtype=object),
+        },
+        index=["0", "1", "2"],
+    )
+    var = pd.DataFrame({"valid_start_date": pd.to_datetime(["1970-01-01", "1970-01-02"])}, index=["0", "1"])
+    tem = pd.DataFrame({"timestamp": pd.to_datetime(["2000-01-01", "2000-01-02"])})
+
+    return EHRData(X=np.zeros((3, 2, 2)), obs=obs, var=var, tem=tem)
+
+
+def _assert_columns_anndata_cannot_write_read_back(edata: EHRData, edata_read: EHRData):
+    assert edata_read.obs["birth_datetime"].tolist()[::2] == ["2000-01-01T01:02:03", "2001-02-03T04:05:06"]
+    assert edata_read.obs["birth_datetime"].isna().tolist() == [False, True, False]
+    assert edata_read.obs["location_id"].isna().all()
+    assert edata_read.obs["care_site_id"].tolist()[::2] == [1.0, 3.0]
+    assert edata_read.obs["care_site_id"].isna().tolist() == [False, True, False]
+    assert edata_read.var["valid_start_date"].tolist() == ["1970-01-01T00:00:00", "1970-01-02T00:00:00"]
+    assert edata_read.tem["timestamp"].tolist() == ["2000-01-01T00:00:00", "2000-01-02T00:00:00"]
+
+    # the object that was written is left as it was
+    assert pd.api.types.is_datetime64_any_dtype(edata.obs["birth_datetime"])
+    assert edata.obs["location_id"].dtype == object
+
+
 @pytest.fixture
 def csv_basic():
     return pd.read_csv("tests/data/toy_csv/csv_basic.csv")
