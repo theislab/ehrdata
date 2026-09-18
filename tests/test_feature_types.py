@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 import pytest
+import sparse
+from scipy.sparse import csr_matrix
 
 from ehrdata import EHRData, feature_type_overview, harmonize_missing_values, infer_feature_types, replace_feature_types
 from ehrdata._logger import logger
@@ -55,6 +57,84 @@ def test_harmonize_missing_values_3D(sample_dataset, request):
     harmonize_missing_values(edata, layer=DEFAULT_TEM_LAYER_NAME)
     for missing_value_string in MISSING_VALUES:
         assert missing_value_string not in edata.layers[DEFAULT_TEM_LAYER_NAME].flatten()
+
+
+def test_harmonize_missing_values_sparse_coo():
+    dense = np.array([[1.0, 0.0, 2.0], [0.0, 0.0, 3.0]])
+    X = sparse.COO.from_numpy(dense)
+    edata = EHRData(X=X)
+
+    harmonize_missing_values(edata)
+
+    assert isinstance(edata.X, sparse.COO)
+    assert edata.X.nnz == X.nnz  # stays sparse
+    assert np.isnan(edata.X.fill_value)
+    np.testing.assert_array_equal(edata.X.todense(), [[1.0, np.nan, 2.0], [np.nan, np.nan, 3.0]])
+
+
+def test_harmonize_missing_values_sparse_coo_3d():
+    dense = np.array([[[1.0, 0.0], [0.0, 2.0], [3.0, 0.0]], [[0.0, 0.0], [4.0, 0.0], [0.0, 5.0]]])
+    X = sparse.COO.from_numpy(dense)
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X})
+
+    harmonize_missing_values(edata, layer=DEFAULT_TEM_LAYER_NAME)
+
+    result = edata.layers[DEFAULT_TEM_LAYER_NAME]
+    assert isinstance(result, sparse.COO)
+    assert result.nnz == X.nnz
+    assert np.isnan(result.fill_value)
+
+
+def test_harmonize_missing_values_sparse_coo_vars_excluded():
+    dense = np.array([[1.0, 0.0, 2.0], [0.0, 0.0, 3.0], [4.0, 0.0, 0.0]])
+    X = sparse.COO.from_numpy(dense)
+    edata = EHRData(X=X, var=pd.DataFrame(index=["v0", "v1", "v2"]))
+
+    harmonize_missing_values(edata, vars=["v1"])
+
+    result = edata.X
+    assert isinstance(result, sparse.COO)
+    assert np.isnan(result.fill_value)
+    np.testing.assert_array_equal(
+        result.todense(),
+        [[1.0, 0.0, 2.0], [np.nan, 0.0, 3.0], [4.0, 0.0, np.nan]],
+    )
+
+
+def test_harmonize_missing_values_sparse_coo_3d_vars_excluded():
+    dense = np.array([[[1.0, 0.0], [0.0, 2.0], [3.0, 0.0]], [[0.0, 0.0], [4.0, 0.0], [0.0, 5.0]]])
+    X = sparse.COO.from_numpy(dense)
+    edata = EHRData(layers={DEFAULT_TEM_LAYER_NAME: X}, var=pd.DataFrame(index=["v0", "v1", "v2"]))
+
+    harmonize_missing_values(edata, layer=DEFAULT_TEM_LAYER_NAME, vars=["v1"])
+
+    result = edata.layers[DEFAULT_TEM_LAYER_NAME]
+    assert isinstance(result, sparse.COO)
+    assert np.isnan(result.fill_value)
+    np.testing.assert_array_equal(
+        result.todense(),
+        [[[1.0, np.nan], [0.0, 2.0], [3.0, np.nan]], [[np.nan, np.nan], [4.0, 0.0], [np.nan, 5.0]]],
+    )
+
+
+def test_harmonize_missing_values_sparse_coo_unknown_var_raises():
+    dense = np.array([[1.0, 0.0], [0.0, 2.0]])
+    X = sparse.COO.from_numpy(dense)
+    edata = EHRData(X=X, var=pd.DataFrame(index=["v0", "v1"]))
+
+    with pytest.raises(KeyError):
+        harmonize_missing_values(edata, vars=["bogus"])
+
+
+def test_harmonize_missing_values_scipy_sparse_unaffected():
+    dense = np.array([[1.0, 0.0, 2.0], [0.0, 0.0, 3.0]])
+    X = csr_matrix(dense)
+    edata = EHRData(X=X)
+
+    harmonize_missing_values(edata)
+
+    assert isinstance(edata.X, csr_matrix)
+    np.testing.assert_array_equal(edata.X.toarray(), dense)
 
 
 @pytest.mark.parametrize(
@@ -123,6 +203,47 @@ def test_feature_type_inference_float_encoded_binary(binary_as, expected):
     infer_feature_types(edata, binary_as=binary_as, output=None)
 
     assert edata.var["feature_type"]["binary_feature"] == expected
+
+
+def test_feature_type_inference_sparse_coo():
+    dense = np.array([[1.0, 2.0, 0.0], [4.0, 0.0, 6.0], [0.0, 5.0, 7.0], [8.0, 0.0, 0.0]])
+    X = sparse.COO.from_numpy(dense)
+    edata = EHRData(X=X, var=pd.DataFrame(index=["v0", "v1", "v2"]))
+
+    infer_feature_types(edata, output=None)
+
+    assert list(edata.var["feature_type"]) == ["numeric", "numeric", "numeric"]
+    assert isinstance(edata.X, sparse.COO)
+    assert edata.X.nnz == X.nnz  # inference must not densify or otherwise mutate the stored array
+
+
+def test_feature_type_inference_sparse_coo_binary():
+    dense = np.array([[0.0, 5.0], [1.0, 0.0], [0.0, 3.0], [1.0, 0.0]])
+    X = sparse.COO.from_numpy(dense)
+    edata = EHRData(X=X, var=pd.DataFrame(index=["bin", "num"]))
+
+    infer_feature_types(edata, output=None)
+
+    assert list(edata.var["feature_type"]) == ["categorical", "numeric"]
+
+
+def test_feature_type_inference_sparse_coo_binary_as_numeric():
+    dense = np.array([[0.0, 5.0], [1.0, 0.0], [0.0, 3.0], [1.0, 0.0]])
+    X = sparse.COO.from_numpy(dense)
+    edata = EHRData(X=X, var=pd.DataFrame(index=["bin", "num"]))
+
+    infer_feature_types(edata, binary_as="numeric", output=None)
+
+    assert list(edata.var["feature_type"]) == ["numeric", "numeric"]
+
+
+def test_feature_type_inference_sparse_coo_all_nan_raises():
+    dense = np.array([[1.0, np.nan], [2.0, np.nan], [3.0, np.nan]])
+    X = sparse.COO.from_numpy(dense)
+    edata = EHRData(X=X, var=pd.DataFrame(index=["v0", "v1"]))
+
+    with pytest.raises(ValueError, match="only NaN"):
+        infer_feature_types(edata, output=None)
 
 
 @pytest.mark.parametrize(

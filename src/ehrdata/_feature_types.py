@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import warnings
-from functools import wraps
+from functools import singledispatch, wraps
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
+import sparse
 from dateutil.parser import isoparse  # type: ignore
 from fast_array_utils.conv import to_dense
 from rich import print
@@ -70,6 +71,52 @@ def _detect_feature_type(
     return NUMERIC_TAG, False  # type: ignore
 
 
+def _detect_feature_types_sparse_coo(
+    X: sparse.COO,
+    *,
+    binary_as: Literal["categorical", "numeric"] = "categorical",
+) -> list[tuple[Literal["categorical", "numeric"], bool]]:
+    """Detect the feature type of every variable (axis 1) of a numeric `sparse.COO` array, without densifying.
+
+    A `sparse.COO` array is always numeric, so classification only needs to decide, per variable, whether its values
+    are exactly `{0, 1}` (binary, treated like `_detect_feature_type` treats a binary column) or not
+    """
+    n_vars = X.shape[1]
+    entries_per_var = X.size // n_vars
+
+    order = np.argsort(X.coords[1], kind="stable")
+    sorted_vars = X.coords[1][order]
+    sorted_data = X.data[order]
+    starts = np.searchsorted(sorted_vars, np.arange(n_vars))
+    ends = np.searchsorted(sorted_vars, np.arange(n_vars), side="right")
+
+    fill_is_nan = np.issubdtype(X.dtype, np.floating) and np.isnan(X.fill_value)
+
+    results = []
+    for j in range(n_vars):
+        stored = sorted_data[starts[j] : ends[j]]
+        if np.issubdtype(X.dtype, np.floating):
+            stored = stored[~np.isnan(stored)]
+        values = set(np.unique(stored).tolist())
+
+        has_implicit_entries = (ends[j] - starts[j]) < entries_per_var
+        if has_implicit_entries and not fill_is_nan:
+            values.add(X.fill_value)
+
+        if not values:
+            err_msg = (
+                f"Feature at position {j} contains only NaN values. Please drop this feature to infer the feature type."
+            )
+            raise ValueError(err_msg)
+
+        if values == {0, 1}:
+            results.append((NUMERIC_TAG, False) if binary_as == "numeric" else (CATEGORICAL_TAG, True))
+        else:
+            results.append((NUMERIC_TAG, False))
+
+    return results
+
+
 def infer_feature_types(
     edata: EHRData,
     *,
@@ -120,16 +167,20 @@ def infer_feature_types(
             stacklevel=2,
         )
 
-    if issparse(X):
-        X = to_dense(X)
+    if isinstance(X, sparse.COO):
+        sparse_results = _detect_feature_types_sparse_coo(X, binary_as=binary_as)
+    else:
+        sparse_results = None
+        if issparse(X):
+            X = to_dense(X)
 
-    if X.ndim == 3:
-        n_obs, n_vars, n_t = X.shape
-        X = X.transpose(0, 2, 1).reshape(n_obs * n_t, n_vars)
+        if X.ndim == 3:
+            n_obs, n_vars, n_t = X.shape
+            X = X.transpose(0, 2, 1).reshape(n_obs * n_t, n_vars)
 
-    df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
+        df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
 
-    for feature in edata.var_names:
+    for i, feature in enumerate(edata.var_names):
         if (
             FEATURE_TYPE_KEY in edata.var
             and edata.var[FEATURE_TYPE_KEY][feature] is not None
@@ -137,7 +188,10 @@ def infer_feature_types(
         ):
             feature_types[feature] = edata.var[FEATURE_TYPE_KEY][feature]
         else:
-            feature_types[feature], raise_warning = _detect_feature_type(df[feature], binary_as=binary_as)
+            if sparse_results is not None:
+                feature_types[feature], raise_warning = sparse_results[i]
+            else:
+                feature_types[feature], raise_warning = _detect_feature_type(df[feature], binary_as=binary_as)
             if raise_warning:
                 uncertain_features.append(feature)
 
@@ -291,21 +345,97 @@ def replace_feature_types(
     edata.var.loc[features, FEATURE_TYPE_KEY] = corrected_type
 
 
+@singledispatch
+def _harmonize_missing_values_numeric(X, *, var_names: pd.Index, vars: Iterable[str] | None) -> tuple[object, bool]:
+    """Treat the implicit zero fill value of a numeric array as missing, if that array type is ambiguous about it.
+
+    Returns `(array, changed)`. The default (dense arrays, `scipy.sparse`, ...) is a no-op: `0` is
+    unambiguous for those, or (for `scipy.sparse`) there is no lossless way to swap the fill value.
+    """
+    return X, False
+
+
+@_harmonize_missing_values_numeric.register(sparse.COO)
+def _(X: sparse.COO, *, var_names: pd.Index, vars: Iterable[str] | None) -> tuple[sparse.COO, bool]:
+    """Swap a numeric :class:`sparse.COO` array's zero fill value to `np.nan`, keeping `vars` columns real.
+
+    Variables are always axis 1 of `X` (both for 2D and 3D EHRData arrays). Columns in `vars` are
+    excluded from the zero-as-missing treatment: their previously-implicit zeros are materialized as
+    explicit stored `0` entries so they are not swept up by the new `np.nan` fill value; all other
+    columns stay sparse. A boolean array, or one whose fill value is already something other than
+    `0` (a deliberate existing encoding), is left untouched.
+    """
+    if np.issubdtype(X.dtype, np.bool_) or X.fill_value != 0:
+        return X, False
+
+    excluded = (
+        np.asarray([var_names.get_loc(v) for v in vars], dtype=np.intp)
+        if vars is not None
+        else np.array([], dtype=np.intp)
+    )
+
+    var_coord = X.coords[1]
+    is_excluded = np.isin(var_coord, excluded) if excluded.size else np.zeros(var_coord.shape, dtype=bool)
+
+    data = X.data.astype(np.float64, copy=True)
+    data[(data == 0) & ~is_excluded] = np.nan
+    coords = X.coords
+
+    if excluded.size:
+        # Materialize every position of the excluded columns that isn't already stored explicitly,
+        # since those positions would otherwise silently read back as the new np.nan fill value.
+        excluded_shape = list(X.shape)
+        excluded_shape[1] = excluded.size
+        stored = np.zeros(excluded_shape, dtype=bool)
+
+        pos_in_excluded = np.full(X.shape[1], -1, dtype=np.intp)
+        pos_in_excluded[excluded] = np.arange(excluded.size)
+
+        if is_excluded.any():
+            index = (
+                coords[0][is_excluded],
+                pos_in_excluded[var_coord[is_excluded]],
+                *(coords[ax][is_excluded] for ax in range(2, X.ndim)),
+            )
+            stored[index] = True
+
+        missing = np.argwhere(~stored)
+        if missing.size:
+            missing = missing.T.copy()
+            missing[1] = excluded[missing[1]]
+            coords = np.concatenate([coords, missing], axis=1)
+            data = np.concatenate([data, np.zeros(missing.shape[1], dtype=np.float64)])
+
+    return sparse.COO(coords, data, shape=X.shape, fill_value=np.nan), True
+
+
 def harmonize_missing_values(
     edata: EHRData,
     *,
     layer: str | None = None,
     missing_values: Iterable[str] | None = ["nan", "np.nan", "<NA>", "pd.NA"],
+    vars: Iterable[str] | None = None,
     copy: bool = False,
 ) -> EHRData | None:
     """Harmonize missing values in the :class:`~ehrdata.EHRData` object.
 
     This function will replace strings that are considered to represent missing values with `np.nan`.
 
+    For a numeric :class:`sparse.COO` layer, the implicit fill value `0` is ambiguous between "not
+    measured" and "measured as zero". This function treats it as missing for every variable except
+    those listed in `vars`.
+    Columns not in `vars` stay sparse; columns in `vars` keep `0` as a real value,
+    which requires materializing their previously-implicit zeros as explicit stored entries so they
+    don't pick up the new `np.nan` fill value. Boolean layers (sparse or dense) are also
+    left untouched, as `0`/`False` is not ambiguous for them.
+
     Args:
         edata: Data object.
         layer: The layer to use from the :class:`~ehrdata.EHRData` object. If `None`, the `X` layer is used.
         missing_values: The strings that are considered to represent missing values and should be replaced with np.nan
+        vars: For a sparse :class:`sparse.COO` layer only: variable names whose `0` values represent a
+            real, measured zero rather than a missing value, and so are excluded from the
+            zero-as-missing treatment described above.
         copy: Whether to return a copy of the :class:`~ehrdata.EHRData` object with the missing values replaced.
 
     Examples:
@@ -320,7 +450,21 @@ def harmonize_missing_values(
     # note that every scipy sparse array is of a numeric dtype and will enter this if block
     # further sparse.COO, while being allowed in theory to be str dtype, is only allowed numeric dtypes under binsparse specification which we follow closely
     if np.issubdtype(X.dtype, np.number) or np.issubdtype(X.dtype, np.bool_):
-        logger.debug(f"ed.harmonize_missing_values does not affect numeric layer {'X' if layer is None else layer}.")
+        harmonized, changed = _harmonize_missing_values_numeric(X, var_names=edata.var_names, vars=vars)
+
+        if changed:
+            logger.debug(
+                f"ed.harmonize_missing_values treats the implicit zero fill value as missing in sparse.COO layer {'X' if layer is None else layer}."
+            )
+            if layer is None:
+                edata.X = harmonized
+            else:
+                edata.layers[layer] = harmonized
+        else:
+            logger.debug(
+                f"ed.harmonize_missing_values does not affect numeric layer {'X' if layer is None else layer}."
+            )
+
         return edata if copy else None
 
     df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
