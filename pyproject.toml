@@ -23,9 +23,10 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  "anndata>=0.12.6",
+  "anndata>=0.13.1",
   "duckdb",
   "fast-array-utils[sparse]",
+  "h5py",
   "pooch",
   "rich",
   "sparse",
@@ -36,8 +37,8 @@ optional-dependencies.dask = [
   "dask",
 ]
 optional-dependencies.dev = [
-  "pre-commit",
-  "twine",
+  "prek",
+  "twine>=4.0.2",
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
@@ -48,11 +49,11 @@ optional-dependencies.doc = [
   "numpy<2.5",                       # numba (via sparse) caps numpy<2.5; lamindb otherwise pulls 2.5.1, forcing uv to backtrack numba into an unbuildable llvmlite and break the RTD build. Relax when numba supports newer numpy.
   "pandas",
   "scanpydoc",
-  "sphinx>=4,<9",
+  "sphinx>=8.1,<9",
   "sphinx-autodoc-typehints",
   "sphinx-book-theme>=1",
   "sphinx-copybutton",
-  "sphinx-tabs",
+  "sphinx-design",
   "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
   "vitessce",
@@ -99,7 +100,7 @@ urls.Source = "https://github.com/theislab/ehrdata"
 envs.default.installer = "uv"
 envs.default.features = [ "dev" ]
 envs.docs.features = [ "doc" ]
-envs.docs.scripts.build = "sphinx-build -M html docs docs/_build {args}"
+envs.docs.scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.hatch-test.features = [ "test" ]
@@ -107,16 +108,16 @@ envs.hatch-test.env-vars.HDF5_USE_FILE_LOCKING = "FALSE"  # avoids concurrent re
 envs.hatch-test.matrix = [
   # Full integration-aware suite on both supported Pythons.
   { python = [ "3.12", "3.14" ] },
-  # Integration-free "core" lanes against, in turn: latest anndata, the last anndata <0.13, and the latest anndata pre-release (the "pre" name flags it in CI).
-  # See the dependency pins below.
-  { python = [ "3.14" ], variant = [ "core" ] },
+  # Integration-free "core" lanes against, in turn: the oldest supported anndata, the latest anndata,
+  # and the latest anndata pre-release (the "pre" name flags it in CI). See the dependency pins below.
   { python = [ "3.12" ], variant = [ "core-anndata-min" ] },
+  { python = [ "3.14" ], variant = [ "core" ] },
   { python = [ "3.14" ], variant = [ "core-pre" ] },
 ]
 # The explicit pre-release in `core-pre` makes uv and pip allow pre-releases for anndata only; every other dependency stays on its latest stable release.
 envs.hatch-test.overrides.matrix.variant.dependencies = [
-  { value = "anndata<0.13", if = [ "core-anndata-min" ] },
-  { value = "anndata>=0.13.0rc1", if = [ "core-pre" ] },
+  { value = "anndata==0.13.1", if = [ "core-anndata-min" ] },
+  { value = "anndata>=0.13.1rc1", if = [ "core-pre" ] },
 ]
 envs.hatch-test.overrides.matrix.variant.set-features = [
   { value = "test-core", if = [ "core", "core-anndata-min", "core-pre" ] },
@@ -195,14 +196,15 @@ ini_options.markers = [
 ini_options.xfail_strict = true
 
 [tool.coverage]
+run.source = [ "ehrdata" ]
 run.omit = [
   "**/test_*.py",
 ]
 run.patch = [ "subprocess" ]
-run.source = [ "ehrdata" ]
 
 [tool.cruft]
 skip = [
+  ".git",
   "tests",
   "src/**/__init__.py",
   "src/**/basic.py",

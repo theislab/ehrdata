@@ -6,7 +6,6 @@ from types import EllipsisType
 from typing import TYPE_CHECKING
 from warnings import warn
 
-import h5py
 import numpy as np
 import pandas as pd
 import scipy
@@ -36,9 +35,6 @@ Index = (
     | CSMatrix
     | CSArray
 )
-H5Group = h5py.Group
-H5Array = h5py.Dataset
-H5File = h5py.File
 
 
 #############################

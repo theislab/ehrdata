@@ -9,8 +9,6 @@ import scipy as sp
 import sparse
 from scipy.sparse import issparse
 from tests.conftest import (
-    _ANNDATA_ALLOWS_COO,
-    _ANNDATA_ALLOWS_ND_X,
     TEST_DATA_PATH,
     _assert_dtype_object_array_with_missing_values_equal,
     _assert_io_read,
@@ -199,7 +197,6 @@ def test_write_h5ed_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
     assert not any(k.startswith("_ed_ondisk_") for k in edata_read.obsm)
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
 @pytest.mark.parametrize("slot", ["X", "layer"])
 def test_write_read_h5ed_sparse_coo_3d(slot, tmp_path):
     dense = np.zeros((3, 2, 4))
@@ -239,7 +236,6 @@ def test_write_read_h5ed_sparse_coo_3d(slot, tmp_path):
     assert np.array_equal(restored.todense(), dense)
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
 def test_write_read_h5ed_sparse_coo_fill_value_and_dtype(tmp_path):
     # a non-zero fill_value and a non-float dtype must round-trip losslessly
     coords = np.array([[0, 2], [0, 1], [1, 3]])
@@ -256,7 +252,6 @@ def test_write_read_h5ed_sparse_coo_fill_value_and_dtype(tmp_path):
     assert np.array_equal(restored.todense(), coo.todense())
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
 def test_write_read_h5ed_sparse_coo_boolean(tmp_path):
     # a boolean sparse.COO (e.g. `coo != 0`) must round-trip through the default read path
     # (harmonize + cast). binsparse labels booleans "bint8" and stores them as uint8 on disk.
@@ -280,7 +275,6 @@ def test_write_read_h5ed_sparse_coo_boolean(tmp_path):
     assert np.array_equal(restored.todense(), coo.todense())
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
 @pytest.mark.parametrize("slot", ["X", "layer"])
 @pytest.mark.parametrize(
     "data",
@@ -317,7 +311,6 @@ def test_read_h5ed_legacy_v1_with_3d_in_layers(edata_333, tmp_path):
     assert np.array_equal(edata_333.layers["tem_data"], edata_read.layers["tem_data"])
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
 def test_write_read_h5ed_3d_X_relocated_to_obsm(tmp_path):
     # a 3D X is relocated to the reserved `_ed_ondisk_X` obsm key (and dropped from X) on write, and restored to a 3D X on read.
 
@@ -332,7 +325,7 @@ def test_write_read_h5ed_3d_X_relocated_to_obsm(tmp_path):
         assert "_ed_ondisk_X" in f["obsm"]
         # the 3D array must not remain in the 2D-only X slot
         assert "X" not in dict(f)
-        # the unified-X None key must not leak in as a relocated "layer" (anndata 0.13)
+        # the unified-X None key must not leak in as a relocated "layer"
         assert not any(k.startswith("_ed_ondisk_layers_") for k in f["obsm"])
 
     edata_read = read_h5ed(path)
@@ -343,9 +336,8 @@ def test_write_read_h5ed_3d_X_relocated_to_obsm(tmp_path):
     assert [k for k in edata_read.layers if k is not None] == []
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
 def test_read_h5ed_accepts_3d_X_directly_on_disk(tmp_path):
-    # ehrdata reads a file that stores a 3D array directly in X (as anndata >=0.13 still can, with a warning) just as naturally as one using the relocated `_ed_ondisk_*` layout.
+    # ehrdata reads a file that stores a 3D array directly in X (which anndata still allows, with a warning) just as naturally as one using the relocated `_ed_ondisk_*` layout.
     X3 = np.arange(2 * 3 * 4).reshape(2, 3, 4).astype(float)
 
     path = tmp_path / "raw_3d_X.h5ad"

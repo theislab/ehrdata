@@ -8,8 +8,6 @@ import sparse
 import zarr
 from scipy.sparse import issparse
 from tests.conftest import (
-    _ANNDATA_ALLOWS_COO,
-    _ANNDATA_ALLOWS_ND_X,
     TEST_DATA_PATH,
     _assert_dtype_object_array_with_missing_values_equal,
     _assert_io_read,
@@ -195,7 +193,6 @@ def test_write_read_zarr_X_none_with_3d_layer(edata_330, tmp_path):
     assert not any(k.startswith("_ed_ondisk_") for k in edata_read.obsm)
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 does not allow a >2D X in memory")
 def test_write_read_zarr_3d_X_relocated_to_obsm(tmp_path):
 
     from ehrdata import EHRData
@@ -215,7 +212,6 @@ def test_write_read_zarr_3d_X_relocated_to_obsm(tmp_path):
     assert [k for k in edata_read.layers if k is not None] == []
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
 @pytest.mark.parametrize("chunks", ["auto", "ehrdata_auto"])
 @pytest.mark.parametrize("slot", ["X", "layer"])
 def test_write_read_zarr_sparse_coo_3d(slot, chunks, tmp_path):
@@ -258,7 +254,6 @@ def test_write_read_zarr_sparse_coo_3d(slot, chunks, tmp_path):
     assert np.array_equal(restored.todense(), dense)
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
 def test_write_read_zarr_sparse_coo_boolean(tmp_path):
     # a boolean sparse.COO (e.g. `coo != 0`) must round-trip through the default read path
     # (harmonize + cast). binsparse labels booleans "bint8" and stores them as uint8 on disk.
@@ -285,7 +280,6 @@ def test_write_read_zarr_sparse_coo_boolean(tmp_path):
     assert np.array_equal(restored.todense(), coo.todense())
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory")
 @pytest.mark.parametrize("slot", ["X", "layer"])
 @pytest.mark.parametrize(
     "data",

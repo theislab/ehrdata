@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import sparse
-from tests.conftest import _ANNDATA_ALLOWS_COO, _ANNDATA_ALLOWS_ND_X
 
 import ehrdata as ed
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
@@ -179,15 +178,11 @@ def test_physionet2019_arguments():
     "sparse_param",
     [
         False,
-        pytest.param(
-            True,
-            marks=pytest.mark.skipif(not _ANNDATA_ALLOWS_COO, reason="anndata <0.13.1 rejects sparse.COO in memory"),
-        ),
+        True,
     ],
 )
 def test_ehrdata_blobs(sparse_param):
     """Test the ehrdata_blobs function."""
-    # a named layer keeps this runnable on anndata <0.13, which rejects a >2D X at construction
     edata = ed.dt.ehrdata_blobs(
         layer=DEFAULT_TEM_LAYER_NAME,
         n_observations=100,
@@ -225,7 +220,6 @@ def test_ehrdata_blobs(sparse_param):
     assert edata.tem.shape == (10, 2)
 
 
-@pytest.mark.skipif(not _ANNDATA_ALLOWS_ND_X, reason="anndata <0.13 rejects a >2D X at construction")
 def test_ehrdata_blobs_default_x():
     """Without a layer name, the time series is stored in the default 3D X."""
     edata = ed.dt.ehrdata_blobs(n_observations=20, n_variables=5, base_timepoints=10)
