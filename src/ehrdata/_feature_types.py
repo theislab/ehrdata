@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
 import sparse
 from dateutil.parser import isoparse  # type: ignore
 from fast_array_utils.conv import to_dense
@@ -20,6 +21,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from ehrdata import EHRData
+
+# sparse array types
+_FAST_SPARSE_TYPES = (sparse.COO, sp.csr_array, sp.csr_matrix, sp.csc_array, sp.csc_matrix)
 
 
 def _detect_feature_type(
@@ -71,16 +75,63 @@ def _detect_feature_type(
     return NUMERIC_TAG, False  # type: ignore
 
 
-def _detect_feature_types_sparse_coo(
+def _classify_sparse_binary_columns(
+    var_coord: np.ndarray,
+    data: np.ndarray,
+    n_vars: int,
+    entries_per_var: int,
+    *,
+    fill_value,
+    fill_is_nan: bool,
+) -> np.ndarray:
+    """Per variable, decides if its values (explicit + implicit) are exactly `{0, 1}`."""
+    is_float = np.issubdtype(data.dtype, np.floating)
+    nan_mask = np.isnan(data) if is_float else np.zeros(data.shape, dtype=bool)
+
+    has_zero = np.zeros(n_vars, dtype=bool)
+    has_one = np.zeros(n_vars, dtype=bool)
+    has_other = np.zeros(n_vars, dtype=bool)
+    stored_count = np.zeros(n_vars, dtype=np.int64)
+    non_nan_count = np.zeros(n_vars, dtype=np.int64)
+
+    np.logical_or.at(has_zero, var_coord, (data == 0) & ~nan_mask)
+    np.logical_or.at(has_one, var_coord, (data == 1) & ~nan_mask)
+    np.logical_or.at(has_other, var_coord, ~nan_mask & (data != 0) & (data != 1))
+    np.add.at(stored_count, var_coord, 1)
+    np.add.at(non_nan_count, var_coord, ~nan_mask)
+
+    has_implicit = stored_count < entries_per_var
+    if not fill_is_nan:
+        non_nan_count += has_implicit * (entries_per_var - stored_count)
+        if fill_value == 0:
+            has_zero |= has_implicit
+        elif fill_value == 1:
+            has_one |= has_implicit
+        else:
+            has_other |= has_implicit
+
+    all_nan = np.nonzero(non_nan_count == 0)[0]
+    if all_nan.size:
+        err_msg = f"Feature at position {all_nan[0]} contains only NaN values. Please drop this feature to infer the feature type."
+        raise ValueError(err_msg)
+
+    return has_zero & has_one & ~has_other
+
+
+def _binary_mask_to_results(
+    is_binary: np.ndarray, binary_as: Literal["categorical", "numeric"]
+) -> list[tuple[Literal["categorical", "numeric"], bool]]:
+    binary_result = (NUMERIC_TAG, False) if binary_as == "numeric" else (CATEGORICAL_TAG, True)
+    numeric_result = (NUMERIC_TAG, False)
+    return [binary_result if b else numeric_result for b in is_binary]
+
+
+def _detect_feature_types_sparse_coo_non_numeric(
     X: sparse.COO,
     *,
     binary_as: Literal["categorical", "numeric"] = "categorical",
-) -> list[tuple[Literal["categorical", "numeric"], bool]]:
-    """Detect the feature type of every variable (axis 1) of a numeric `sparse.COO` array, without densifying.
-
-    A `sparse.COO` array is always numeric, so classification only needs to decide, per variable, whether its values
-    are exactly `{0, 1}` (binary, treated like `_detect_feature_type` treats a binary column) or not
-    """
+) -> list[tuple[Literal["date", "categorical", "numeric"], bool]]:
+    """Detect the feature type of every variable of a non-numeric `sparse.COO` array."""
     n_vars = X.shape[1]
     entries_per_var = X.size // n_vars
 
@@ -90,31 +141,58 @@ def _detect_feature_types_sparse_coo(
     starts = np.searchsorted(sorted_vars, np.arange(n_vars))
     ends = np.searchsorted(sorted_vars, np.arange(n_vars), side="right")
 
-    fill_is_nan = np.issubdtype(X.dtype, np.floating) and np.isnan(X.fill_value)
-
     results = []
     for j in range(n_vars):
-        stored = sorted_data[starts[j] : ends[j]]
-        if np.issubdtype(X.dtype, np.floating):
-            stored = stored[~np.isnan(stored)]
-        values = set(np.unique(stored).tolist())
-
-        has_implicit_entries = (ends[j] - starts[j]) < entries_per_var
-        if has_implicit_entries and not fill_is_nan:
-            values.add(X.fill_value)
-
-        if not values:
-            err_msg = (
-                f"Feature at position {j} contains only NaN values. Please drop this feature to infer the feature type."
-            )
-            raise ValueError(err_msg)
-
-        if values == {0, 1}:
-            results.append((NUMERIC_TAG, False) if binary_as == "numeric" else (CATEGORICAL_TAG, True))
+        if ends[j] - starts[j] < entries_per_var:
+            # rare: a genuine implicit fill value among non-numeric data, densify just this column
+            col = pd.Series(X[:, j].todense().reshape(-1))
         else:
-            results.append((NUMERIC_TAG, False))
+            col = pd.Series(sorted_data[starts[j] : ends[j]])
+        results.append(_detect_feature_type(col, binary_as=binary_as))
 
     return results
+
+
+@singledispatch
+def _detect_feature_types_sparse(X, *, binary_as: Literal["categorical", "numeric"] = "categorical"):
+    """Detect the feature type of every variable (axis 1) of a sparse array, without densifying."""
+    msg = f"_detect_feature_types_sparse does not support array type {type(X)}."
+    raise NotImplementedError(msg)
+
+
+@_detect_feature_types_sparse.register(sparse.COO)
+def _(X: sparse.COO, *, binary_as: Literal["categorical", "numeric"] = "categorical"):
+    # sparse.COO isn't restricted to numeric dtypes in memory (only ehrdata's on-disk binsparse
+    # writer enforces that); route non-numeric arrays through the dedicated per-column path.
+    if not (np.issubdtype(X.dtype, np.number) or np.issubdtype(X.dtype, np.bool_)):
+        return _detect_feature_types_sparse_coo_non_numeric(X, binary_as=binary_as)
+
+    n_vars = X.shape[1]
+    entries_per_var = X.size // n_vars  # rows * time steps (for 3D) per variable
+    fill_is_nan = np.issubdtype(X.dtype, np.floating) and np.isnan(X.fill_value)
+    is_binary = _classify_sparse_binary_columns(
+        X.coords[1], X.data, n_vars, entries_per_var, fill_value=X.fill_value, fill_is_nan=fill_is_nan
+    )
+    return _binary_mask_to_results(is_binary, binary_as)
+
+
+@_detect_feature_types_sparse.register(sp.csr_array)
+@_detect_feature_types_sparse.register(sp.csr_matrix)
+def _(X, *, binary_as: Literal["categorical", "numeric"] = "categorical"):
+    # CSR stores each entry's column index in .indices
+    n_vars = X.shape[1]
+    is_binary = _classify_sparse_binary_columns(X.indices, X.data, n_vars, X.shape[0], fill_value=0, fill_is_nan=False)
+    return _binary_mask_to_results(is_binary, binary_as)
+
+
+@_detect_feature_types_sparse.register(sp.csc_array)
+@_detect_feature_types_sparse.register(sp.csc_matrix)
+def _(X, *, binary_as: Literal["categorical", "numeric"] = "categorical"):
+    # CSC stores entries grouped by column via .indptr
+    n_vars = X.shape[1]
+    var_coord = np.repeat(np.arange(n_vars), np.diff(X.indptr))
+    is_binary = _classify_sparse_binary_columns(var_coord, X.data, n_vars, X.shape[0], fill_value=0, fill_is_nan=False)
+    return _binary_mask_to_results(is_binary, binary_as)
 
 
 def infer_feature_types(
@@ -167,12 +245,12 @@ def infer_feature_types(
             stacklevel=2,
         )
 
-    if isinstance(X, sparse.COO):
-        sparse_results = _detect_feature_types_sparse_coo(X, binary_as=binary_as)
+    # The non-densifying fast path applies to the array types registered on _detect_feature_types_sparse
+    # (sparse.COO handles numeric and non-numeric dtypes internally; scipy.sparse is always numeric).
+    if isinstance(X, _FAST_SPARSE_TYPES):
+        sparse_results = _detect_feature_types_sparse(X, binary_as=binary_as)
     else:
         sparse_results = None
-        if issparse(X):
-            X = to_dense(X)
 
         if X.ndim == 3:
             n_obs, n_vars, n_t = X.shape
@@ -357,14 +435,7 @@ def _harmonize_missing_values_numeric(X, *, var_names: pd.Index, vars: Iterable[
 
 @_harmonize_missing_values_numeric.register(sparse.COO)
 def _(X: sparse.COO, *, var_names: pd.Index, vars: Iterable[str] | None) -> tuple[sparse.COO, bool]:
-    """Swap a numeric :class:`sparse.COO` array's zero fill value to `np.nan`, keeping `vars` columns real.
-
-    Variables are always axis 1 of `X` (both for 2D and 3D EHRData arrays). Columns in `vars` are
-    excluded from the zero-as-missing treatment: their previously-implicit zeros are materialized as
-    explicit stored `0` entries so they are not swept up by the new `np.nan` fill value; all other
-    columns stay sparse. A boolean array, or one whose fill value is already something other than
-    `0` (a deliberate existing encoding), is left untouched.
-    """
+    """Swap a numeric :class:`sparse.COO` array's zero fill value to `np.nan`, keeping `vars` columns real."""
     if np.issubdtype(X.dtype, np.bool_) or X.fill_value != 0:
         return X, False
 
@@ -447,8 +518,15 @@ def harmonize_missing_values(
         edata = edata.copy()
     X = edata.X if layer is None else edata.layers[layer]
 
-    # note that every scipy sparse array is of a numeric dtype and will enter this if block
-    # further sparse.COO, while being allowed in theory to be str dtype, is only allowed numeric dtypes under binsparse specification which we follow closely
+    # reject non numeric sparse.COO explicitly rather than silently densifying
+    if isinstance(X, sparse.COO) and not (np.issubdtype(X.dtype, np.number) or np.issubdtype(X.dtype, np.bool_)):
+        err_msg = (
+            f"ed.harmonize_missing_values can only be used on a numeric sparse.COO layer "
+            f"({'X' if layer is None else layer!r} has dtype {X.dtype})."
+        )
+        raise NotImplementedError(err_msg)
+
+    # every scipy sparse array is of a numeric dtype and will enter this if block
     if np.issubdtype(X.dtype, np.number) or np.issubdtype(X.dtype, np.bool_):
         harmonized, changed = _harmonize_missing_values_numeric(X, var_names=edata.var_names, vars=vars)
 
