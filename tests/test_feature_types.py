@@ -309,7 +309,7 @@ def test_feature_type_overview_vanilla(sample_dataset, request, capsys):
     edata = EHRData(X=data.values, var=pd.DataFrame(data.columns))
     feature_type_overview(edata)
     assert (
-        " Detected feature types for EHRData object with 4 obs and 11 vars\nâ• â•â• ðŸ“… Date features\nâ• â•â• ðŸ“ Numerical features\nâ•‘   â• â•â• 0\nâ•‘   â• â•â• 1\nâ•‘   â• â•â• 2\nâ•‘   â• â•â• 3\nâ•‘   â•šâ•â• 4\nâ•šâ•â• ðŸ—‚ï¸ Categorical features\n    â• â•â• 10 (2 categories)\n    â• â•â• 5 (4 categories)\n    â• â•â• 6 (3 categories)\n    â• â•â• 7 (2 categories)\n    â• â•â• 8 (2 categories)\n    â•šâ•â• 9 (2 categories)"
+        " Detected feature types for EHRData object with 4 obs and 11 vars\n╠══ 📅 Date features\n╠══ 📐 Numerical features\n║   ╠══ 0\n║   ╠══ 1\n║   ╠══ 2\n║   ╠══ 3\n║   ╚══ 4\n╚══ 🗂️ Categorical features\n    ╠══ 10 (2 categories)\n    ╠══ 5 (4 categories)\n    ╠══ 6 (3 categories)\n    ╠══ 7 (2 categories)\n    ╠══ 8 (2 categories)\n    ╚══ 9 (2 categories)"
         in capsys.readouterr().out
     )
 
