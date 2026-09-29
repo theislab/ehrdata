@@ -15,6 +15,7 @@ from rich.tree import Tree
 from scipy.sparse import issparse
 
 from ehrdata._logger import logger
+from ehrdata._types import CSArray, CSMatrix
 from ehrdata.core.constants import CATEGORICAL_TAG, DATE_TAG, FEATURE_TYPE_KEY, MISSING_VALUES, NUMERIC_TAG
 
 if TYPE_CHECKING:
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
     from ehrdata import EHRData
 
 # sparse array types
-_FAST_SPARSE_TYPES = (sparse.COO, sp.csr_array, sp.csr_matrix, sp.csc_array, sp.csc_matrix)
+_FAST_SPARSE_TYPES = (sparse.COO, CSMatrix, CSArray)
 
 
 def _detect_feature_type(
@@ -425,11 +426,7 @@ def replace_feature_types(
 
 @singledispatch
 def _harmonize_missing_values_numeric(X, *, var_names: pd.Index, vars: Iterable[str] | None) -> tuple[object, bool]:
-    """Treat the implicit zero fill value of a numeric array as missing, if that array type is ambiguous about it.
-
-    Returns `(array, changed)`. The default (dense arrays, `scipy.sparse`, ...) is a no-op: `0` is
-    unambiguous for those, or (for `scipy.sparse`) there is no lossless way to swap the fill value.
-    """
+    """Treat the implicit zero fill value of a numeric array as missing, if that array type is ambiguous about it."""
     return X, False
 
 
@@ -478,6 +475,18 @@ def _(X: sparse.COO, *, var_names: pd.Index, vars: Iterable[str] | None) -> tupl
             data = np.concatenate([data, np.zeros(missing.shape[1], dtype=np.float64)])
 
     return sparse.COO(coords, data, shape=X.shape, fill_value=np.nan), True
+
+
+@_harmonize_missing_values_numeric.register(sp.csr_array)
+@_harmonize_missing_values_numeric.register(sp.csr_matrix)
+@_harmonize_missing_values_numeric.register(sp.csc_array)
+@_harmonize_missing_values_numeric.register(sp.csc_matrix)
+def _(X, *, var_names: pd.Index, vars: Iterable[str] | None) -> tuple[object, bool]:
+    err_msg = (
+        f"ed.harmonize_missing_values cannot treat the implicit zero fill value as missing for "
+        f"array type {type(X)}. Please convert to a dense array or sparse.COO first."
+    )
+    raise NotImplementedError(err_msg)
 
 
 def harmonize_missing_values(
@@ -557,12 +566,17 @@ def harmonize_missing_values(
 
 
 def _harmonize_on_read(edata: EHRData) -> None:
-    if edata.X is not None:
-        harmonize_missing_values(edata)
-        logger.info("Harmonizing missing values of X")
+    layers = [None] if edata.X is not None else []
+    # anndata 0.13's unified `.X` slot shows up as key None in edata.layers too; skip the duplicate
+    layers += [key for key in edata.layers if key is not None]
 
-    for key in edata.layers:
-        if key is None:  # anndata 0.13: the unified `.X` slot, already harmonized above
-            continue
-        harmonize_missing_values(edata, layer=key)
-        logger.info(f"Harmonizing missing values of layer {key}")
+    for layer in layers:
+        label = "X" if layer is None else f"layer {layer}"
+        try:
+            harmonize_missing_values(edata, layer=layer)
+            logger.info(f"Harmonizing missing values of {label}")
+        except NotImplementedError:
+            # scipy.sparse (CSR/CSC) can't be harmonized without densifying
+            logger.debug(
+                f"Skipping missing-value harmonization of {label}: not supported for scipy.sparse without densifying."
+            )

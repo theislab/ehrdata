@@ -128,15 +128,13 @@ def test_harmonize_missing_values_sparse_coo_unknown_var_raises():
         harmonize_missing_values(edata, vars=["bogus"])
 
 
-def test_harmonize_missing_values_scipy_sparse_unaffected():
+def test_harmonize_missing_values_scipy_sparse_raises():
     dense = np.array([[1.0, 0.0, 2.0], [0.0, 0.0, 3.0]])
     X = csr_matrix(dense)
     edata = EHRData(X=X)
 
-    harmonize_missing_values(edata)
-
-    assert isinstance(edata.X, csr_matrix)
-    np.testing.assert_array_equal(edata.X.toarray(), dense)
+    with pytest.raises(NotImplementedError, match="cannot treat the implicit zero fill value as missing"):
+        harmonize_missing_values(edata)
 
 
 @pytest.mark.parametrize(
