@@ -4,6 +4,7 @@ import contextlib
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pandas as pd
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
@@ -63,3 +64,46 @@ def _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata: EHRData) -> E
                     edata.layers[layer] = array.astype(str)
 
     return edata
+
+
+def _cast_dataframe_columns_to_writable_dtype(df: pd.DataFrame, slot: str) -> pd.DataFrame:
+    """Return a copy of a dataframe of `.obs`, `.var` or `.tem` with the columns anndata cannot write cast.
+
+    anndata has no writer for datetime columns, and h5py rejects an `object` column holding anything
+    but strings, which is what a database read leaves behind for a column it found empty.
+    Such columns are cast following the rule that `X` and the layers follow: to a numeric dtype, and
+    to a string dtype if that fails. Datetimes are written as ISO 8601 strings, from which
+    :func:`~ehrdata.infer_feature_types` recognizes the column as a date again. Missing values stay missing.
+    """
+    df = df.copy()
+    cast_to_string = []
+
+    for column_name in df.columns:
+        column = df[column_name]
+
+        if pd.api.types.is_datetime64_any_dtype(column):
+            # element-wise, since a mapped column of ISO 8601 strings is inferred back to datetimes by pandas
+            iso_8601 = np.array([None if pd.isna(value) else value.isoformat() for value in column], dtype=object)
+            df[column_name] = pd.Categorical(iso_8601)
+            cast_to_string.append(column_name)
+
+        elif column.dtype == object:
+            observed_values = column[column.notna()]
+            if observed_values.empty:
+                df[column_name] = np.full(len(column), np.nan)
+            elif observed_values.map(lambda value: isinstance(value, str)).all():
+                # anndata writes an all-string column itself, but not the missing values among them
+                df[column_name] = pd.Categorical(column)
+            else:
+                try:
+                    df[column_name] = pd.to_numeric(column)
+                except (TypeError, ValueError):
+                    df[column_name] = pd.Categorical(column.astype(str).where(column.notna()))
+                    cast_to_string.append(column_name)
+
+    if cast_to_string:
+        logger.warning(
+            f"Columns {cast_to_string} of .{slot} have a dtype that cannot be written, and are written as strings."
+        )
+
+    return df
