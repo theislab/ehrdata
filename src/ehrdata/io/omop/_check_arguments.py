@@ -139,6 +139,9 @@ def _check_valid_concept_ids(concept_ids) -> None:
     if concept_ids != "all" and not isinstance(concept_ids, Sequence):
         msg = "concept_ids must be a sequence of integers or 'all'."
         raise TypeError(msg)
+    if len(concept_ids) == 0:
+        msg = "concept_ids must not be empty."
+        raise ValueError(msg)
 
 
 def _check_valid_aggregation_strategy(aggregation_strategy) -> None:
