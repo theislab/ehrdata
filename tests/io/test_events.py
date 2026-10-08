@@ -1,3 +1,5 @@
+import sys
+
 import duckdb
 import numpy as np
 import pandas as pd
@@ -201,6 +203,14 @@ def test_from_events_input_types(events, tmp_path):
     pa = pytest.importorskip("pyarrow")
     np.testing.assert_array_equal(from_events(pa.Table.from_pandas(events)).X, expected)
     np.testing.assert_array_equal(from_events(duckdb.connect().from_df(events)).X, expected)
+
+
+def test_from_events_relation_without_pyarrow(events, monkeypatch):
+    expected = from_events(events).X
+    relation = duckdb.connect().from_df(events)
+    monkeypatch.setitem(sys.modules, "pyarrow", None)
+
+    np.testing.assert_array_equal(from_events(relation).X, expected)
 
 
 def test_from_events_column_names(events):

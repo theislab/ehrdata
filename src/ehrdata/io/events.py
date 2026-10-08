@@ -258,7 +258,7 @@ def _register_events(
     if isinstance(events, Sequence):
         con.read_parquet([str(path) for path in events], union_by_name=True).create_view("raw_events")
     elif isinstance(events, duckdb.DuckDBPyRelation):
-        con.register("raw_events", events.to_arrow_table())
+        con.register("raw_events", events.df())
     else:
         con.register("raw_events", events)
 
