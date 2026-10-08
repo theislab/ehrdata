@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning][].
 ## [Unreleased]
 
 ### Added
- - {func}`~ehrdata.rebin` aggregates the time axis of an {class}`~ehrdata.EHRData` into coarser intervals, for instance hourly into 6-hourly ones, with the `aggregation_strategy` of the loaders. It applies to `.X` and every layer with a time axis and updates the interval offsets in `.tem`. ([#PR](https://github.com/theislab/ehrdata/pull/PR)) @Zethson
+ - {func}`~ehrdata.rebin` aggregates the time axis of an {class}`~ehrdata.EHRData` into coarser intervals, for instance hourly into 6-hourly ones, with the `aggregation_strategy` of the loaders. It applies to `.X` and every layer with a time axis and updates the interval offsets in `.tem`. ([#316](https://github.com/theislab/ehrdata/pull/316)) @Zethson
 
 ### Changed
  - ehrdata now requires `anndata>=0.13.1`, the first release providing everything {class}`~ehrdata.EHRData` builds on: a 3D `.X`, `.X` unified into `layers[None]`, and pydata-sparse `COO` arrays in memory. The last ehrdata still tolerated `anndata<0.13`, while already supporting it. ([#277](https://github.com/theislab/ehrdata/issues/277)) @eroell
