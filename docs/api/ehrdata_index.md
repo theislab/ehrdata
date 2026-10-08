@@ -31,3 +31,14 @@
     move_to_x
 
 ```
+
+## Time Axis
+
+```{eval-rst}
+.. autosummary::
+    :toctree:
+    :nosignatures:
+
+    rebin
+
+```
