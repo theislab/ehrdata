@@ -48,6 +48,13 @@ MISSING_VALUES = (
 PANDAS_FORMATS = ["flat", "wide", "long"]
 
 
+# Event tables
+# ------------
+# The column of obs holding each subject's anchor time, if from_events takes it from the subject's first event
+
+ANCHOR_TIME_KEY = "anchor_time"
+
+
 # Default data path
 # ------------------
 # The default path to store and load data

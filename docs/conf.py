@@ -94,6 +94,7 @@ intersphinx_mapping = {
     "lamin": ("https://docs.lamin.ai", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "pandas": ("https://pandas.pydata.org/docs", None),
+    "pyarrow": ("https://arrow.apache.org/docs", None),
     "python": ("https://docs.python.org/3", None),
     "scanpy": ("https://scanpy.readthedocs.io/en/stable", None),
     "scipy": ("https://docs.scipy.org/doc/scipy", None),
@@ -146,6 +147,8 @@ nitpick_ignore = [
     # https://github.com/duckdb/duckdb-web/issues/3806
     ("py:class", "duckdb.duckdb.DuckDBPyConnection"),
     ("py:class", "_duckdb.DuckDBPyConnection"),
+    ("py:class", "duckdb.duckdb.DuckDBPyRelation"),
+    ("py:class", "_duckdb.DuckDBPyRelation"),
     # Is documented as a py:attribute instead
     ("py:class", "numpy.int64"),
     ("py:class", "numpy._typing._array_like.GenericAlias"),
@@ -168,4 +171,5 @@ qualname_overrides = {
     "zarr.core.group.Group": "zarr.group.Group",
     "lnschema_core.models.Artifact": "lamindb.Artifact",
     "pandas.core.series.Series": "pandas.Series",
+    "pyarrow.lib.Table": "pyarrow.Table",
 }
