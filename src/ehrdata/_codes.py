@@ -279,6 +279,7 @@ def _reduce_coords(
     coords: np.ndarray,
     data: np.ndarray,
     shape: Sequence[int],
+    *,
     fill_value: float,
     groups: np.ndarray,
     sizes: np.ndarray,
@@ -327,7 +328,9 @@ def _(x: np.ndarray, groups: np.ndarray, sizes: np.ndarray, strategy: Literal["s
 @_reduce_groups.register(scipy.sparse.spmatrix)
 def _(x, groups: np.ndarray, sizes: np.ndarray, strategy: Literal["sum", "max"]):
     coo = x.tocoo()
-    coords, values, shape = _reduce_coords(np.stack([coo.row, coo.col]), coo.data, x.shape, 0, groups, sizes, strategy)
+    coords, values, shape = _reduce_coords(
+        np.stack([coo.row, coo.col]), coo.data, x.shape, fill_value=0, groups=groups, sizes=sizes, strategy=strategy
+    )
     return type(x)((values, tuple(coords)), shape=shape)
 
 
@@ -336,7 +339,9 @@ def _(x: sparse.COO, groups: np.ndarray, sizes: np.ndarray, strategy: Literal["s
     fill_value = x.fill_value
     if not (fill_value == 0 or np.isnan(fill_value)):
         return sparse.COO.from_numpy(_reduce_dense(x.todense(), groups, sizes, strategy), fill_value=fill_value)
-    coords, values, shape = _reduce_coords(x.coords, x.data, x.shape, fill_value, groups, sizes, strategy)
+    coords, values, shape = _reduce_coords(
+        x.coords, x.data, x.shape, fill_value=fill_value, groups=groups, sizes=sizes, strategy=strategy
+    )
     return sparse.COO(coords, values, shape=shape, fill_value=fill_value, has_duplicates=False, sorted=True)
 
 
