@@ -156,7 +156,18 @@ def _write_timedeltas_to_db(
         )
         """
     )
-    backend_handle.execute("INSERT INTO timedeltas SELECT * FROM timedeltas_dataframe")
+    # DuckDB reads a pandas Timedelta of 30 days or more as calendar months, so the offsets are passed as microseconds.
+    offsets_in_microseconds = timedeltas_dataframe.assign(  # noqa: F841
+        interval_start_offset=timedeltas_dataframe["interval_start_offset"] // pd.Timedelta(microseconds=1),
+        interval_end_offset=timedeltas_dataframe["interval_end_offset"] // pd.Timedelta(microseconds=1),
+    )
+    backend_handle.execute(
+        """
+        INSERT INTO timedeltas
+        SELECT to_microseconds(interval_start_offset), to_microseconds(interval_end_offset), interval_step
+        FROM offsets_in_microseconds
+        """
+    )
 
 
 def _drop_timedeltas(backend_handle: duckdb.DuckDBPyConnection):

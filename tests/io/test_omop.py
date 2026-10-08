@@ -2273,3 +2273,33 @@ def test_setup_connection_replaces_the_tables(omop_connection_vanilla):
     ed.io.omop.setup_connection(path="tests/data/toy_omop/vanilla", backend_handle=con)
 
     assert con.execute("SELECT COUNT(*) FROM measurement").fetchone()[0] == 9
+
+
+@pytest.mark.parametrize(
+    ("interval_length_number", "interval_length_unit"),
+    [(30, "day"), (365, "day"), (720, "h")],
+)
+def test_setup_variables_intervals_have_the_exact_length(
+    omop_connection_vanilla, interval_length_number, interval_length_unit
+):
+    """Intervals of 30 days or more are exactly as long as asked for, rather than calendar months."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=3,
+    )
+
+    # the observation_period of person 1 starts 2100-01-01
+    intervals = con.execute(
+        """SELECT interval_start, interval_end FROM long_person_timestamp_feature_value_measurement
+        WHERE obs_id = 1 AND data_table_concept_id = 3031147 ORDER BY interval_step"""
+    ).df()
+    boundaries = pd.date_range("2100-01-01", periods=4, freq=pd.Timedelta(interval_length_number, interval_length_unit))
+    assert intervals["interval_start"].tolist() == boundaries[:-1].tolist()
+    assert intervals["interval_end"].tolist() == boundaries[1:].tolist()
