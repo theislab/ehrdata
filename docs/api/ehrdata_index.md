@@ -42,3 +42,15 @@
     rebin
 
 ```
+
+## Code Vocabularies
+
+```{eval-rst}
+.. autosummary::
+    :toctree:
+    :nosignatures:
+
+    annotate_codes
+    aggregate_codes
+
+```
