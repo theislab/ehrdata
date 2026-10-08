@@ -13,6 +13,7 @@
     :nosignatures:
 
     io.read_csv
+    io.read_fhir
     io.read_h5ed
     io.read_meds
     io.read_zarr
