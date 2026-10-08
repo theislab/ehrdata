@@ -309,9 +309,8 @@ def read_fhir(
     if not event_resources:
         msg = f"No {', '.join(resource for resource in resources if resource != 'Patient')} resources found in {path}."
         raise FileNotFoundError(msg)
-    events = _event_relation(con, sources, event_resources).to_arrow_table()
-    edata = from_events(events, obs=obs, codes=codes, **binning)
-    con.register("fhir_events", events)
+    _event_relation(con, sources, event_resources).create("fhir_events")
+    edata = from_events(con.table("fhir_events").df(), obs=obs, codes=codes, **binning)
     var = (
         con.sql("SELECT code, mode(description) AS description, mode(unit) AS unit FROM fhir_events GROUP BY code")
         .df()
