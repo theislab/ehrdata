@@ -10,7 +10,6 @@ from dateutil.parser import isoparse  # type: ignore
 from fast_array_utils.conv import to_dense
 from rich import print
 from rich.tree import Tree
-from scipy.sparse import issparse
 
 from ehrdata._logger import logger
 from ehrdata.core.constants import CATEGORICAL_TAG, DATE_TAG, FEATURE_TYPE_KEY, MISSING_VALUES, NUMERIC_TAG
@@ -113,6 +112,7 @@ def infer_feature_types(
         # X not set, fall back to first available layer
         first_layer = sorted(edata.layers)[0]
         X = edata.layers[first_layer]
+        layer = first_layer
         warnings.warn(
             f"No layer specified and `edata.X` is None. Falling back to layer '{first_layer}' for feature type inference. "
             f"To be explicit, pass `layer='{first_layer}'` or the desired layer name.",
@@ -120,14 +120,7 @@ def infer_feature_types(
             stacklevel=2,
         )
 
-    if issparse(X):
-        X = to_dense(X)
-
-    if X.ndim == 3:
-        n_obs, n_vars, n_t = X.shape
-        X = X.transpose(0, 2, 1).reshape(n_obs * n_t, n_vars)
-
-    df = pd.DataFrame(X.reshape(-1, edata.shape[1]), columns=edata.var_names)
+    df = _as_frame(X, edata.var_names)
 
     for feature in edata.var_names:
         if (
@@ -157,7 +150,7 @@ def infer_feature_types(
         )
 
     if output == "tree":
-        feature_type_overview(edata)
+        feature_type_overview(edata, layer=layer)
     elif output == "dataframe":
         return edata.var[FEATURE_TYPE_KEY].to_frame()
     elif output is not None:
@@ -201,12 +194,23 @@ def _check_feature_types(func):
     return wrapper
 
 
+def _as_frame(X, columns: pd.Index) -> pd.DataFrame:
+    """Values of `X` with one row per observation, or per observation and timepoint for 3D data."""
+    X = to_dense(X, to_cpu_memory=True)
+    if X.ndim == 3:
+        X = X.transpose(0, 2, 1).reshape(X.shape[0] * X.shape[2], X.shape[1])
+    return pd.DataFrame(X, columns=columns)
+
+
 @_check_feature_types
-def feature_type_overview(edata: EHRData) -> None:
+def feature_type_overview(edata: EHRData, *, layer: str | None = None) -> None:
     """Print an overview of the feature types and encoding modes in the :class:`~ehrdata.EHRData` object.
+
+    For 3D data, categories are counted across observations and timepoints.
 
     Args:
         edata: Data object.
+        layer: The layer to count categories in. If `None`, the `X` field is used.
 
     Examples:
         >>> import ehrdata as ed
@@ -229,10 +233,8 @@ def feature_type_overview(edata: EHRData) -> None:
     branch = tree.add("🗂️[b] Categorical features")
     cat_features = edata.var_names[edata.var[FEATURE_TYPE_KEY] == CATEGORICAL_TAG]
 
-    df = pd.DataFrame(
-        to_dense(edata[:, cat_features].X) if issparse(edata[:, cat_features].X) else edata[:, cat_features].X,
-        columns=cat_features,
-    )
+    X = edata.X if layer is None else edata.layers[layer]
+    df = _as_frame(X[:, edata.var_names.get_indexer(cat_features)], cat_features)
 
     if "encoding_mode" in edata.var:
         unencoded_vars = edata.var.loc[cat_features, "unencoded_var_names"].unique().tolist()
