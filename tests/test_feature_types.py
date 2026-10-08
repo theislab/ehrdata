@@ -143,6 +143,14 @@ def test_feature_type_overview_vanilla(sample_dataset, request, capsys):
     )
 
 
+@pytest.mark.parametrize("layer", [None, DEFAULT_TEM_LAYER_NAME])
+def test_feature_type_overview_3d(layer, capsys):
+    X = np.array([[["a", "b", "c"], [1.5, 2.5, np.nan]], [["b", "b", "a"], [3.5, 0.5, 4.5]]], dtype=object)
+    edata = EHRData(X=X) if layer is None else EHRData(shape=X.shape[:2], layers={layer: X})
+    infer_feature_types(edata, layer=layer)
+    assert "0 (3 categories)" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize(
     "sample_dataset",
     [
