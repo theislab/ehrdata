@@ -15,7 +15,7 @@ from ehrdata._compat import DaskArray
 from ehrdata.core import EHRData
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Sequence
 
     from duckdb import DuckDBPyConnection
 
@@ -327,9 +327,7 @@ def _(x: np.ndarray, groups: np.ndarray, sizes: np.ndarray, strategy: Literal["s
 @_reduce_groups.register(scipy.sparse.spmatrix)
 def _(x, groups: np.ndarray, sizes: np.ndarray, strategy: Literal["sum", "max"]):
     coo = x.tocoo()
-    coords, values, shape = _reduce_coords(
-        np.stack([coo.row, coo.col]), coo.data, x.shape, 0, groups, sizes, strategy
-    )
+    coords, values, shape = _reduce_coords(np.stack([coo.row, coo.col]), coo.data, x.shape, 0, groups, sizes, strategy)
     return type(x)((values, tuple(coords)), shape=shape)
 
 

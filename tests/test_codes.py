@@ -61,7 +61,8 @@ def test_annotate_codes_copy(edata_codes):
 
 def test_annotate_codes_keeps_descriptions():
     edata = ed.EHRData(
-        np.ones((1, 2)), var=pd.DataFrame({"description": ["Heart attack", None]}, index=["ICD10CM/I21.0", "ICD10CM/I21"])
+        np.ones((1, 2)),
+        var=pd.DataFrame({"description": ["Heart attack", None]}, index=["ICD10CM/I21.0", "ICD10CM/I21"]),
     )
     ed.annotate_codes(edata)
     assert edata.var["description"].tolist() == ["Heart attack", pd.NA]
@@ -156,7 +157,14 @@ EXPECTED_MAX = np.array([[2.0, 0.0, 1.0, 120.0, 50.0], [np.nan, 3.0, 0.0, np.nan
 def test_aggregate_codes(edata_codes, aggregation_strategy, expected, array_type):
     edata_codes.X = array_type(edata_codes.X)
     aggregated = ed.aggregate_codes(edata_codes, "icd10_category", aggregation_strategy=aggregation_strategy)
-    assert aggregated.var_names.tolist() == ["ICD10CM/I21", "ICD10/E11", "ATC/C07AB02", "ATC/C07AA05", "LOINC/8480-6", "age"]
+    assert aggregated.var_names.tolist() == [
+        "ICD10CM/I21",
+        "ICD10/E11",
+        "ATC/C07AB02",
+        "ATC/C07AA05",
+        "LOINC/8480-6",
+        "age",
+    ]
     assert type(aggregated.X) is type(edata_codes.X)
     X = aggregated.X
     X = X.compute() if isinstance(X, da.Array) else X
