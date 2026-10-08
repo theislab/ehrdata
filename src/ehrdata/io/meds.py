@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 MEDS_VERSION = "0.4.1"
 SPLIT_KEY = "split"
+STATIC_CODES_KEY = "meds_static_codes"
 
 
 def read_meds(
@@ -37,7 +38,8 @@ def read_meds(
     To start the intervals at another time, such as an admission, pass the data files and an `obs` with this time to :func:`~ehrdata.io.from_events` instead.
     Static events, which have no time, become columns of `obs`.
     These hold the numeric value of the code, or whether the subject has the code if the code has no numeric values.
-    The split of each subject is stored in `obs["split"]`, and the description of each code in `var["description"]`.
+    Slashes in these codes become underscores in the column names, and `uns["meds_static_codes"]` maps the column names to the codes.
+    The split of each subject is stored in `obs["split"]`, and the description of each code, if any, in `var["description"]`.
 
     Args:
         root: The root directory of the MEDS dataset.
@@ -68,7 +70,7 @@ def read_meds(
         >>> edata
         EHRData object with n_obs × n_vars × n_t = 1 × 1 × 2
             obs: 'split', 'anchor_time'
-            var: 'n_events', 'description'
+            var: 'n_events'
             tem: '0', '1'
             shape of .X: (1, 1, 2)
     """
@@ -90,6 +92,7 @@ def read_meds(
         obs = obs.loc[obs[SPLIT_KEY].isin([split] if isinstance(split, str) else split)].copy()
 
     static = con.sql("SELECT * REPLACE (INTERVAL 0 SECOND AS time) FROM data WHERE time IS NULL").df()
+    static_codes = {}
     if len(static):
         static_edata = from_events(
             static, obs=obs, num_intervals=1, aggregation_strategy=binning.get("aggregation_strategy", "last")
@@ -98,15 +101,23 @@ def read_meds(
             set(static.loc[static["numeric_value"].notna(), "code"]) if "numeric_value" in static.columns else set()
         )
         for code, values in zip(static_edata.var_names, static_edata.X[:, :, 0].T, strict=True):
-            obs[code] = values if code in numeric_codes else ~np.isnan(values)
+            column = code.replace("/", "_")
+            if column in obs.columns:
+                msg = f"The static code {code!r} would overwrite the column {column!r} of obs."
+                raise ValueError(msg)
+            static_codes[column] = code
+            obs[column] = values if code in numeric_codes else ~np.isnan(values)
 
     edata = from_events(data, obs=obs, codes=codes, **binning)
+    if static_codes:
+        edata.uns[STATIC_CODES_KEY] = static_codes
 
     codes_path = root / "metadata" / "codes.parquet"
     if codes_path.exists():
         code_metadata = con.read_parquet(str(codes_path)).df().drop_duplicates("code").set_index("code")
-        if "description" in code_metadata.columns:
-            edata.var["description"] = code_metadata["description"].reindex(edata.var_names).to_numpy()
+        description = code_metadata.get("description", pd.Series()).reindex(edata.var_names)
+        if description.notna().any():
+            edata.var["description"] = description.to_numpy()
 
     return edata
 
@@ -124,6 +135,7 @@ def write_meds(
     The time of the event is the subject's anchor time in `obs[anchor]` plus the start of the interval.
     If `obs` has no such column, the time is the start of the interval after 1970-01-01.
     Numeric and boolean columns of `obs` become static events, which have no time, and `obs["split"]` becomes the split of each subject.
+    The codes of the static events are the column names, or the codes in `uns["meds_static_codes"]` for the columns that :func:`~ehrdata.io.read_meds` created.
 
     Args:
         edata: Central data object.
@@ -182,6 +194,7 @@ def write_meds(
     ]
     static_codes = []
     for column in edata.obs.columns.drop([anchor, SPLIT_KEY], errors="ignore"):
+        code = edata.uns.get(STATIC_CODES_KEY, {}).get(column, column)
         if pd.api.types.is_bool_dtype(edata.obs[column]):
             has_event, numeric_value = edata.obs[column].to_numpy(), np.nan
         elif pd.api.types.is_numeric_dtype(edata.obs[column]):
@@ -189,10 +202,10 @@ def write_meds(
             numeric_value = edata.obs[column].to_numpy()[has_event]
         else:
             continue
-        static_codes.append(column)
+        static_codes.append(code)
         events.append(
             pd.DataFrame(
-                {"subject_id": subject_ids[has_event], "time": pd.NaT, "code": column, "numeric_value": numeric_value}
+                {"subject_id": subject_ids[has_event], "time": pd.NaT, "code": code, "numeric_value": numeric_value}
             )
         )
 

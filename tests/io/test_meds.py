@@ -8,7 +8,7 @@ import pytest
 
 from ehrdata import EHRData
 from ehrdata.core.constants import ANCHOR_TIME_KEY
-from ehrdata.io import from_events, read_meds, write_meds
+from ehrdata.io import from_events, read_h5ed, read_meds, write_h5ed, write_meds
 
 T0 = pd.Timestamp("2020-01-01")
 HOUR = pd.Timedelta(1, "h")
@@ -75,8 +75,9 @@ def test_read_meds(meds_root):
         ],
     )
     assert list(edata.obs["split"]) == ["train", "tuning", "held_out"]
-    assert list(edata.obs["GENDER//F"]) == [True, False, False]
-    assert list(edata.obs["GENDER//M"]) == [False, True, False]
+    assert list(edata.obs["GENDER__F"]) == [True, False, False]
+    assert list(edata.obs["GENDER__M"]) == [False, True, False]
+    assert edata.uns["meds_static_codes"] == {"GENDER__F": "GENDER//F", "GENDER__M": "GENDER//M", "HEIGHT": "HEIGHT"}
     np.testing.assert_array_equal(edata.obs["HEIGHT"], [170.0, np.nan, 180.0])
     assert list(edata.obs[ANCHOR_TIME_KEY]) == [str(T0), str(T0 + 24 * HOUR), str(T0)]
     assert list(edata.var["description"]) == ["Heart rate", "Hypertension"]
@@ -120,6 +121,24 @@ def test_meds_roundtrip(meds_root, tmp_path, sparse):
     pd.testing.assert_frame_equal(read.obs, edata.obs)
     pd.testing.assert_frame_equal(read.var.drop(columns="n_events"), edata.var.drop(columns="n_events"))
     pd.testing.assert_frame_equal(read.tem, edata.tem)
+    assert read.uns["meds_static_codes"] == edata.uns["meds_static_codes"]
+
+
+def test_meds_roundtrip_through_h5ed(meds_root, tmp_path):
+    edata = read_meds(meds_root)
+    write_h5ed(edata, tmp_path / "meds.h5ed")
+
+    write_meds(read_h5ed(tmp_path / "meds.h5ed"), tmp_path / "written")
+    read = read_meds(tmp_path / "written")
+
+    np.testing.assert_array_equal(read.X, edata.X)
+    pd.testing.assert_frame_equal(read.obs, edata.obs)
+    pd.testing.assert_frame_equal(read.var.drop(columns="n_events"), edata.var.drop(columns="n_events"))
+    assert read.uns["meds_static_codes"] == edata.uns["meds_static_codes"]
+    assert (
+        "GENDER//F"
+        in duckdb.read_parquet(str(tmp_path / "written" / "metadata" / "codes.parquet")).fetchnumpy()["code"]
+    )
 
 
 def test_write_meds_files(meds_root, tmp_path):
