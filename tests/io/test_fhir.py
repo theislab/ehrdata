@@ -248,8 +248,12 @@ def test_read_fhir(fhir_dir):
     )
     pd.testing.assert_frame_equal(edata.obs, expected_obs, check_dtype=False)
     assert list(edata.var_names) == list(EXPECTED_VAR)
-    assert list(edata.var["description"]) == [description for description, _, _ in EXPECTED_VAR.values()]
-    assert list(edata.var["unit"]) == [unit for _, unit, _ in EXPECTED_VAR.values()]
+    expected_var = pd.DataFrame(
+        [(description, unit) for description, unit, _ in EXPECTED_VAR.values()],
+        index=list(EXPECTED_VAR),
+        columns=["description", "unit"],
+    )
+    pd.testing.assert_frame_equal(edata.var[["description", "unit"]], expected_var, check_dtype=False)
     assert edata.var.loc["LOINC/2222-2", "n_events"] == 2
     assert edata.shape == (3, len(EXPECTED_VAR), 2)
     np.testing.assert_array_equal(edata.X[:, :, 0].T, [values for _, _, values in EXPECTED_VAR.values()])
