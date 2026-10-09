@@ -343,6 +343,7 @@ def mimic_iv_meds(
     The intervals start at the first hospital admission of each patient.
     `obs` holds the `split` of each patient, the time of the first admission in `anchor_time`, `gender` with the categories `"female"` and `"male"`, the `age` at the first admission in years, and `death`, which is 1 if the death of the patient is recorded and 0 otherwise.
     `var` holds the number of binned events of each code in `n_events` and its `description`.
+    Codes without any event in the intervals are dropped.
     `tem['time_value']` is the start of every interval in `interval_length_unit`, for instance days since the first admission with the defaults.
 
     Args:
@@ -363,11 +364,11 @@ def mimic_iv_meds(
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_iv_meds()
         >>> edata
-        EHRData object with n_obs × n_vars × n_t = 100 × 7033 × 14
+        EHRData object with n_obs × n_vars × n_t = 100 × 4253 × 14
             obs: 'split', 'anchor_time', 'gender', 'age', 'death'
             var: 'n_events', 'description'
             tem: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13'
-            shape of .X: (100, 7033, 14)
+            shape of .X: (100, 4253, 14)
     """
     if data_path is None:
         data_path = DEFAULT_DATA_PATH / "mimic-iv-demo-meds"
@@ -390,6 +391,7 @@ def mimic_iv_meds(
         sparse=sparse,
         layer=layer,
     )
+    edata = edata[:, edata.var["n_events"] > 0].copy()
 
     # every patient has exactly one of the two static gender codes, which are the only static codes
     del edata.uns["meds_static_codes"]
