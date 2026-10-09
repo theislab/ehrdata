@@ -7,6 +7,7 @@ import pandas as pd
 import xarray as xr
 from fast_array_utils.conv import to_dense
 from scipy.sparse import issparse
+from sparse import COO
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -386,6 +387,8 @@ def to_pandas(
 
     if issparse(X):  # pragma: no cover
         X = to_dense(X)
+    elif isinstance(X, COO):
+        X = X.todense()
 
     if format == "wide":
         if len(X.shape) == 2:
@@ -423,9 +426,9 @@ def to_pandas(
                 X,
                 dims=["observation_id", "variable", "time"],
                 coords={
-                    "observation_id": edata.obs_names,
-                    "variable": edata.var_names,
-                    "time": edata.tem.index,
+                    "observation_id": edata.obs_names.to_numpy(),
+                    "variable": edata.var_names.to_numpy(),
+                    "time": edata.tem.index.to_numpy(),
                 },
             )
             data_array.name = "value"

@@ -2,5 +2,6 @@ from . import omop
 from .csv import read_csv
 from .events import from_events
 from .h5ed import read_h5ad, read_h5ed, write_h5ad, write_h5ed
+from .meds import read_meds, write_meds
 from .pandas import from_pandas, to_pandas
 from .zarr import read_zarr, write_zarr
