@@ -1790,6 +1790,8 @@ def test_setup_interval_variables_aggregation_strategies_carry_the_unit(
     # person 1 has dose_value 10 of drug 902427 in unit 8576 in two dose_eras, starting 2100-01-01 and 2100-02-01
     # make the two differ, so that the aggregates of the interval holding both are free of ties
     con.execute("UPDATE dose_era SET dose_value = 20 WHERE dose_era_id = 2")
+    # and extend visit 1 of person 1, which ends 2100-01-31, so that it covers both
+    con.execute("UPDATE visit_occurrence SET visit_end_date = '2100-02-28' WHERE visit_occurrence_id = 1")
 
     edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
     edata = ed.io.omop.setup_interval_variables(
@@ -2145,3 +2147,159 @@ def test_setup_variables_parquet(omop_connection_vanilla_parquet):
         [[np.nan, np.nan, np.nan, np.nan], [23.0, np.nan, np.nan, np.nan]],
     ]
     assert np.allclose(edata.layers[DEFAULT_TEM_LAYER_NAME], np.array(expected_data), equal_nan=True)
+
+
+@pytest.mark.parametrize(
+    ("setup_function", "data_tables", "data_field_to_keep", "concept_id", "expected_R"),
+    [
+        (
+            ed.io.omop.setup_variables,
+            ["measurement", "observation"],
+            "value_as_number",
+            3031147,
+            [[[18.5, np.nan]], [[20.5, np.nan]], [[22.5, np.nan]]],
+        ),
+        (
+            ed.io.omop.setup_interval_variables,
+            ["drug_exposure", "condition_occurrence"],
+            "is_present",
+            19073183,
+            [[[1, np.nan]]] * 3,
+        ),
+    ],
+)
+def test_concept_ids_select_the_variables(
+    omop_connection_vanilla, setup_function, data_tables, data_field_to_keep, concept_id, expected_R
+):
+    """Only the selected concept_ids become variables, also when a data table has none of them."""
+    con = omop_connection_vanilla
+
+    # give the concept that is not selected values in several units, which only the selected ones must agree on
+    con.execute(
+        "UPDATE measurement SET value_as_number = 1, unit_concept_id = measurement_id WHERE measurement_concept_id = 3022318"
+    )
+
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    setup_kwargs = {
+        "backend_handle": con,
+        "data_tables": data_tables,
+        "data_field_to_keep": dict.fromkeys(data_tables, data_field_to_keep),
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 2,
+        "aggregation_strategy": "mean",
+    }
+    edata_selected = setup_function(edata, concept_ids=[concept_id], **setup_kwargs)
+
+    assert edata_selected.var["data_table_concept_id"].tolist() == [concept_id]
+    assert np.allclose(edata_selected.X, np.array(expected_R), equal_nan=True)
+
+    with pytest.raises(ValueError, match="concept_ids must not be empty"):
+        setup_function(edata, concept_ids=[], **setup_kwargs)
+
+
+def test_setup_variables_enrich_var_with_unit_info_matches_the_concept_id(omop_connection_vanilla):
+    """The unit report is merged into var on the concept id, not on the position."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=1,
+        enrich_var_with_unit_info=True,
+    )
+
+    # concept 3022318 has no value_as_number, and hence no unit; concept 3031147 is in unit 9557
+    assert edata.var["data_table_concept_id"].tolist() == [3022318, 3031147]
+    assert edata.var["unit_concept_id"].isna().tolist() == [True, False]
+    assert edata.var["unit_concept_id"].iloc[1] == 9557
+
+
+@pytest.mark.parametrize("time_precision", ["date", "datetime"])
+def test_setup_variables_and_interval_variables_end_with_the_observation(omop_connection_vanilla, time_precision):
+    """Data points after the last day of the observation are not binned."""
+    con = omop_connection_vanilla
+
+    # the observation_period of person 1 ends 2100-01-31: add a value of concept 3031147 on that day, and one after it
+    con.execute(
+        """INSERT INTO measurement
+            (measurement_id, person_id, measurement_concept_id, measurement_date, measurement_datetime,
+             value_as_number, unit_concept_id, unit_source_value)
+        VALUES
+            (10, 1, 3031147, '2100-01-31', '2100-01-31 14:00:00', 30, 9557, 'mEq/L'),
+            (11, 1, 3031147, '2100-02-02', '2100-02-02 10:00:00', 40, 9557, 'mEq/L')"""
+    )
+    # drug 19073183 of person 1 has a second drug_exposure starting after that day; let the one of drug 19019979 outlast it
+    con.execute(
+        """UPDATE drug_exposure SET drug_exposure_end_date = '2100-03-31', drug_exposure_end_datetime = '2100-03-31 00:00:00'
+        WHERE drug_exposure_id = 3"""
+    )
+
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    intervals = {"interval_length_number": 7, "interval_length_unit": "day", "num_intervals": 6}
+
+    edata_variables = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        time_precision=time_precision,
+        **intervals,
+    )
+    # obs 0 is person 1, var 1 is concept 3031147, interval 4 holds both values and interval 5 starts after 2100-01-31
+    assert np.allclose(edata_variables.X[0, 1, 4:], [30, np.nan], equal_nan=True)
+
+    edata_interval_variables = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["is_present"],
+        time_precision=time_precision,
+        keep_date="interval",
+        **intervals,
+    )
+    assert np.allclose(edata_interval_variables.X[0], [[1, 1, 1, 1, 1, np.nan]] * 2, equal_nan=True)
+
+
+def test_setup_connection_replaces_the_tables(omop_connection_vanilla):
+    """Setting up a connection again replaces its tables rather than failing on them."""
+    con = omop_connection_vanilla
+    con.execute("DELETE FROM measurement")
+
+    ed.io.omop.setup_connection(path="tests/data/toy_omop/vanilla", backend_handle=con)
+
+    assert con.execute("SELECT COUNT(*) FROM measurement").fetchone()[0] == 9
+
+
+@pytest.mark.parametrize(
+    ("interval_length_number", "interval_length_unit"),
+    [(30, "day"), (365, "day"), (720, "h")],
+)
+def test_setup_variables_intervals_have_the_exact_length(
+    omop_connection_vanilla, interval_length_number, interval_length_unit
+):
+    """Intervals of 30 days or more are exactly as long as asked for, rather than calendar months."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=3,
+    )
+
+    # the observation_period of person 1 starts 2100-01-01
+    intervals = con.execute(
+        """SELECT interval_start, interval_end FROM long_person_timestamp_feature_value_measurement
+        WHERE obs_id = 1 AND data_table_concept_id = 3031147 ORDER BY interval_step"""
+    ).df()
+    boundaries = pd.date_range("2100-01-01", periods=4, freq=pd.Timedelta(interval_length_number, interval_length_unit))
+    assert intervals["interval_start"].tolist() == boundaries[:-1].tolist()
+    assert intervals["interval_end"].tolist() == boundaries[1:].tolist()

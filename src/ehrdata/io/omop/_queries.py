@@ -120,6 +120,13 @@ def _get_unit_fields(backend_handle: duckdb.DuckDBPyConnection, data_table: str)
     return tuple(field for field in UNIT_FIELDS if field in columns)
 
 
+def _concept_ids_condition(data_table: str, concept_ids: Literal["all"] | Sequence[int]) -> str:
+    """Get the SQL condition that restricts the rows of data_table to concept_ids."""
+    if concept_ids == "all":
+        return "TRUE"
+    return f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id IN ({', '.join(str(int(concept_id)) for concept_id in concept_ids)})"
+
+
 def _generate_timedeltas(interval_length_number: int, interval_length_unit: str, num_intervals: int) -> pd.DataFrame:
     timedeltas_dataframe = pd.DataFrame(
         {
@@ -149,7 +156,18 @@ def _write_timedeltas_to_db(
         )
         """
     )
-    backend_handle.execute("INSERT INTO timedeltas SELECT * FROM timedeltas_dataframe")
+    # DuckDB reads a pandas Timedelta of 30 days or more as calendar months, so the offsets are passed as microseconds.
+    offsets_in_microseconds = timedeltas_dataframe.assign(  # noqa: F841
+        interval_start_offset=timedeltas_dataframe["interval_start_offset"] // pd.Timedelta(microseconds=1),
+        interval_end_offset=timedeltas_dataframe["interval_end_offset"] // pd.Timedelta(microseconds=1),
+    )
+    backend_handle.execute(
+        """
+        INSERT INTO timedeltas
+        SELECT to_microseconds(interval_start_offset), to_microseconds(interval_end_offset), interval_step
+        FROM offsets_in_microseconds
+        """
+    )
 
 
 def _drop_timedeltas(backend_handle: duckdb.DuckDBPyConnection):
@@ -212,6 +230,7 @@ def _write_long_time_interval_table(
     aggregation_strategy: str,
     data_field_to_keep: Sequence[str] | str,
     unit_fields: Sequence[str] = (),
+    concept_ids: Literal["all"] | Sequence[int] = "all",
     keep_date: str = "",
 ) -> None:
     if isinstance(data_field_to_keep, str):
@@ -246,8 +265,9 @@ def _write_long_time_interval_table(
         ), \
         """
     else:
+        # The end date rather than datetime, as OMOP end dates are inclusive and end datetimes are optional.
         person_time_defining_cte = f"""WITH person_time_defining_table AS ( \
-            SELECT person.person_id as person_id, {time_defining_table}.{time_defining_id_key} as obs_id, {_get_datetime_key("start", time_defining_table, time_precision)} as start_date, {_get_datetime_key("end", time_defining_table, time_precision)} as end_date \
+            SELECT person.person_id as person_id, {time_defining_table}.{time_defining_id_key} as obs_id, {_get_datetime_key("start", time_defining_table, time_precision)} as start_date, {_get_datetime_key("end", time_defining_table, "date")} as end_date \
             FROM person \
             JOIN {time_defining_table} ON person.person_id = {time_defining_table}.{TIME_DEFINING_TABLE_SUBJECT_KEY[time_defining_table]} \
         ), \
@@ -259,6 +279,7 @@ def _write_long_time_interval_table(
             WITH distinct_data_table_concept_ids AS ( \
                 SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id
                 FROM {data_table} \
+                WHERE {_concept_ids_condition(data_table, concept_ids)} \
             )
             SELECT obs_id, person_id, {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id as data_table_concept_id, start_date, end_date \
             FROM person_time_defining_table \
@@ -269,7 +290,7 @@ def _write_long_time_interval_table(
             FROM person_data_table \
         ), \
         long_format_intervals as ( \
-            SELECT obs_id, person_id, data_table_concept_id, interval_step, start_date, start_date + interval_start_offset as interval_start, start_date + interval_end_offset as interval_end \
+            SELECT obs_id, person_id, data_table_concept_id, interval_step, start_date, end_date, start_date + interval_start_offset as interval_start, start_date + interval_end_offset as interval_end \
             FROM long_format_backbone \
             CROSS JOIN timedeltas \
         ), \
@@ -286,6 +307,7 @@ def _write_long_time_interval_table(
         SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col, unit_fields)} \
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{datetime_col} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col} < lfi.interval_end \
+                AND CAST(data_table_with_presence_indicator.{datetime_col} AS DATE) <= lfi.end_date \
         GROUP BY lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
 
@@ -300,6 +322,8 @@ def _write_long_time_interval_table(
                 AND (data_table_with_presence_indicator.{datetime_col_start} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col_start} < lfi.interval_end \
                     OR data_table_with_presence_indicator.{datetime_col_end} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col_end} < lfi.interval_end \
                     OR (data_table_with_presence_indicator.{datetime_col_start} < lfi.interval_start AND data_table_with_presence_indicator.{datetime_col_end} >= lfi.interval_end)) \
+                AND CAST(data_table_with_presence_indicator.{datetime_col_start} AS DATE) <= lfi.end_date \
+                AND CAST(lfi.interval_start AS DATE) <= lfi.end_date \
         GROUP BY lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
 
