@@ -287,3 +287,12 @@ def test_annotate_codes_roundtrip(edata_codes, tmp_path, write, read):
     var = getattr(ed.io, read)(tmp_path / "edata").var
     assert var["icd_codes"].astype("string").tolist() == edata_codes.var["icd_codes"].tolist()
     assert var["atc_level_5"].astype("string").tolist() == edata_codes.var["atc_level_5"].tolist()
+
+
+@pytest.mark.parametrize(("write", "read"), [("write_h5ed", "read_h5ed"), ("write_zarr", "read_zarr")])
+@pytest.mark.parametrize("var_names", [["ICD10CM/I21.0"], ["ICD10CM/I21.0", "ATC/C07AB02"]])
+def test_annotate_codes_roundtrip_subset(edata_codes, var_names, tmp_path, write, read):
+    subset = edata_codes[:, var_names].copy()
+    getattr(ed.io, write)(subset, tmp_path / "edata")
+    var = getattr(ed.io, read)(tmp_path / "edata").var
+    pd.testing.assert_frame_equal(var.astype("string"), subset.var)
