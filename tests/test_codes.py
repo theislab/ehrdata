@@ -83,6 +83,8 @@ def test_annotate_codes_icd9(name, category, chapter):
         ("DRG//HCFA//3", "MS-DRG", "003", pd.NA),
         ("LAB//RESULT//50931//mg/dL", pd.NA, pd.NA, pd.NA),
         ("MEDS_BIRTH", pd.NA, pd.NA, pd.NA),
+        ("BMI (kg/m2)", pd.NA, pd.NA, pd.NA),
+        ("Blood Pressure/systolic", pd.NA, pd.NA, pd.NA),
     ],
 )
 def test_annotate_codes_meds_mimic_iv(name, vocabulary, code, icd_codes):
