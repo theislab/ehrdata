@@ -90,7 +90,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ehrapy_data
-          key: ehrapy-data-tests-v2
+          key: ehrapy-data-tests-v3
       - name: run tests using hatch
         env:
           MPLBACKEND: agg
@@ -105,7 +105,7 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ehrapy_data
-          key: ehrapy-data-tests-v2
+          key: ehrapy-data-tests-v3
       - name: generate coverage report
         run: |
           # See https://coverage.readthedocs.io/page/config.html#run-patch

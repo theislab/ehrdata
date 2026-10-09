@@ -44,6 +44,116 @@ def test_diabetes_130_fairlearn():
     assert np.array_equal(edata.X[:2, :2], expected_first_four_X)
 
 
+def test_heart_failure():
+    edata = ed.dt.heart_failure(columns_obs_only=["sex", "time", "DEATH_EVENT"])
+    assert edata.shape == (299, 10, 1)
+    assert list(edata.var_names[:2]) == ["age", "anaemia"]
+    assert list(edata.obs["sex"].cat.categories) == ["female", "male"]
+    assert edata.obs["DEATH_EVENT"].dtype == np.int64
+    assert set(edata.obs["DEATH_EVENT"]) == {0, 1}
+    assert edata.obs.loc["0", ["sex", "time", "DEATH_EVENT"]].tolist() == ["male", 4, 1]
+
+
+def test_heart_disease():
+    edata = ed.dt.heart_disease(columns_obs_only=["site", "sex", "cp", "restecg", "slope", "thal", "num"])
+    assert edata.shape == (920, 8, 1)
+    assert list(edata.var_names) == ["age", "trestbps", "chol", "fbs", "thalach", "exang", "oldpeak", "ca"]
+    assert edata.obs["site"].value_counts().to_dict() == {
+        "cleveland": 303,
+        "hungarian": 294,
+        "long_beach_va": 200,
+        "switzerland": 123,
+    }
+    assert list(edata.obs["cp"].cat.categories) == [
+        "typical angina",
+        "atypical angina",
+        "non-anginal pain",
+        "asymptomatic",
+    ]
+    assert list(edata.obs["thal"].cat.categories) == ["normal", "fixed defect", "reversible defect"]
+    assert edata.obs.loc["0", ["site", "sex", "cp", "thal", "num"]].tolist() == [
+        "cleveland",
+        "male",
+        "typical angina",
+        "fixed defect",
+        0,
+    ]
+    X = edata.X.astype(np.float64)
+    assert not (X[:, edata.var_names.isin(["chol", "trestbps"])] == 0).any()
+    assert np.isnan(X).any()
+
+
+@pytest.mark.xdist_group(name="dataset_pbcseq")
+def test_pbcseq():
+    edata = ed.dt.pbcseq()
+    assert edata.shape == (312, 12, 15)
+    assert edata.tem.shape == (15, 3)
+    np.testing.assert_array_equal(edata.tem["time_value"], np.arange(0, 15 * 365, 365, dtype=np.float64))
+    assert list(edata.obs.columns) == ["futime", "status", "trt", "age", "sex"]
+    assert list(edata.obs["status"].cat.categories) == ["censored", "transplant", "death"]
+    assert list(edata.obs["trt"].cat.categories) == ["D-penicillamine", "placebo"]
+    assert edata.obs.loc["1", ["futime", "status", "trt", "sex"]].tolist() == [
+        400,
+        "death",
+        "D-penicillamine",
+        "female",
+    ]
+    # the first interval holds the measurements at enrollment
+    assert edata[edata.obs_names == "1", "bili", 0].X.item() == 14.5
+    assert edata.var["n_events"].sum() > 0
+
+
+@pytest.mark.xdist_group(name="dataset_pbcseq")
+def test_pbcseq_arguments():
+    edata = ed.dt.pbcseq(
+        interval_length_number=30, num_intervals=4, aggregation_strategy="last", layer=DEFAULT_TEM_LAYER_NAME
+    )
+    assert edata.shape == (312, 12, 4)
+    assert edata.X is None
+    np.testing.assert_array_equal(edata.tem["time_value"], [0.0, 30.0, 60.0, 90.0])
+
+
+@pytest.mark.xdist_group(name="dataset_mimic_iv_meds")
+def test_mimic_iv_meds():
+    edata = ed.dt.mimic_iv_meds()
+    assert edata.shape == (100, 7033, 14)
+    np.testing.assert_array_equal(edata.tem["time_value"], np.arange(14, dtype=np.float64))
+    assert list(edata.obs.columns) == ["split", "anchor_time", "gender", "age", "death"]
+    assert list(edata.var.columns) == ["n_events", "description"]
+    assert "meds_static_codes" not in edata.uns
+    assert edata.obs["gender"].value_counts().to_dict() == {"male": 57, "female": 43}
+    assert edata.obs["death"].sum() == 31
+    assert edata.obs["age"].between(18, 100).all()
+    assert edata.obs.loc["10000032", ["split", "anchor_time", "gender", "death"]].tolist() == [
+        "train",
+        "2180-05-06 22:23:00",
+        "female",
+        1,
+    ]
+
+
+@pytest.mark.xdist_group(name="dataset_mimic_iv_meds")
+def test_mimic_iv_meds_arguments():
+    edata = ed.dt.mimic_iv_meds(interval_length_number=6, interval_length_unit="h", num_intervals=4, sparse=True)
+    assert edata.shape == (100, 7033, 4)
+    assert isinstance(edata.X, sparse.COO)
+    np.testing.assert_array_equal(edata.tem["time_value"], [0.0, 6.0, 12.0, 18.0])
+
+
+@pytest.mark.xdist_group(name="dataset_eicu_crd")
+def test_eicu_crd():
+    edata = ed.dt.eicu_crd()
+    assert edata.shape[0] == 2520
+    assert edata.shape[2] == 48
+    np.testing.assert_array_equal(edata.tem["time_value"], np.arange(48, dtype=np.float64))
+    assert {"heartrate", "sao2", "noninvasivesystolic", "creatinine"} <= set(edata.var_names)
+    assert {"hospital_death", "unit_death"} <= set(edata.obs.columns)
+    assert not {"hospitaldischargestatus", "unitdischargestatus"} & set(edata.obs.columns)
+    assert set(edata.obs["hospital_death"].dropna()) == {0, 1}
+    assert edata.obs["age"].max() == 90
+    assert pd.api.types.is_numeric_dtype(edata.obs["age"])
+
+
 @pytest.fixture
 def duckdb_connection():
     """Fixture to create and return a DuckDB connection for testing."""

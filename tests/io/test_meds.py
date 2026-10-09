@@ -207,3 +207,12 @@ def test_write_meds_invalid(meds_root, tmp_path):
 
     with pytest.raises(ValueError, match="interval_start_offset"):
         write_meds(EHRData(X=np.ones((1, 1, 2)), obs=pd.DataFrame(index=["1"])), tmp_path / "written")
+
+
+def test_read_meds_anchor_code(meds_root):
+    edata = read_meds(meds_root, anchor_code="ICD", interval_length_number=1, interval_length_unit="h")
+
+    assert edata.obs[ANCHOR_TIME_KEY].iloc[0] == str(T0 + HOUR)
+    assert edata.obs[ANCHOR_TIME_KEY].iloc[1:].isna().all()
+    np.testing.assert_array_equal(edata.X[0], [[np.nan, 70.0], [1.0, np.nan]])
+    assert np.isnan(edata.X[1:]).all()
