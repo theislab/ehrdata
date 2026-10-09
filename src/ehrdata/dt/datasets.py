@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+import duckdb
 import numpy as np
 import pandas as pd
 
@@ -368,8 +369,6 @@ def mimic_iv_meds(
             tem: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13'
             shape of .X: (100, 7033, 14)
     """
-    import duckdb
-
     if data_path is None:
         data_path = DEFAULT_DATA_PATH / "mimic-iv-demo-meds"
     data_path = Path(data_path)
