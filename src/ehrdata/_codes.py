@@ -95,7 +95,7 @@ _MEDS_ICD_VOCABULARIES = {
 }
 _MEDS_MEDICATION = re.compile(r"MEDICATION//.*//([^/]+)")
 _MEDS_DRG = re.compile(r"DRG//(HCFA|APR)//([0-9]+)")
-_VOCABULARY_CODE = re.compile(r"([^/]+)/([^/].*)")
+_VOCABULARY_CODE = re.compile(r"([^/\s()]+)/([^/].*)")
 
 CODE_COLUMNS = (
     "vocabulary",
@@ -290,6 +290,7 @@ def annotate_codes(
     """Annotate the variables with the vocabulary, code, description and hierarchy of their codes.
 
     Variables are named by codes like `ICD10CM/I21.0`, `ICD9CM/410.01`, `ATC/C07AB02`, `LOINC/8480-6`, or `SNOMED/22298006`, that is, an OMOP vocabulary name and a code of this vocabulary.
+    Names whose part before the `/` contains spaces or parentheses, such as `BMI (kg/m2)`, are not codes.
     Codes of the MEDS MIMIC-IV ETL are understood as well: `DIAGNOSIS//ICD//10//I210` and `DIAGNOSIS//ICD//9//41001` as `ICD10CM` and `ICD9CM`, `PROCEDURE//ICD//10//...` and `PROCEDURE//ICD//9//...` as `ICD10PCS` and `ICD9Proc`, the NDC at the end of `MEDICATION//...` codes as `NDC`, and `DRG//HCFA//...` and `DRG//APR//...` as `MS-DRG` and `APR-DRG`.
     Variables read from an OMOP CDM database are identified by their `data_table_concept_id` or, if enriched with feature information, by their `vocabulary_id` and `concept_code` instead.
 
