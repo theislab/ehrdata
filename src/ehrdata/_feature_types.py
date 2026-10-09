@@ -24,7 +24,7 @@ def _detect_feature_type(
     col: pd.Series,
     *,
     binary_as: Literal["categorical", "numeric"] = "categorical",
-) -> tuple[Literal["date", "categorical", "numeric"], bool]:
+) -> tuple[Literal["date", "categorical", "numeric"] | None, bool]:
     """Detect the feature type of a :class:`~pandas.Series`.
 
     Args:
@@ -32,14 +32,13 @@ def _detect_feature_type(
         binary_as: How to classify binary (0/1) features.
 
     Returns:
-        The detected feature type (one of 'date', 'categorical', or 'numeric') and a boolean, which is True if the feature type is uncertain.
+        The detected feature type (one of 'date', 'categorical', or 'numeric'), or `None` if the series has no values, and a boolean, which is True if the feature type is uncertain.
     """
     col[col.isin(MISSING_VALUES)] = np.nan
     col = col.infer_objects()
     col = col.dropna()
     if len(col) == 0:
-        err_msg = f"Feature '{col.name}' contains only NaN values. Please drop this feature to infer the feature type."
-        raise ValueError(err_msg)
+        return None, False
     majority_type = col.apply(type).value_counts().idxmax()
 
     if majority_type == pd.Timestamp:
@@ -85,6 +84,7 @@ def infer_feature_types(
     Be aware that not all features stored numerically are of `'numeric'` type, as categorical features might be stored in a numerically encoded format.
     For example, a feature with values [0, 1, 2] might be a categorical feature with three categories.
     This is accounted for in the method, but it is recommended to check the inferred types.
+    Features without any value are skipped with a warning and get no feature type.
 
     Args:
         edata: Data object.
@@ -105,6 +105,7 @@ def infer_feature_types(
     """
     feature_types = {}
     uncertain_features = []
+    empty_features = []
 
     X = edata.X if layer is None else edata.layers[layer]
 
@@ -131,10 +132,19 @@ def infer_feature_types(
             feature_types[feature] = edata.var[FEATURE_TYPE_KEY][feature]
         else:
             feature_types[feature], raise_warning = _detect_feature_type(df[feature], binary_as=binary_as)
+            if feature_types[feature] is None:
+                empty_features.append(feature)
             if raise_warning:
                 uncertain_features.append(feature)
 
     edata.var[FEATURE_TYPE_KEY] = pd.Series(feature_types)[edata.var_names]
+
+    if empty_features:
+        names = ", ".join(f"'{feature}'" for feature in empty_features)
+        logger.warning(
+            f"Features without any value were skipped and got no feature type: {names}. "
+            f"Drop them or set their type using `ed.replace_feature_types`."
+        )
 
     if verbose:
         if uncertain_features:

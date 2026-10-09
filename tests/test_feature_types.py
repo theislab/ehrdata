@@ -224,3 +224,25 @@ def test_replace_feature_types_unknown_feature_raises_error(variable_type_sample
     infer_feature_types(edata)
     with pytest.raises(ValueError):
         replace_feature_types(edata, ["int_column"], "invalid_target")
+
+
+@pytest.mark.parametrize(
+    "X",
+    [
+        np.array([[1.0, np.nan], [2.5, np.nan], [3.0, np.nan]]),
+        np.array([[[1.0, 2.0], [np.nan, np.nan]], [[2.5, np.nan], [np.nan, np.nan]]]),
+        np.array([[1.5, "nan"], [2.5, None]], dtype=object),
+    ],
+)
+def test_infer_feature_types_skips_features_without_values(X, monkeypatch):
+    messages = []
+    monkeypatch.setattr(logger, "warning", lambda msg, **kwargs: messages.append(msg))
+
+    edata = EHRData(X=X, var=pd.DataFrame(index=["numeric_feature", "empty_feature"]))
+    infer_feature_types(edata, output=None)
+
+    assert edata.var["feature_type"]["numeric_feature"] == "numeric"
+    assert pd.isna(edata.var["feature_type"]["empty_feature"])
+    skipped = [msg for msg in messages if "without any value" in msg]
+    assert len(skipped) == 1
+    assert "'empty_feature'" in skipped[0]
