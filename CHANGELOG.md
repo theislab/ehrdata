@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
  - {func}`~ehrdata.rebin` aggregates the time axis of an {class}`~ehrdata.EHRData` into coarser intervals, for instance hourly into 6-hourly ones, with the `aggregation_strategy` of the loaders. It applies to `.X` and every layer with a time axis and updates the interval offsets in `.tem`. ([#316](https://github.com/theislab/ehrdata/pull/316)) @Zethson
+ - {func}`~ehrdata.io.from_events` bins a table of events, one row per code recorded for a subject at a time as in the [Medical Event Data Standard (MEDS)](https://medical-event-data-standard.github.io), into an {class}`~ehrdata.EHRData` with a time axis. It reads pandas, pyarrow, DuckDB relations and parquet files, starts each subject's intervals at an anchor time from `obs` or at the subject's first event, counts the events of codes without numeric values, and returns a dense array or a `sparse.COO`. ([#313](https://github.com/theislab/ehrdata/pull/313)) @Zethson
 
 ### Changed
  - ehrdata now requires `anndata>=0.13.1`, the first release providing everything {class}`~ehrdata.EHRData` builds on: a 3D `.X`, `.X` unified into `layers[None]`, and pydata-sparse `COO` arrays in memory. The last ehrdata still tolerated `anndata<0.13`, while already supporting it. ([#277](https://github.com/theislab/ehrdata/issues/277)) @eroell

@@ -19,6 +19,7 @@
     io.write_zarr
     io.from_pandas
     io.to_pandas
+    io.from_events
 
 ```
 
