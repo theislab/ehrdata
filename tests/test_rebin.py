@@ -103,6 +103,7 @@ def test_rebin_tem_offsets():
     tem = _generate_timedeltas(1, "h", 5).set_index("interval_step")
     tem.index = tem.index.astype(str)
     tem = tem.astype(str)
+    tem["time_value"] = np.arange(5, dtype=np.float64)
     tem["other"] = "x"
     edata = EHRData(X, tem=tem)
 
@@ -112,6 +113,7 @@ def test_rebin_tem_offsets():
         {
             "interval_start_offset": ["0 days 00:00:00", "0 days 03:00:00"],
             "interval_end_offset": ["0 days 03:00:00", "0 days 05:00:00"],
+            "time_value": [0.0, 3.0],
         },
         index=pd.Index(["0", "1"], name="interval_step"),
     )

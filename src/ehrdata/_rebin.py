@@ -30,7 +30,7 @@ def rebin(
     Missing values (`NaN`) are ignored, and an interval without any observed value is missing.
     `"last"` and `"first"` keep the latest and the earliest observed value, and `"count"` is the number of observed values.
 
-    In `.tem`, the `interval_start_offset` of a new interval is the one of its first timepoint, and the `interval_end_offset` the one of its last timepoint.
+    In `.tem`, the `interval_start_offset` and `time_value` of a new interval are the ones of its first timepoint, and the `interval_end_offset` the one of its last timepoint.
     An `interval_step` column is renumbered, and other columns of `.tem` are dropped.
 
     Args:
@@ -90,10 +90,9 @@ def _rebin_tem(tem: pd.DataFrame, bin_size: int) -> pd.DataFrame:
     rebinned = pd.DataFrame(index=pd.Index(np.arange(len(starts)).astype(str), name=tem.index.name))
     if "interval_step" in tem.columns:
         rebinned["interval_step"] = np.arange(len(starts))
-    if "interval_start_offset" in tem.columns:
-        rebinned["interval_start_offset"] = tem["interval_start_offset"].to_numpy()[starts]
-    if "interval_end_offset" in tem.columns:
-        rebinned["interval_end_offset"] = tem["interval_end_offset"].to_numpy()[ends]
+    for column, positions in (("interval_start_offset", starts), ("interval_end_offset", ends), ("time_value", starts)):
+        if column in tem.columns:
+            rebinned[column] = tem[column].to_numpy()[positions]
     return rebinned
 
 
