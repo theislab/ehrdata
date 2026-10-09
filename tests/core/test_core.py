@@ -1,9 +1,11 @@
 import warnings
 
 import anndata as ad
+import dask.array as da
 import numpy as np
 import pandas as pd
 import pytest
+import sparse
 from tests.conftest import _assert_shape_matches
 
 from ehrdata import EHRData
@@ -588,6 +590,42 @@ def test_ehrdata_subset_mixedindices(edata_3d_slot):
 
     _assert_fields_are_view(edata_sliced)
     _assert_shape_matches(edata_sliced, (1, 1, 1))
+
+
+@pytest.mark.parametrize("array_type", ["numpy", "sparse", "dask", "dask_sparse"])
+@pytest.mark.parametrize(
+    "index",
+    [
+        (np.array([0, 2, 3, 5, 6]), ["var1", "var3"]),
+        (slice(None), ["var1", "var3"], [0, 2]),
+        (np.array([0, 2, 3, 5, 6]), slice(None), np.array([0, 2])),
+        (np.arange(7) < 5, slice(None), [1]),
+        (np.array([0, 2, 3, 5, 6]), ["var1", "var3"], slice(1, None)),
+    ],
+)
+def test_ehrdata_subset_arrays_on_several_axes(array_type, index):
+    ref = np.arange(7 * 3 * 3).reshape(7, 3, 3)
+    X = {
+        "numpy": lambda: ref,
+        "sparse": lambda: sparse.COO.from_numpy(ref),
+        "dask": lambda: da.from_array(ref, chunks=(4, 3, 3)),
+        "dask_sparse": lambda: da.from_array(sparse.COO.from_numpy(ref), chunks=(4, 3, 3)),
+    }[array_type]()
+    edata = EHRData(X=X, var=pd.DataFrame(index=["var1", "var2", "var3"]))
+
+    expected = ref
+    for axis, idx in enumerate(index):
+        idx = edata.var_names.get_indexer(idx) if axis == 1 and isinstance(idx, list) else idx
+        expected = expected[(slice(None),) * axis + (idx,)]
+
+    def as_numpy(arr):
+        arr = arr.compute() if isinstance(arr, da.Array) else arr
+        return arr.todense() if isinstance(arr, sparse.COO) else np.asarray(arr)
+
+    edata_sliced = edata[index]
+    assert edata_sliced.shape == expected.shape
+    np.testing.assert_array_equal(as_numpy(edata_sliced.layers[None]), expected)
+    np.testing.assert_array_equal(as_numpy(edata_sliced.copy().X), expected)
 
 
 def test_copy(edata_333):
