@@ -116,7 +116,9 @@ def test_pbcseq_arguments():
 @pytest.mark.xdist_group(name="dataset_mimic_iv_meds")
 def test_mimic_iv_meds():
     edata = ed.dt.mimic_iv_meds()
-    assert edata.shape == (100, 7033, 14)
+    assert edata.shape == (100, 4253, 14)
+    assert (edata.var["n_events"] > 0).all()
+    assert not np.isnan(edata.X).all(axis=(0, 2)).any()
     np.testing.assert_array_equal(edata.tem["time_value"], np.arange(14, dtype=np.float64))
     assert list(edata.obs.columns) == ["split", "anchor_time", "gender", "age", "death"]
     assert list(edata.var.columns) == ["n_events", "description"]
@@ -135,7 +137,8 @@ def test_mimic_iv_meds():
 @pytest.mark.xdist_group(name="dataset_mimic_iv_meds")
 def test_mimic_iv_meds_arguments():
     edata = ed.dt.mimic_iv_meds(interval_length_number=6, interval_length_unit="h", num_intervals=4, sparse=True)
-    assert edata.shape == (100, 7033, 4)
+    assert edata.shape == (100, 2317, 4)
+    assert (edata.var["n_events"] > 0).all()
     assert isinstance(edata.X, sparse.COO)
     np.testing.assert_array_equal(edata.tem["time_value"], [0.0, 6.0, 12.0, 18.0])
 
