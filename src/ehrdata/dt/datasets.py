@@ -14,7 +14,7 @@ from ehrdata.io.omop import setup_connection
 from ehrdata.io.omop._queries import _generate_timedeltas
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 
     from duckdb import DuckDBPyConnection
 
@@ -424,7 +424,10 @@ def physionet2012(
     Taken the defaults of `interval_length_number`, `interval_length_unit`, `num_intervals`, and `drop_samples`, the tensor stored in `.layers[layer_name]` of `edata` is the same as when doing the `PyPOTS <https://github.com/WenjieDu/PyPOTS>`_ preprocessing :cite:`du2023pypots`.
     A simple deviation is that the tensor in `ehrdata` is of shape `n_obs x n_vars x n_intervals` (with defaults, 3000x37x48) while the tensor in PyPOTS is of shape `n_obs x n_intervals x n_vars` (3000x48x37).
     The tensor stored in `.layers[layer_name]` is hence also fully compatible with the PyPOTS package, as the `.layers` field of EHRData objects generally is.
-    Note: In the original dataset, some missing values are encoded with a -1 for some entries of the variables `'DiasABP'`, `'NIDiasABP'`, and `'Weight'`. Here, these are replaced with `NaN` s.
+    In the original dataset, missing values are encoded as -1, for instance for `'Height'`, `'Survival'` (no death recorded), `'DiasABP'`, `'NIDiasABP'`, and `'Weight'`.
+    Here, these are missing values (`NaN`) instead.
+    `'Gender'` and `'ICUType'` hold the labels of their codes as categories, while the outcome `'In-hospital_death'` stays 0 (survivor) or 1 (died in hospital).
+    `tem['time_value']` is the start of every interval in `interval_length_unit`, for instance hours since ICU admission with the defaults.
 
     Args:
        data_path: Path to the raw data. If the path exists, the data is loaded from there.
@@ -455,13 +458,22 @@ def physionet2012(
         Inspect static information
 
         >>> edata.obs.head()
-                set	Age	Gender	Height	ICUType	SAPS-I	SOFA	Length_of_stay	Survival	In-hospital_death
+                    set   Age  Gender  Height                   ICUType  SAPS-I  SOFA  Length_of_stay  Survival  In-hospital_death
         RecordID
-        132539	set-a	54.0	0.0	-1.0	4.0	6	1	5	-1	0
-        132540	set-a	76.0	1.0	175.3	2.0	16	8	8	-1	0
-        132541	set-a	44.0	0.0	-1.0	3.0	21	11	19	-1	0
-        132543	set-a	68.0	1.0	180.3	3.0	7	1	9	575	0
-        132545	set-a	88.0	0.0	-1.0	3.0	17	2	4	918	0
+        132539    set-a  54.0  female     NaN                  surgical     6.0   1.0             5.0       NaN                  0
+        132540    set-a  76.0    male   175.3  cardiac surgery recovery    16.0   8.0             8.0       NaN                  0
+        132541    set-a  44.0  female     NaN                   medical    21.0  11.0            19.0       NaN                  0
+        132543    set-a  68.0    male   180.3                   medical     7.0   1.0             9.0     575.0                  0
+        132545    set-a  88.0  female     NaN                   medical    17.0   2.0             4.0     918.0                  0
+
+        Inspect the time axis
+
+        >>> edata.tem.head(3)
+                      interval_start_offset interval_end_offset  time_value
+        interval_step
+        0                   0 days 00:00:00     0 days 01:00:00         0.0
+        1                   0 days 01:00:00     0 days 02:00:00         1.0
+        2                   0 days 02:00:00     0 days 03:00:00         2.0
 
         Inspect the 48-hour trajectory of the variable ``RespRate``:
 
@@ -572,9 +584,20 @@ def physionet2012(
 
     # in order to conveniently save the produced EHRData object: infer to avoid h5ad error b.c. object columns
     obs = obs.infer_objects()
+    placeholder_columns = ["Age", "Height", "SAPS-I", "SOFA", "Length_of_stay", "Survival"]
+    obs[placeholder_columns] = obs[placeholder_columns].replace(-1, np.nan)
+    _label_codes(
+        obs,
+        {
+            "Gender": {0: "female", 1: "male"},
+            "ICUType": {1: "coronary care", 2: "cardiac surgery recovery", 3: "medical", 4: "surgical"},
+        },
+    )
 
     # consider only time series features from now
-    df_dynamic_long = person_long_across_set_df[~person_long_across_set_df["Parameter"].isin(static_features)]
+    df_dynamic_long = person_long_across_set_df[
+        ~person_long_across_set_df["Parameter"].isin(static_features) & (person_long_across_set_df["Value"] != -1)
+    ]
 
     return _create_edata_from_physionet_long_format(
         df_dynamic_long=df_dynamic_long,
@@ -608,6 +631,8 @@ def physionet2019(
 
     The data consists of 35 time dependent features and 5 static features (`Age`, `Gender`, `Unit1`, `Unit2`, `HospAdmTime`).
     More information on the features can be found on the link above.
+    `'Gender'` holds the labels `'female'` and `'male'` as categories, while the ICU indicators `'Unit1'` (MICU) and `'Unit2'` (SICU) and the `'SepsisLabel'` stay 0 or 1.
+    `tem['time_value']` is the start of every interval in `interval_length_unit`, for instance hours since ICU admission with the defaults.
 
     The full dataset consists of 40'336 patients, with values for the 35 dynamic features recorded hourly, and indicated missing if the value is not available.
     This amounts to a final dataset shape of 40'336 x 35 x number of considered time steps.
@@ -649,11 +674,11 @@ def physionet2019(
         >>> edata.obs.head()
                     Age  Gender  Unit1  Unit2  HospAdmTime   training_Set
         RecordID
-        p014977     77.27     1.0    0.0    1.0       -69.14  training_setA
-        p000902     65.55     1.0    NaN    NaN        -0.02  training_setA
-        p009098     52.16     0.0    NaN    NaN        -0.03  training_setA
-        p008386     24.35     1.0    NaN    NaN        -0.03  training_setA
-        p018195     82.51     1.0    1.0    0.0      -907.88  training_setA
+        p000001   83.14  female    NaN    NaN        -0.03  training_setA
+        p000002   75.91  female    0.0    1.0       -98.60  training_setA
+        p000003   45.82  female    1.0    0.0     -1195.71  training_setA
+        p000004   65.71  female    0.0    1.0        -8.77  training_setA
+        p000005   28.09    male    1.0    0.0        -0.05  training_setA
 
         Inspect the 48-hour trajectory of the variable ``SepsisLabel``:
 
@@ -766,7 +791,8 @@ def physionet2019(
 
         person_collector_dynamic[txt_file.stem] = person_dynamic_long
 
-    obs = pd.concat(person_collector_static.values(), axis=1).T.set_index("RecordID")
+    obs = pd.concat(person_collector_static.values(), axis=1).T.set_index("RecordID").infer_objects()
+    _label_codes(obs, {"Gender": {0: "female", 1: "male"}})
     df_dynamic_long = pd.concat(person_collector_dynamic.values())
 
     return _create_edata_from_physionet_long_format(
@@ -781,6 +807,12 @@ def physionet2019(
         layer=layer,
         dataset="physionet2019",
     )
+
+
+def _label_codes(obs: pd.DataFrame, labels: Mapping[str, Mapping[int, str]]) -> None:
+    """Replace the documented codes of nominal `obs` columns by their labels, with codes outside of them as missing values."""
+    for column, column_labels in labels.items():
+        obs[column] = pd.Categorical(obs[column].map(column_labels), categories=list(column_labels.values()))
 
 
 def _create_edata_from_physionet_long_format(
@@ -864,6 +896,7 @@ def _create_edata_from_physionet_long_format(
     obs = obs.infer_objects()
     for col in tem.columns:
         tem[col] = tem[col].astype(str)
+    tem["time_value"] = (tem.index * interval_length_number).astype(np.float64)
 
     edata = (
         EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=tem)

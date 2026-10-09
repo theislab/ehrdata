@@ -84,31 +84,41 @@ def test_synthea27nj_omop():
 def test_physionet2012():
     edata = ed.dt.physionet2012(layer=DEFAULT_TEM_LAYER_NAME)
     assert edata.shape == (11988, 37, 48)
-    assert edata.tem.shape == (48, 2)
+    assert edata.tem.shape == (48, 3)
+    np.testing.assert_array_equal(edata.tem["time_value"], np.arange(48, dtype=np.float64))
     assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (11988, 37, 48)
     assert edata.obs.shape == (11988, 10)
     assert edata.var.shape == (37, 1)
 
+    assert list(edata.obs["Gender"].cat.categories) == ["female", "male"]
+    assert list(edata.obs["ICUType"].cat.categories) == [
+        "coronary care",
+        "cardiac surgery recovery",
+        "medical",
+        "surgical",
+    ]
+    assert edata.obs["In-hospital_death"].dtype == np.int64
+    assert not (edata.obs.select_dtypes("number") == -1).any().any()
+    assert not (edata.layers[DEFAULT_TEM_LAYER_NAME] == -1).any()
+
     # check a few hand-picked values for a stricter test
+    numeric = ["Age", "Height", "SAPS-I", "SOFA", "Length_of_stay", "Survival", "In-hospital_death"]
     # first entry set a
-    assert edata.obs.loc["132539"].values[0] == "set-a"
-    assert np.allclose(
-        edata.obs.loc["132539"].values[1:].astype(np.float32),
-        np.array([54.0, 0.0, -1.0, 4.0, 6, 1, 5, -1, 0], dtype=np.float32),
-    )
+    assert edata.obs.loc["132539", ["set", "Gender", "ICUType"]].tolist() == ["set-a", "female", "surgical"]
+    np.testing.assert_allclose(edata.obs.loc["132539", numeric].astype(np.float64), [54.0, np.nan, 6, 1, 5, np.nan, 0])
 
     # first entry set b
-    assert edata.obs.loc["142675"].values[0] == "set-b"
-    assert np.allclose(
-        edata.obs.loc["142675"].values[1:].astype(np.float32),
-        np.array([70.0, 1.0, 175.3, 2.0, 27, 14, 9, 7, 1], dtype=np.float32),
-    )
+    assert edata.obs.loc["142675", ["set", "Gender", "ICUType"]].tolist() == [
+        "set-b",
+        "male",
+        "cardiac surgery recovery",
+    ]
+    np.testing.assert_allclose(edata.obs.loc["142675", numeric].astype(np.float64), [70.0, 175.3, 27, 14, 9, 7, 1])
 
     # first entry set c
-    assert edata.obs.loc["152871"].values[0] == "set-c"
-    assert np.allclose(
-        edata.obs.loc["152871"].values[1:].astype(np.float32),
-        np.array([71.0, 1.0, 167.6, 4.0, 19, 10, 23, -1, 0], dtype=np.float32),
+    assert edata.obs.loc["152871", ["set", "Gender", "ICUType"]].tolist() == ["set-c", "male", "surgical"]
+    np.testing.assert_allclose(
+        edata.obs.loc["152871", numeric].astype(np.float64), [71.0, 167.6, 19, 10, 23, np.nan, 0]
     )
 
     # first entry c two different HR value
@@ -127,7 +137,8 @@ def test_physionet2012_arguments():
         drop_samples=None,
     )
     assert edata.shape == (12000, 37, 24)
-    assert edata.tem.shape == (24, 2)
+    assert edata.tem.shape == (24, 3)
+    np.testing.assert_array_equal(edata.tem["time_value"], np.arange(0, 48, 2, dtype=np.float64))
     assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (12000, 37, 24)
     assert edata.obs.shape == (12000, 10)
     assert edata.var.shape == (37, 1)
@@ -137,7 +148,8 @@ def test_physionet2012_arguments():
 def test_physionet2019():
     edata = ed.dt.physionet2019(layer=DEFAULT_TEM_LAYER_NAME, n_samples=10)
     assert edata.shape == (10, 35, 48)
-    assert edata.tem.shape == (48, 2)
+    assert edata.tem.shape == (48, 3)
+    np.testing.assert_array_equal(edata.tem["time_value"], np.arange(48, dtype=np.float64))
     assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (10, 35, 48)
     assert edata.obs.shape == (10, 6)
     assert edata.var.shape == (35, 1)
@@ -145,9 +157,11 @@ def test_physionet2019():
     # check a few hand-picked values for a stricter test
     # a randomly picked entry, for which verified the values in the source data
     assert edata.obs.loc["p000667", "training_Set"] == "training_setA"
-    np.allclose(
-        edata.obs.loc["p000667", ["Age", "Gender", "Unit1", "Unit2", "HospAdmTime"]].values,
-        np.array([19.96, 0.0, 1.0, 0.0, -0.02]),
+    assert list(edata.obs["Gender"].cat.categories) == ["female", "male"]
+    assert edata.obs.loc["p000667", "Gender"] == "female"
+    np.testing.assert_allclose(
+        edata.obs.loc["p000667", ["Age", "Unit1", "Unit2", "HospAdmTime"]].astype(np.float64),
+        [19.96, 1.0, 0.0, -0.02],
     )
 
     np.allclose(
@@ -168,7 +182,8 @@ def test_physionet2019_arguments():
         n_samples=2,
     )
     assert edata.shape == (2, 35, 24)
-    assert edata.tem.shape == (24, 2)
+    assert edata.tem.shape == (24, 3)
+    np.testing.assert_array_equal(edata.tem["time_value"], np.arange(0, 48, 2, dtype=np.float64))
     assert edata.layers[DEFAULT_TEM_LAYER_NAME].shape == (2, 35, 24)
     assert edata.obs.shape == (2, 6)
     assert edata.var.shape == (35, 1)
