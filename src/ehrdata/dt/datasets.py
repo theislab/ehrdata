@@ -4,12 +4,13 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+import duckdb
 import numpy as np
 import pandas as pd
 
 from ehrdata.core.constants import DEFAULT_DATA_PATH
 from ehrdata.dt._dataloader import _download
-from ehrdata.io import read_csv, read_h5ed
+from ehrdata.io import from_events, from_pandas, read_csv, read_h5ed, read_meds
 from ehrdata.io.omop import setup_connection
 from ehrdata.io.omop._queries import _generate_timedeltas
 
@@ -323,6 +324,95 @@ def mimic_iv_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = N
         nested_omop_tables_folder="mimic-iv-demo-data-in-the-omop-common-data-model-0.9/1_omop_data_csv",
         dataset_prefix="2b_",
     )
+
+
+def mimic_iv_meds(
+    data_path: Path | str | None = None,
+    *,
+    interval_length_number: int = 1,
+    interval_length_unit: str = "D",
+    num_intervals: int = 14,
+    aggregation_strategy: Literal["last", "first", "mean", "median", "min", "max", "sum", "count"] = "last",
+    sparse: bool = False,
+    layer: str | None = None,
+) -> EHRData:
+    """Loads the MIMIC-IV demo data in the Medical Event Data Standard (MEDS).
+
+    Loads the 100 patients of the MIMIC-IV Clinical Database Demo in the `MEDS format from physionet <https://physionet.org/content/mimic-iv-demo-meds/0.0.1/>`_ :cite:`vandewater2025mimic` :cite:`johnson2023mimic` :cite:`goldberger2000physiobank`.
+    The events, such as laboratory measurements, vital signs, medications, diagnoses, and procedures, are read with :func:`~ehrdata.io.read_meds`.
+    The intervals start at the first hospital admission of each patient.
+    `obs` holds the `split` of each patient, the time of the first admission in `anchor_time`, `gender` with the categories `"female"` and `"male"`, the `age` at the first admission in years, and `death`, which is 1 if the death of the patient is recorded and 0 otherwise.
+    `var` holds the number of binned events of each code in `n_events` and its `description`.
+    `tem['time_value']` is the start of every interval in `interval_length_unit`, for instance days since the first admission with the defaults.
+
+    Args:
+        data_path: Path to the raw data. If the path exists, the data is loaded from there.
+            Else, the data is downloaded.
+        interval_length_number: Numeric value of the length of one interval.
+        interval_length_unit: Unit belonging to the interval length.
+        num_intervals: Number of intervals.
+        aggregation_strategy: Aggregation strategy for the numeric values of a code within one interval, as in :func:`~ehrdata.io.from_events`.
+        sparse: Whether to store the data as a `sparse.COO` array instead of a :class:`numpy.ndarray`.
+        layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
+
+    Returns:
+        The MIMIC-IV demo dataset of shape patients × codes × intervals.
+        The raw data is also downloaded, stored and available under the ``data_path``.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.mimic_iv_meds()
+        >>> edata
+        EHRData object with n_obs × n_vars × n_t = 100 × 7033 × 14
+            obs: 'split', 'anchor_time', 'gender', 'age', 'death'
+            var: 'n_events', 'description'
+            tem: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13'
+            shape of .X: (100, 7033, 14)
+    """
+    if data_path is None:
+        data_path = DEFAULT_DATA_PATH / "mimic-iv-demo-meds"
+    data_path = Path(data_path)
+
+    dataset_name = "mimic-iv-demo-data-in-the-medical-event-data-standard-meds-0.0.1"
+    _download(
+        f"https://physionet.org/static/published-projects/mimic-iv-demo-meds/{dataset_name}.zip",
+        output_path=data_path,
+    )
+    root = data_path / dataset_name
+
+    edata = read_meds(
+        root,
+        anchor_code="HOSPITAL_ADMISSION",
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
+        sparse=sparse,
+        layer=layer,
+    )
+
+    # every patient has exactly one of the two static gender codes, which are the only static codes
+    del edata.uns["meds_static_codes"]
+    is_male = edata.obs.pop("GENDER__M").to_numpy()
+    edata.obs = edata.obs.drop(columns="GENDER__F")
+    edata.obs["gender"] = pd.Categorical(np.where(is_male, "male", "female"), categories=["female", "male"])
+
+    life_events = (
+        duckdb.sql(
+            f"SELECT subject_id::VARCHAR AS subject_id, code, MIN(time) AS time FROM read_parquet('{root / 'data' / '**' / '*.parquet'}') "
+            "WHERE code IN ('MEDS_BIRTH', 'MEDS_DEATH') GROUP BY ALL"
+        )
+        .df()
+        .pivot(index="subject_id", columns="code", values="time")
+        .reindex(edata.obs_names)
+    )
+    edata.obs["age"] = (
+        pd.to_datetime(edata.obs["anchor_time"]) - life_events["MEDS_BIRTH"]
+    ).dt.days.to_numpy() / 365.25
+    edata.obs["death"] = life_events["MEDS_DEATH"].notna().astype(np.int64).to_numpy()
+    _add_time_value(edata, interval_length_number)
+
+    return edata
 
 
 def gibleed_omop(backend_handle: DuckDBPyConnection, data_path: Path | None = None) -> None:
@@ -815,6 +905,11 @@ def _label_codes(obs: pd.DataFrame, labels: Mapping[str, Mapping[int, str]]) -> 
         obs[column] = pd.Categorical(obs[column].map(column_labels), categories=list(column_labels.values()))
 
 
+def _add_time_value(edata: EHRData, interval_length_number: int) -> None:
+    """Store the start of every interval in units of the interval length unit in `tem["time_value"]`."""
+    edata.tem["time_value"] = np.arange(edata.n_t, dtype=np.float64) * interval_length_number
+
+
 def _create_edata_from_physionet_long_format(
     df_dynamic_long: pd.DataFrame,
     obs: pd.DataFrame,
@@ -896,13 +991,13 @@ def _create_edata_from_physionet_long_format(
     obs = obs.infer_objects()
     for col in tem.columns:
         tem[col] = tem[col].astype(str)
-    tem["time_value"] = (tem.index * interval_length_number).astype(np.float64)
 
     edata = (
         EHRData(layers={layer: tem_layer}, obs=obs, var=var, tem=tem)
         if layer is not None
         else EHRData(X=tem_layer, obs=obs, var=var, tem=tem)
     )
+    _add_time_value(edata, interval_length_number)
 
     return edata[~edata.obs.index.isin(drop_samples or [])].copy()
 
@@ -1035,3 +1130,299 @@ def diabetes_130_fairlearn(
     )
 
     return edata
+
+
+def eicu_crd(
+    data_path: Path | str | None = None,
+    *,
+    interval_length_number: int = 1,
+    interval_length_unit: str = "h",
+    num_intervals: int = 48,
+    aggregation_strategy: Literal["last", "first", "mean", "median", "min", "max"] = "last",
+    layer: str | None = None,
+) -> EHRData:
+    """Loads the demo of the `eICU Collaborative Research Database (v2.0.1) <https://physionet.org/content/eicu-crd-demo/2.0.1/>`_.
+
+    The eICU Collaborative Research Database holds the data of patients admitted to intensive care units (ICUs) across the United States in 2014 and 2015 :cite:`pollard2018eicu` :cite:`goldberger2000physiobank`.
+    Its openly available demo holds 2520 ICU stays from 20 hospitals.
+    The observations are the ICU stays, identified by `patientunitstayid`, with the stay and patient information of the `patient` table in `obs`.
+    The variables are the vital signs of the `vitalPeriodic` and `vitalAperiodic` tables and the laboratory measurements of the `lab` table, with the time since ICU admission.
+    Measurements before the ICU admission are not included.
+
+    Ages above 89 years, which are `"> 89"` in the original dataset, are 90.
+    `hospital_death` and `unit_death` are 1 if the patient died in the hospital or in the ICU, respectively, and 0 otherwise, instead of the `hospitaldischargestatus` and `unitdischargestatus` with `"Expired"` and `"Alive"`.
+    `tem['time_value']` is the start of every interval in `interval_length_unit`, for instance hours since ICU admission with the defaults.
+
+    Args:
+        data_path: Path to the raw data. If the path exists, the data is loaded from there.
+            Else, the data is downloaded.
+        interval_length_number: Numeric value of the length of one interval.
+        interval_length_unit: Unit belonging to the interval length.
+        num_intervals: Number of intervals.
+        aggregation_strategy: Aggregation strategy for the values of a variable within one interval, as in :func:`~ehrdata.io.from_events`.
+        layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
+
+    Returns:
+        The eICU demo dataset of shape ICU stays × variables × intervals.
+        The raw data is also downloaded, stored and available under the ``data_path``.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.eicu_crd()
+        >>> edata.shape
+        (2520, 170, 48)
+        >>> edata.obs[["gender", "age", "unittype", "hospital_death"]].head(3)
+                           gender   age      unittype  hospital_death
+        patientunitstayid
+        141764             Female  87.0  Med-Surg ICU             0.0
+        141765             Female  87.0  Med-Surg ICU             0.0
+        143870               Male  76.0          SICU             0.0
+    """
+    if data_path is None:
+        data_path = DEFAULT_DATA_PATH / "eicu-crd-demo"
+    data_path = Path(data_path)
+
+    for table in ["patient", "vitalPeriodic", "vitalAperiodic", "lab"]:
+        _download(
+            f"https://physionet.org/files/eicu-crd-demo/2.0.1/{table}.csv.gz?download",
+            output_path=data_path,
+            output_filename=f"{table}.csv.gz",
+            raw_format="csv",
+        )
+
+    obs = pd.read_csv(data_path / "patient.csv.gz", index_col="patientunitstayid")
+    obs["age"] = pd.to_numeric(obs["age"].replace("> 89", "90"))
+    deaths = {"hospitaldischargestatus": "hospital_death", "unitdischargestatus": "unit_death"}
+    for status in deaths:
+        obs[status] = obs[status].map({"Alive": 0, "Expired": 1})
+    obs = obs.rename(columns=deaths)
+
+    vitals = [
+        pd.read_csv(data_path / f"{table}.csv.gz")
+        .drop(columns=f"{table.lower()}id")
+        .melt(id_vars=["patientunitstayid", "observationoffset"], var_name="code", value_name="numeric_value")
+        .rename(columns={"observationoffset": "offset"})
+        for table in ["vitalPeriodic", "vitalAperiodic"]
+    ]
+    lab = pd.read_csv(
+        data_path / "lab.csv.gz", usecols=["patientunitstayid", "labresultoffset", "labname", "labresult"]
+    ).rename(columns={"labresultoffset": "offset", "labname": "code", "labresult": "numeric_value"})
+    events = pd.concat([*vitals, lab], ignore_index=True).dropna(subset=["numeric_value"])
+    events["offset"] = pd.to_timedelta(events["offset"], unit="min")
+
+    edata = from_events(
+        events,
+        obs=obs,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
+        layer=layer,
+        subject_id="patientunitstayid",
+        time="offset",
+    )
+    _add_time_value(edata, interval_length_number)
+
+    return edata
+
+
+def pbcseq(
+    data_path: Path | str | None = None,
+    *,
+    interval_length_number: int = 365,
+    interval_length_unit: str = "D",
+    num_intervals: int = 15,
+    aggregation_strategy: Literal["last", "first", "mean", "median", "min", "max"] = "first",
+    layer: str | None = None,
+) -> EHRData:
+    """Loads the repeated visits of the Mayo Clinic primary biliary cholangitis (PBC) trial.
+
+    The 312 patients of the randomized placebo-controlled trial of D-penicillamine for primary biliary cholangitis (formerly primary biliary cirrhosis) at the Mayo Clinic between 1974 and 1984 were followed up at scheduled visits, at 6 months, 1 year, and then yearly :cite:`murtaugh1994primary`.
+    The dataset holds the clinical and laboratory measurements of all 1945 visits, as provided by the `survival R package <https://github.com/therneau/survival>`_ as `pbcseq`.
+    The variables are `ascites`, `hepato` (hepatomegaly), `spiders` (spider angiomata), `edema` (0 for no edema, 0.5 for untreated or successfully treated edema, 1 for edema despite diuretic therapy), `bili` (serum bilirubin in mg/dl), `chol` (serum cholesterol in mg/dl), `albumin` (in g/dl), `alk.phos` (alkaline phosphatase in U/liter), `ast` (aspartate aminotransferase in U/ml), `platelet` (platelet count), `protime` (prothrombin time in seconds) and the histologic `stage` of the disease.
+    `obs` holds the `age` at enrollment in years, the `sex`, the treatment `trt` with the categories `"D-penicillamine"` and `"placebo"`, the follow-up time `futime` in days, and the `status` at the end of the follow-up with the categories `"censored"`, `"transplant"`, and `"death"`.
+    The intervals start at enrollment, and `tem['time_value']` is the start of every interval in `interval_length_unit`, for instance days since enrollment with the defaults.
+
+    Args:
+        data_path: Path to the raw data. If the path exists, the data is loaded from there.
+            Else, the data is downloaded.
+        interval_length_number: Numeric value of the length of one interval.
+        interval_length_unit: Unit belonging to the interval length.
+        num_intervals: Number of intervals.
+        aggregation_strategy: Aggregation strategy for the values of a variable when a patient has multiple visits within one interval, as in :func:`~ehrdata.io.from_events`.
+            With the default `"first"` and yearly intervals, the first interval holds the measurements at enrollment.
+        layer: Name of the layer in the EHRData object that will store the time series data. If not specified, it uses `X`.
+
+    Returns:
+        The PBC dataset of shape patients × variables × intervals.
+        The raw data is also downloaded, stored and available under the ``data_path``.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.pbcseq()
+        >>> edata
+        EHRData object with n_obs × n_vars × n_t = 312 × 12 × 15
+            obs: 'futime', 'status', 'trt', 'age', 'sex'
+            var: 'n_events'
+            tem: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14'
+            shape of .X: (312, 12, 15)
+    """
+    if data_path is None:
+        data_path = DEFAULT_DATA_PATH / "pbcseq"
+    data_path = Path(data_path)
+
+    _download(
+        "https://vincentarelbundock.github.io/Rdatasets/csv/survival/pbcseq.csv",
+        output_path=data_path,
+    )
+    visits = pd.read_csv(data_path / "pbcseq.csv")
+
+    obs_columns = ["futime", "status", "trt", "age", "sex"]
+    obs = visits.groupby("id")[obs_columns].first()
+    _label_codes(
+        obs,
+        {
+            "status": {0: "censored", 1: "transplant", 2: "death"},
+            "trt": {1: "D-penicillamine", 2: "placebo"},
+            "sex": {"f": "female", "m": "male"},
+        },
+    )
+
+    variables = [
+        "ascites",
+        "hepato",
+        "spiders",
+        "edema",
+        "bili",
+        "chol",
+        "albumin",
+        "alk.phos",
+        "ast",
+        "platelet",
+        "protime",
+        "stage",
+    ]
+    events = visits.melt(id_vars=["id", "day"], value_vars=variables, var_name="code", value_name="numeric_value")
+    events["day"] = pd.to_timedelta(events["day"], unit="D")
+    edata = from_events(
+        events.dropna(subset=["numeric_value"]),
+        obs=obs,
+        codes=variables,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        aggregation_strategy=aggregation_strategy,
+        layer=layer,
+        subject_id="id",
+        time="day",
+    )
+    _add_time_value(edata, interval_length_number)
+
+    return edata
+
+
+def heart_failure(
+    columns_obs_only: Iterable[str] | None = None,
+) -> EHRData:
+    """Loads the heart failure clinical records dataset.
+
+    The dataset holds the medical records of 299 patients with heart failure collected at the Faisalabad Institute of Cardiology and at the Allied Hospital in Faisalabad, Pakistan, from April to December 2015 :cite:`ahmad2017survival` :cite:`chicco2020machine`.
+    All patients had a left ventricular systolic dysfunction and were in the classes III or IV of the New York Heart Association classification.
+    `time` is the follow-up period in days, and `DEATH_EVENT` is 1 if the patient died during the follow-up period and 0 otherwise.
+    `sex` holds the categories `"female"` and `"male"`, while `anaemia`, `diabetes`, `high_blood_pressure`, and `smoking` stay 0 or 1.
+
+    More details and the original dataset can be found in the `UCI Machine Learning Repository <https://archive.ics.uci.edu/dataset/519/heart+failure+clinical+records>`_.
+
+    Args:
+        columns_obs_only: Columns to include in `obs` only and not `X`.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.heart_failure(columns_obs_only=["time", "DEATH_EVENT"])
+        >>> edata
+        EHRData object with n_obs × n_vars × n_t = 299 × 11 × 1
+            obs: 'time', 'DEATH_EVENT'
+            shape of .X: (299, 11)
+    """
+    data_path = DEFAULT_DATA_PATH / "heart_failure"
+    _download(
+        "https://archive.ics.uci.edu/static/public/519/heart+failure+clinical+records.zip",
+        output_path=data_path,
+        output_filename="heart_failure_clinical_records_dataset.csv.zip",
+    )
+    df = pd.read_csv(data_path / "heart_failure_clinical_records_dataset.csv")
+    _label_codes(df, {"sex": {0: "female", 1: "male"}})
+
+    return from_pandas(df, columns_obs_only=columns_obs_only)
+
+
+def heart_disease(
+    columns_obs_only: Iterable[str] | None = None,
+) -> EHRData:
+    """Loads the heart disease dataset.
+
+    The dataset holds the 14 commonly used attributes of 920 patients referred for coronary angiography at the Cleveland Clinic Foundation, the Hungarian Institute of Cardiology in Budapest, the Veterans Administration Medical Center in Long Beach, California, and the University Hospitals of Zurich and Basel :cite:`detrano1989international`.
+    `site` holds the clinic, with the categories `"cleveland"`, `"hungarian"`, `"long_beach_va"`, and `"switzerland"`.
+    The diagnosis `num` is 0 if the diameter of all major vessels is narrowed by less than 50% and 1 to 4 otherwise.
+    `sex`, the chest pain type `cp`, the resting electrocardiographic results `restecg`, the slope of the peak exercise ST segment `slope`, and the thallium scintigraphy result `thal` hold the labels of their documented codes as categories.
+    The fasting blood sugar above 120 mg/dl `fbs` and the exercise induced angina `exang` stay 0 or 1.
+    Missing values, which are `?` in the original dataset, and the physiologically impossible serum cholesterol `chol` and resting blood pressure `trestbps` of 0 are missing values (`NaN`).
+
+    More details and the original dataset can be found in the `UCI Machine Learning Repository <https://archive.ics.uci.edu/dataset/45/heart+disease>`_.
+
+    Args:
+        columns_obs_only: Columns to include in `obs` only and not `X`.
+
+    Examples:
+        >>> import ehrdata as ed
+        >>> edata = ed.dt.heart_disease(columns_obs_only=["site", "num"])
+        >>> edata
+        EHRData object with n_obs × n_vars × n_t = 920 × 13 × 1
+            obs: 'site', 'num'
+            shape of .X: (920, 13)
+    """
+    data_path = DEFAULT_DATA_PATH / "heart_disease"
+    _download(
+        "https://archive.ics.uci.edu/static/public/45/heart+disease.zip",
+        output_path=data_path,
+        output_filename="processed.cleveland.data.zip",
+    )
+    columns = [
+        "age",
+        "sex",
+        "cp",
+        "trestbps",
+        "chol",
+        "fbs",
+        "restecg",
+        "thalach",
+        "exang",
+        "oldpeak",
+        "slope",
+        "ca",
+        "thal",
+        "num",
+    ]
+    sites = {"cleveland": "cleveland", "hungarian": "hungarian", "va": "long_beach_va", "switzerland": "switzerland"}
+    df = pd.concat(
+        [
+            pd.read_csv(data_path / f"processed.{filename}.data", names=columns, na_values="?").assign(site=site)
+            for filename, site in sites.items()
+        ],
+        ignore_index=True,
+    )
+    df[["chol", "trestbps"]] = df[["chol", "trestbps"]].replace(0, np.nan)
+    df["site"] = pd.Categorical(df["site"], categories=list(sites.values()))
+    _label_codes(
+        df,
+        {
+            "sex": {0: "female", 1: "male"},
+            "cp": {1: "typical angina", 2: "atypical angina", 3: "non-anginal pain", 4: "asymptomatic"},
+            "restecg": {0: "normal", 1: "ST-T wave abnormality", 2: "left ventricular hypertrophy"},
+            "slope": {1: "upsloping", 2: "flat", 3: "downsloping"},
+            "thal": {3: "normal", 6: "fixed defect", 7: "reversible defect"},
+        },
+    )
+    df.index = df.index.astype(str)
+
+    return from_pandas(df[["site", *columns]], columns_obs_only=columns_obs_only)

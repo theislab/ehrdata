@@ -30,12 +30,13 @@ def read_meds(
     *,
     split: str | Sequence[str] | None = None,
     codes: Collection[str] | None = None,
+    anchor_code: str | None = None,
     **binning: Any,
 ) -> EHRData:
     """Read a `Medical Event Data Standard (MEDS) <https://medical-event-data-standard.github.io>`__ dataset into an :class:`~ehrdata.EHRData` object with a time axis.
 
-    The events are binned into intervals with :func:`~ehrdata.io.from_events`, starting at each subject's first event.
-    To start the intervals at another time, such as an admission, pass the data files and an `obs` with this time to :func:`~ehrdata.io.from_events` instead.
+    The events are binned into intervals with :func:`~ehrdata.io.from_events`, starting at each subject's first event or at the first event of `anchor_code`.
+    To start the intervals at any other time, pass the data files and an `obs` with this time to :func:`~ehrdata.io.from_events` instead.
     Static events, which have no time, become columns of `obs`.
     These hold the numeric value of the code, or whether the subject has the code if the code has no numeric values.
     Slashes in these codes become underscores in the column names, and `uns["meds_static_codes"]` maps the column names to the codes.
@@ -47,6 +48,10 @@ def read_meds(
             If not specified, all subjects are read.
         codes: The codes to use as variables, in this order.
             If not specified, all codes of events with a time are used, sorted.
+        anchor_code: Code of the event at which the first interval of each subject starts, such as `"HOSPITAL_ADMISSION"`.
+            It also matches the codes that extend it after `//`, such as `"HOSPITAL_ADMISSION//ELECTIVE"`.
+            The time of the first such event of each subject is stored in `obs["anchor_time"]`, and subjects without one have no values.
+            If not specified, the intervals start at the first event of each subject, which is often the birth.
         **binning: Passed to :func:`~ehrdata.io.from_events`, such as `interval_length_number`, `interval_length_unit`, `num_intervals`, `aggregation_strategy`, `sparse`, and `layer`.
 
     Returns:
@@ -107,6 +112,16 @@ def read_meds(
                 raise ValueError(msg)
             static_codes[column] = code
             obs[column] = values if code in numeric_codes else ~np.isnan(values)
+
+    if anchor_code is not None:
+        anchor_times = con.execute(
+            "SELECT subject_id::VARCHAR AS subject_id, MIN(time) AS time FROM data "
+            "WHERE code = $code OR starts_with(code, $code || '//') GROUP BY subject_id",
+            {"code": anchor_code},
+        ).df()
+        anchor_time = anchor_times.set_index("subject_id")["time"].reindex(obs.index)
+        obs[ANCHOR_TIME_KEY] = anchor_time.map(str).mask(anchor_time.isna())
+        binning["anchor"] = ANCHOR_TIME_KEY
 
     edata = from_events(data, obs=obs, codes=codes, **binning)
     if static_codes:
