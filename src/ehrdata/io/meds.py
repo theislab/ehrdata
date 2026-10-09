@@ -32,7 +32,7 @@ def read_meds(
     codes: Collection[str] | None = None,
     **binning: Any,
 ) -> EHRData:
-    """Read a `Medical Event Data Standard (MEDS) <https://medical-event-data-standard.github.io>`_ dataset into an :class:`~ehrdata.EHRData` object with a time axis.
+    """Read a `Medical Event Data Standard (MEDS) <https://medical-event-data-standard.github.io>`__ dataset into an :class:`~ehrdata.EHRData` object with a time axis.
 
     The events are binned into intervals with :func:`~ehrdata.io.from_events`, starting at each subject's first event.
     To start the intervals at another time, such as an admission, pass the data files and an `obs` with this time to :func:`~ehrdata.io.from_events` instead.
@@ -129,7 +129,7 @@ def write_meds(
     layer: str | None = None,
     anchor: str = ANCHOR_TIME_KEY,
 ) -> None:
-    """Write an :class:`~ehrdata.EHRData` object with a time axis as a `Medical Event Data Standard (MEDS) <https://medical-event-data-standard.github.io>`_ dataset.
+    """Write an :class:`~ehrdata.EHRData` object with a time axis as a `Medical Event Data Standard (MEDS) <https://medical-event-data-standard.github.io>`__ dataset.
 
     Every value that is not missing becomes an event at the start of its interval, as given by `.tem["interval_start_offset"]`, which :func:`~ehrdata.io.from_events` creates.
     The time of the event is the subject's anchor time in `obs[anchor]` plus the start of the interval.
