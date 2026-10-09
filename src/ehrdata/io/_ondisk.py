@@ -6,6 +6,7 @@ EHRData in memory: keeps 3D arrays in ``X``/``layers``. EHRData on disk: moves 3
 
 from __future__ import annotations
 
+from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 import anndata as ad
@@ -23,8 +24,19 @@ from ehrdata.core.constants import (
 from ehrdata.io._coo_codec import is_coo_group, read_coo
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ehrdata import EHRData
     from ehrdata._types import GroupStorageType
+
+
+def _allow_write_nullable_strings[T, **P](f: Callable[P, T]) -> Callable[P, T]:
+    @wraps(f)
+    def wrapped(*args: P.args, **kwargs: P.kwargs):
+        with ad.settings.override(allow_write_nullable_strings=True):
+            return f(*args, **kwargs)
+
+    return wrapped
 
 
 def _is_3d(arr: Any) -> bool:
