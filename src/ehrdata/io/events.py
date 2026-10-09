@@ -42,7 +42,7 @@ def from_events(
     """Bin a table of events into an :class:`~ehrdata.EHRData` object with a time axis.
 
     Every row of `events` is one event: a `code` recorded for a subject at a `time`, optionally with a `numeric_value`.
-    This is the layout of the `Medical Event Data Standard (MEDS) <https://medical-event-data-standard.github.io>`_, whose column names are the defaults.
+    This is the layout of the `Medical Event Data Standard (MEDS) <https://medical-event-data-standard.github.io>`__, whose column names are the defaults.
     The codes become the variables, and the time since each subject's anchor is divided into intervals of equal length.
     Interval `i` starts `i` interval lengths after the anchor and ends right before interval `i + 1` starts.
     Events without a time, before the anchor, or after the last interval are ignored.
