@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import os
 import re
 from bisect import bisect_right
 from functools import singledispatch
+from os.path import commonpath
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -276,7 +276,7 @@ def _atc_lowest_common_level(codes: object) -> object:
         return np.nan
     codes = [str(code) for code in codes]
     leaves = [code for code in codes if not any(other != code and other.startswith(code) for other in codes)]
-    common = os.path.commonprefix(leaves)
+    common = commonpath(leaves)
     length = max((length for length in ATC_LEVEL_LENGTHS if length <= len(common)), default=0)
     return common[:length] if length else np.nan
 
