@@ -1630,6 +1630,42 @@ def test_setup_variables_aggregation_ignores_rows_without_value(omop_connection_
 
 
 @pytest.mark.parametrize("aggregation_strategy", ["last", "first"])
+def test_setup_variables_single_row_aggregation_breaks_ties_deterministically(
+    omop_connection_vanilla, aggregation_strategy
+):
+    """Timestamp ties are broken by value, independent of duckdb's scheduling."""
+    con = omop_connection_vanilla
+    con.execute("SET threads = 4")
+
+    # tie the existing values 18 (12:00) and 19 (13:00) of person 1, concept 3031147
+    con.execute(
+        """INSERT INTO measurement
+            (measurement_id, person_id, measurement_concept_id, measurement_date, measurement_datetime,
+             value_as_number, unit_concept_id, unit_source_value)
+        VALUES
+            (10, 1, 3031147, '2100-01-01', '2100-01-01 12:00:00', 30, 9557, 'mEq/L'),
+            (11, 1, 3031147, '2100-01-01', '2100-01-01 13:00:00', 7, 9557, 'mEq/L')"""
+    )
+
+    for _ in range(5):
+        edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+        edata = ed.io.omop.setup_variables(
+            edata,
+            backend_handle=con,
+            layer=DEFAULT_TEM_LAYER_NAME,
+            data_tables=["measurement"],
+            data_field_to_keep=["value_as_number"],
+            interval_length_number=1,
+            interval_length_unit="day",
+            time_precision="datetime",
+            num_intervals=2,
+            aggregation_strategy=aggregation_strategy,
+        )
+        # last: max(19, 7); first: min(18, 30)
+        assert edata.layers[DEFAULT_TEM_LAYER_NAME][0, 1, 0] == (19 if aggregation_strategy == "last" else 18)
+
+
+@pytest.mark.parametrize("aggregation_strategy", ["last", "first"])
 def test_setup_interval_variables_aggregation_ignores_rows_without_value(omop_connection_vanilla, aggregation_strategy):
     """A row without a value must not shadow an observed value of the same interval, see issue #298."""
     con = omop_connection_vanilla
