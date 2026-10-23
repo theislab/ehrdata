@@ -149,6 +149,7 @@ nitpick_ignore = [
     ("py:class", "_duckdb.DuckDBPyConnection"),
     ("py:class", "duckdb.duckdb.DuckDBPyRelation"),
     ("py:class", "_duckdb.DuckDBPyRelation"),
+    ("py:class", "duckdb._relation.DuckDBPyRelation"),  # duckdb>=2.0
     # Is documented as a py:attribute instead
     ("py:class", "numpy.int64"),
     ("py:class", "numpy._typing._array_like.GenericAlias"),
