@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 
 def read_zarr(
-    filename: PathLike[str] | zarr.group.Group | str,
+    filename: PathLike[str] | zarr.Group | str,
     *,
     harmonize_missing_values: bool = True,
     cast_variables_to_float: bool = True,
