@@ -242,7 +242,7 @@ def _check_valid_birthdates_for_person_table(backend_handle, time_defining_table
             FROM person
             WHERE birth_datetime IS NULL
         """
-        null_count = backend_handle.execute(query).fetchone()[0]
+        null_count = backend_handle.execute(query).fetchall()[0][0]
 
         if null_count > 0:
             msg = (

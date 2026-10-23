@@ -2308,7 +2308,7 @@ def test_setup_connection_replaces_the_tables(omop_connection_vanilla):
 
     ed.io.omop.setup_connection(path="tests/data/toy_omop/vanilla", backend_handle=con)
 
-    assert con.execute("SELECT COUNT(*) FROM measurement").fetchone()[0] == 9
+    assert con.execute("SELECT COUNT(*) FROM measurement").fetchall()[0][0] == 9
 
 
 @pytest.mark.parametrize(

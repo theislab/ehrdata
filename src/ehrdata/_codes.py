@@ -204,7 +204,7 @@ def _annotate_var(var: pd.DataFrame, vocabulary: pd.Series, code: pd.Series) -> 
 
 def _table_exists(backend_handle: DuckDBPyConnection, table: str) -> bool:
     query = "SELECT count(*) FROM information_schema.tables WHERE lower(table_name) = ?"
-    return backend_handle.execute(query, [table]).fetchone()[0] > 0
+    return backend_handle.execute(query, [table]).fetchall()[0][0] > 0
 
 
 def _omop_concepts(
