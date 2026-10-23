@@ -193,7 +193,9 @@ def _generate_value_query(
 
     # is_present is 1 in all rows of the data_table; but need an aggregation operation, so use LAST.
     # LAST/FIRST need ORDER BY for chronological order; for the other strategies, ordering doesn't matter.
-    order_by = f" ORDER BY {datetime_column}" if single_row_aggregation else ""
+    # Break the rare timestamp ties by the kept columns, so the result is deterministic.
+    tie_break = "".join(f", {column}" for column in [*data_field_to_keep, *unit_fields])
+    order_by = f" ORDER BY {datetime_column}{tie_break}" if single_row_aggregation else ""
     is_present_query = f"LAST(is_present{order_by}) {row_filter} as is_present, "
 
     if single_row_aggregation:
