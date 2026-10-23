@@ -164,12 +164,14 @@ nitpick_ignore = [
     ("py:class", "sparse.numba_backend._coo.core.COO"),
     ("py:class", "sparse._coo.core.COO"),
     ("py:class", "pandas.core.arrays.base.ExtensionArray"),
+    ("py:class", "ehrdata.core.ehrdata.AlignedMappingProperty3D"),
 ]
 
 # Redirect broken parameter annotation classes
 qualname_overrides = {
     "zarr.storage._common.StorePath": "zarr.storage.StorePath",
-    "zarr.core.group.Group": "zarr.group.Group",
+    "zarr.core.group.StoreLike": "zarr.storage.StoreLike",
+    "zarr.core.group.Group": "zarr.Group",
     "lnschema_core.models.Artifact": "lamindb.Artifact",
     "pandas.core.series.Series": "pandas.Series",
     "pyarrow.lib.Table": "pyarrow.Table",

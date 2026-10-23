@@ -48,8 +48,8 @@ optional-dependencies.doc = [
   "myst-nb>=1.1",
   "numpy<2.5",                       # numba (via sparse) caps numpy<2.5; lamindb otherwise pulls 2.5.1, forcing uv to backtrack numba into an unbuildable llvmlite and break the RTD build. Relax when numba supports newer numpy.
   "pandas",
-  "scanpydoc<0.17.5",                # 0.17.5 needs sphinx-autodoc-typehints>=3.17 (sphinx>=9.1), conflicting with sphinx<9 below
-  "sphinx>=8.1,<9",
+  "scanpydoc",
+  "sphinx>=9.1",
   "sphinx-autodoc-typehints",
   "sphinx-book-theme>=1",
   "sphinx-copybutton",
