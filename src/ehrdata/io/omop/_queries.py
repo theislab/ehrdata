@@ -88,6 +88,13 @@ def _get_datetime_key(
     return value
 
 
+def _finer_datetime_keys(key: Literal["timepoint", "start", "end"], data_table: str, time_precision: str) -> list[str]:
+    """The datetime column of a table read at date precision, to break ties within a day chronologically."""
+    keys = DATA_TABLE_DATE_KEYS[key][data_table]
+    datetime_key = keys.get("datetime")
+    return [datetime_key] if time_precision == "date" and datetime_key and datetime_key != keys["date"] else []
+
+
 # The unit fields carried along the aggregation, if the data table has them - see _get_unit_fields.
 UNIT_FIELDS = ("unit_concept_id", "unit_source_value")
 
@@ -179,7 +186,9 @@ def _generate_value_query(
     data_field_to_keep: Sequence,
     aggregation_strategy: str,
     datetime_column: str,
+    *,
     unit_fields: Sequence[str] = (),
+    finer_datetime_columns: Sequence[str] = (),
 ) -> str:
     # A row whose data_field_to_keep is NULL carries no value.
     # Such a row must neither mask a value observed in the same interval, nor have a say in the unit of the kept value.
@@ -193,7 +202,9 @@ def _generate_value_query(
 
     # is_present is 1 in all rows of the data_table; but need an aggregation operation, so use LAST.
     # LAST/FIRST need ORDER BY for chronological order; for the other strategies, ordering doesn't matter.
-    order_by = f" ORDER BY {datetime_column}" if single_row_aggregation else ""
+    # Break the rare timestamp ties by the full datetime (at date precision), then the kept columns.
+    tie_break = "".join(f", {column}" for column in [*finer_datetime_columns, *data_field_to_keep, *unit_fields])
+    order_by = f" ORDER BY {datetime_column}{tie_break}" if single_row_aggregation else ""
     is_present_query = f"LAST(is_present{order_by}) {row_filter} as is_present, "
 
     if single_row_aggregation:
@@ -304,7 +315,7 @@ def _write_long_time_interval_table(
     if keep_date in ["timepoint", "start", "end"]:
         datetime_col = _get_datetime_key(keep_date, data_table, time_precision)
         select_query = f"""
-        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col, unit_fields)} \
+        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col, unit_fields=unit_fields, finer_datetime_columns=_finer_datetime_keys(keep_date, data_table, time_precision))} \
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{datetime_col} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col} < lfi.interval_end \
                 AND CAST(data_table_with_presence_indicator.{datetime_col} AS DATE) <= lfi.end_date \
@@ -315,7 +326,7 @@ def _write_long_time_interval_table(
         datetime_col_start = _get_datetime_key("start", data_table, time_precision)
         datetime_col_end = _get_datetime_key("end", data_table, time_precision)
         select_query = f"""
-        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col_start, unit_fields)} \
+        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col_start, unit_fields=unit_fields, finer_datetime_columns=_finer_datetime_keys("start", data_table, time_precision))} \
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id \
                 AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id \
