@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
   "anndata>=0.13.1",
-  "duckdb",
+  "duckdb<2",                 # duckdb 2.0 breaks the OMOP readers; lift once supported
   "fast-array-utils[sparse]",
   "h5py",
   "pooch",
