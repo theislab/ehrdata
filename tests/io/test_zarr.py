@@ -248,7 +248,7 @@ def test_write_read_zarr_sparse_coo_3d(slot, chunks, tmp_path):
     assert {"indices_0", "indices_1", "indices_2", "values", "fill_value"} <= set(group.keys())
     assert group["indices_0"].dtype == np.int64  # indices are always written as int64 on disk
 
-    edata_read = read_zarr(path)
+    edata_read = read_zarr(path, harmonize_missing_values=False)
     restored = edata_read.X if slot == "X" else edata_read.layers["tem_data"]
     assert isinstance(restored, sparse.COO)
     assert np.array_equal(restored.todense(), dense)
