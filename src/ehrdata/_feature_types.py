@@ -82,8 +82,8 @@ def _classify_sparse_binary_columns(
     *,
     fill_value,
     fill_is_nan: bool,
-) -> np.ndarray:
-    """Per variable, decides if its values (explicit + implicit) are exactly `{0, 1}`."""
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per variable, decides if its values (explicit + implicit) are exactly `{0, 1}`, and if it has no values."""
     is_float = np.issubdtype(data.dtype, np.floating)
     nan_mask = np.isnan(data) if is_float else np.zeros(data.shape, dtype=bool)
 
@@ -109,20 +109,19 @@ def _classify_sparse_binary_columns(
         else:
             has_other |= has_implicit
 
-    all_nan = np.nonzero(non_nan_count == 0)[0]
-    if all_nan.size:
-        err_msg = f"Feature at position {all_nan[0]} contains only NaN values. Please drop this feature to infer the feature type."
-        raise ValueError(err_msg)
-
-    return has_zero & has_one & ~has_other
+    return has_zero & has_one & ~has_other, non_nan_count == 0
 
 
 def _binary_mask_to_results(
-    is_binary: np.ndarray, binary_as: Literal["categorical", "numeric"]
-) -> list[tuple[Literal["categorical", "numeric"], bool]]:
+    is_binary: np.ndarray, is_empty: np.ndarray, binary_as: Literal["categorical", "numeric"]
+) -> list[tuple[Literal["categorical", "numeric"] | None, bool]]:
     binary_result = (NUMERIC_TAG, False) if binary_as == "numeric" else (CATEGORICAL_TAG, True)
     numeric_result = (NUMERIC_TAG, False)
-    return [binary_result if b else numeric_result for b in is_binary]
+    # features without any value get no type, like in _detect_feature_type
+    return [
+        (None, False) if e else binary_result if b else numeric_result
+        for b, e in zip(is_binary, is_empty, strict=False)
+    ]
 
 
 def _detect_feature_types_sparse_coo_non_numeric(
@@ -169,10 +168,10 @@ def _(X: sparse.COO, *, binary_as: Literal["categorical", "numeric"] = "categori
     n_vars = X.shape[1]
     entries_per_var = X.size // n_vars  # rows * time steps (for 3D) per variable
     fill_is_nan = np.issubdtype(X.dtype, np.floating) and np.isnan(X.fill_value)
-    is_binary = _classify_sparse_binary_columns(
+    is_binary, is_empty = _classify_sparse_binary_columns(
         X.coords[1], X.data, n_vars, entries_per_var, fill_value=X.fill_value, fill_is_nan=fill_is_nan
     )
-    return _binary_mask_to_results(is_binary, binary_as)
+    return _binary_mask_to_results(is_binary, is_empty, binary_as)
 
 
 @_detect_feature_types_sparse.register(sp.csr_array)
@@ -180,8 +179,10 @@ def _(X: sparse.COO, *, binary_as: Literal["categorical", "numeric"] = "categori
 def _(X, *, binary_as: Literal["categorical", "numeric"] = "categorical"):
     # CSR stores each entry's column index in .indices
     n_vars = X.shape[1]
-    is_binary = _classify_sparse_binary_columns(X.indices, X.data, n_vars, X.shape[0], fill_value=0, fill_is_nan=False)
-    return _binary_mask_to_results(is_binary, binary_as)
+    is_binary, is_empty = _classify_sparse_binary_columns(
+        X.indices, X.data, n_vars, X.shape[0], fill_value=0, fill_is_nan=False
+    )
+    return _binary_mask_to_results(is_binary, is_empty, binary_as)
 
 
 @_detect_feature_types_sparse.register(sp.csc_array)
@@ -190,8 +191,10 @@ def _(X, *, binary_as: Literal["categorical", "numeric"] = "categorical"):
     # CSC stores entries grouped by column via .indptr
     n_vars = X.shape[1]
     var_coord = np.repeat(np.arange(n_vars), np.diff(X.indptr))
-    is_binary = _classify_sparse_binary_columns(var_coord, X.data, n_vars, X.shape[0], fill_value=0, fill_is_nan=False)
-    return _binary_mask_to_results(is_binary, binary_as)
+    is_binary, is_empty = _classify_sparse_binary_columns(
+        var_coord, X.data, n_vars, X.shape[0], fill_value=0, fill_is_nan=False
+    )
+    return _binary_mask_to_results(is_binary, is_empty, binary_as)
 
 
 def infer_feature_types(
@@ -271,7 +274,6 @@ def infer_feature_types(
                 empty_features.append(feature)
             if raise_warning:
                 uncertain_features.append(feature)
-
 
     edata.var[FEATURE_TYPE_KEY] = pd.Series(feature_types)[edata.var_names]
 

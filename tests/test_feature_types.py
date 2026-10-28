@@ -236,12 +236,19 @@ def test_feature_type_inference_array_types_binary_as_numeric_consistent(array_t
 
 
 @pytest.mark.parametrize("array_type", ARRAY_TYPES_NUMERIC)
-def test_feature_type_inference_array_types_all_nan_raises_consistently(array_type):
+def test_feature_type_inference_array_types_all_nan_skipped_consistently(array_type, monkeypatch):
+    messages = []
+    monkeypatch.setattr(logger, "warning", lambda msg, **kwargs: messages.append(msg))
+
     dense = np.array([[1.0, np.nan], [2.0, np.nan], [3.0, np.nan]])
     edata = EHRData(X=array_type(dense), var=pd.DataFrame(index=["v0", "v1"]))
+    infer_feature_types(edata, output=None)
 
-    with pytest.raises(ValueError, match="only NaN"):
-        infer_feature_types(edata, output=None)
+    assert edata.var["feature_type"]["v0"] == "numeric"
+    assert pd.isna(edata.var["feature_type"]["v1"])
+    skipped = [msg for msg in messages if "without any value" in msg]
+    assert len(skipped) == 1
+    assert "'v1'" in skipped[0]
 
 
 def test_feature_type_inference_sparse_coo():
