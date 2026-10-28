@@ -14,51 +14,52 @@ permissions:
   contents: read
 
 jobs:
-    run:
-        runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                notebook: [
-                        "docs/tutorials/getting_started.ipynb",
-                        "docs/tutorials/reading_data.ipynb",
-                        "docs/tutorials/real_dataset_example_physionet2019.ipynb",
-                        "docs/tutorials/omop_intro.ipynb",
-                        "docs/tutorials/omop_ml.ipynb",
-                        "docs/tutorials/interactive_visualization.ipynb",
-                    ]
-        steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-              with:
-                  submodules: "true"
-                  persist-credentials: false
+  run:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        notebook:
+          [
+            "docs/tutorials/getting_started.ipynb",
+            "docs/tutorials/reading_data.ipynb",
+            "docs/tutorials/real_dataset_example_physionet2019.ipynb",
+            "docs/tutorials/omop_intro.ipynb",
+            "docs/tutorials/omop_ml.ipynb",
+            "docs/tutorials/interactive_visualization.ipynb",
+          ]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: "true"
+          persist-credentials: false
 
-            - name: Set up Python
-              uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
-              with:
-                  python-version: "3.14"
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
 
-            - name: Install UV
-              run: pip install uv
+      - name: Install UV
+        run: pip install uv
 
-            - name: Install ehrdata and additional dependencies
-              run: uv pip install --system . nbconvert ipykernel graphviz torch ehrapy "vitessce[all]" bottleneck ome_zarr negspy
+      - name: Install ehrdata and additional dependencies
+        run: uv pip install --system . nbconvert ipykernel graphviz torch ehrapy "vitessce[all]" bottleneck ome_zarr negspy
 
-            # Restore example datasets so flaky/blocked upstream hosts (physionet.org etc.) don't break the tutorial runs.
-            # Keyed per notebook because each notebook downloads a different subset; bump the version on URL changes.
-            - name: Restore datasets cache
-              id: data-cache
-              uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-              with:
-                  path: docs/tutorials/ehrapy_data
-                  key: ehrapy-data-notebook-${{ matrix.notebook }}-v2
+      # Restore example datasets so flaky/blocked upstream hosts (physionet.org etc.) don't break the tutorial runs.
+      # Keyed per notebook because each notebook downloads a different subset; bump the version on URL changes.
+      - name: Restore datasets cache
+        id: data-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: docs/tutorials/ehrapy_data
+          key: ehrapy-data-notebook-${{ matrix.notebook }}-v2
 
-            - name: Run ${{ matrix.notebook }} Notebook
-              run: jupyter nbconvert --to notebook --execute ${{ matrix.notebook }}
+      - name: Run ${{ matrix.notebook }} Notebook
+        run: jupyter nbconvert --to notebook --execute ${{ matrix.notebook }}
 
-            # Only persist after a green run that had to download (cache miss), so a partial/failed download is never saved under the (immutable) key.
-            - name: Save datasets cache
-              if: steps.data-cache.outputs.cache-hit != 'true' && success()
-              uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-              with:
-                  path: docs/tutorials/ehrapy_data
-                  key: ehrapy-data-notebook-${{ matrix.notebook }}-v2
+      # Only persist after a green run that had to download (cache miss), so a partial/failed download is never saved under the (immutable) key.
+      - name: Save datasets cache
+        if: steps.data-cache.outputs.cache-hit != 'true' && success()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: docs/tutorials/ehrapy_data
+          key: ehrapy-data-notebook-${{ matrix.notebook }}-v2

@@ -149,6 +149,7 @@ nitpick_ignore = [
     ("py:class", "_duckdb.DuckDBPyConnection"),
     ("py:class", "duckdb.duckdb.DuckDBPyRelation"),
     ("py:class", "_duckdb.DuckDBPyRelation"),
+    ("py:class", "duckdb._relation.DuckDBPyRelation"),  # duckdb>=2.0
     # Is documented as a py:attribute instead
     ("py:class", "numpy.int64"),
     ("py:class", "numpy._typing._array_like.GenericAlias"),
@@ -164,12 +165,14 @@ nitpick_ignore = [
     ("py:class", "sparse._coo.core.COO"),
     ("py:class", "sparse.COO"),
     ("py:class", "pandas.core.arrays.base.ExtensionArray"),
+    ("py:class", "ehrdata.core.ehrdata.AlignedMappingProperty3D"),
 ]
 
 # Redirect broken parameter annotation classes
 qualname_overrides = {
     "zarr.storage._common.StorePath": "zarr.storage.StorePath",
-    "zarr.core.group.Group": "zarr.group.Group",
+    "zarr.core.group.StoreLike": "zarr.storage.StoreLike",
+    "zarr.core.group.Group": "zarr.Group",
     "lnschema_core.models.Artifact": "lamindb.Artifact",
     "pandas.core.series.Series": "pandas.Series",
     "pyarrow.lib.Table": "pyarrow.Table",
