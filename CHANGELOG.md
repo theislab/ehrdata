@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+## [0.5.0]
+
 ### Added
 
 - {func}`~ehrdata.rebin` aggregates the time axis of an {class}`~ehrdata.EHRData` into coarser intervals, for instance hourly into 6-hourly ones, with the `aggregation_strategy` of the loaders. It applies to `.X` and every layer with a time axis and updates the interval offsets in `.tem`. ([#316](https://github.com/theislab/ehrdata/pull/316)) @Zethson
