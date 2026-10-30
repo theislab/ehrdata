@@ -123,8 +123,8 @@ def write_zarr(
 
     To write to a `.zarr` store, `X`, and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
-    The same holds for the `object` columns of `.obs`, `.var` and `.tem`, with missing values staying missing: integers and booleans among them stay integers and booleans, in a nullable dtype if values are missing, while strings next to other values, and integers no numeric dtype holds exactly, are written as strings. Nullable float columns are written as float.
-    Datetime and timedelta columns cannot be written either, and are written as ISO 8601 strings; as any string column with a repeated or missing value, they are read back as categorical if `convert_strings_to_categoricals=True`.
+    The same holds for the `object` columns of `.obs`, `.var` and `.tem`; integers and booleans among them stay exact, and missing values stay missing.
+    Datetime and timedelta columns are written as ISO 8601 strings, read back as categorical with `convert_strings_to_categoricals=True` if a value repeats or is missing.
 
 
     Args:

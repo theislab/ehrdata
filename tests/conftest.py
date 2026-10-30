@@ -59,21 +59,16 @@ def _assert_dtype_object_array_with_missing_values_equal(a: np.ndarray, b: np.nd
 
 
 def _object_column(values: list) -> pd.Series:
-    # pandas 3 infers strings in an `object` array as `str`, while a database read can leave them behind as `object`
+    # pandas 3 would infer `str`; a database read can leave `object`
     return pd.Series(values, dtype=object, index=["0", "1", "2"])
 
 
 def _edata_with_columns_anndata_cannot_write(X) -> EHRData:
-    """An EHRData with `X` of shape `(3, 2, 2)` whose `.obs`, `.var` and `.tem` hold the column dtypes anndata cannot write.
-
-    Datetime and timedelta columns, and `object` columns holding something else than only strings: an all-null column
-    as a database read leaves it behind, integers, booleans, floats and strings next to a missing value, and values of
-    mixed types. Columns anndata writes itself sit next to them.
-    """
+    """EHRData whose `.obs`, `.var` and `.tem` hold columns anndata cannot write as they are, next to columns it can."""
     obs = pd.DataFrame(
         {
             "birth_datetime": pd.to_datetime(["2000-01-01 01:02:03", None, "2001-02-03 04:05:06"]),
-            # either side of the switch to daylight saving time, so with two offsets
+            # two UTC offsets, across the DST switch
             "visit_start_datetime": pd.to_datetime(["2000-03-26 01:00", "2000-03-26 03:00", None]).tz_localize(
                 "Europe/Berlin"
             ),
@@ -103,7 +98,7 @@ def _edata_with_columns_anndata_cannot_write(X) -> EHRData:
 
 
 def _values(column: pd.Series) -> list:
-    # missing values as None, however the dtype read back marks them
+    # missing values as None, whatever the dtype
     return [None if pd.isna(value) else value for value in column.astype(object)]
 
 
@@ -113,7 +108,7 @@ def _assert_columns_anndata_cannot_write_read_back(edata: EHRData, edata_read: E
     assert _values(obs["visit_start_datetime"]) == ["2000-03-26T01:00:00+01:00", "2000-03-26T03:00:00+02:00", None]
     assert _values(obs["length_of_stay"]) == ["P1DT2H0M0S", None, "P0DT3H0M0S"]
     assert obs["location_id"].isna().all()
-    # integers and booleans stay exact, beyond the integers a float64 holds
+    # exact beyond float64 precision
     assert obs["care_site_id"].dtype == "Int64"
     assert _values(obs["care_site_id"]) == [2**53 + 1, None, 3]
     assert obs["is_deceased"].dtype == "boolean"
@@ -124,7 +119,7 @@ def _assert_columns_anndata_cannot_write_read_back(edata: EHRData, edata_read: E
     assert _values(obs["person_source_value"]) == ["p1", "p2", "p3"]
     assert _values(obs["race_source_value"]) == ["a", "a", "b"]
     assert _values(obs["death_date"]) == ["2001-01-01", None, "unknown"]
-    # strings next to other values stay strings, keeping leading zeros, as do integers no numeric dtype holds exactly
+    # mixed values and too large integers fall back to strings
     assert _values(obs["concept_code"]) == ["007", "2", None]
     assert _values(obs["huge_id"]) == [str(2**63), None, "1"]
     assert _values(obs["duration"]) == ["P0DT1H0M0S", None, "P0DT0H30M0S"]
@@ -138,7 +133,7 @@ def _assert_columns_anndata_cannot_write_read_back(edata: EHRData, edata_read: E
     assert type(edata_read.X) is type(edata.X)
     assert np.array_equal(_to_dense(edata_read.X), _to_dense(edata.X), equal_nan=True)
 
-    # the object that was written is left as it was
+    # the input is left unchanged
     assert pd.api.types.is_datetime64_any_dtype(edata.obs["birth_datetime"])
     assert pd.api.types.is_timedelta64_dtype(edata.obs["length_of_stay"])
     assert edata.obs["care_site_id"].dtype == object
@@ -156,9 +151,9 @@ def _to_dense(X) -> np.ndarray:
 
 @pytest.fixture(params=["numpy_3d", "sparse_coo_3d", "scipy_csr_2d"])
 def X_any_array_type_322(request):
-    """An `X` of shape `(3, 2, 2)`, or `(3, 2)` as a 2D scipy sparse array, in each array type ehrdata writes."""
+    """`X` of shape `(3, 2, 2)`, 2D for scipy sparse, in each array type ehrdata writes."""
     X = np.arange(3 * 2 * 2, dtype=np.float64).reshape(3, 2, 2)
-    # in place of the only zero, so that no sparse array holds an implicit zero harmonize_missing_values turns into np.nan
+    # no implicit zeros, which harmonize_missing_values would turn into np.nan
     X[0, 0, 0] = np.nan
     return {
         "numpy_3d": X,
@@ -168,11 +163,7 @@ def X_any_array_type_322(request):
 
 
 def _edata_with_object_layers(X) -> EHRData:
-    """An EHRData with `object` layers of shape `(3, 2, 2)` next to `X`, which can be `None`.
-
-    The layer `numbers` holds integers and a missing value, the layer `strings` holds a variable of numbers as strings
-    and a variable of strings, both with a missing value.
-    """
+    """EHRData with `object` layers of numbers and of strings, with missing values, next to `X` (may be `None`)."""
     numbers = np.array([[[1, None], [2, 3]], [[4, 5], [6, 7]], [[8, 9], [10, 11]]], dtype=object)
     strings = np.array([[["1", None], ["a", "b"]], [["2", "3"], ["c", None]], [["4", "5"], ["d", "e"]]], dtype=object)
     return EHRData(
@@ -190,7 +181,7 @@ def _assert_object_layers_read_back(edata: EHRData, edata_read: EHRData):
         np.array([[[1, np.nan], [2, 3]], [[4, 5], [6, 7]], [[8, 9], [10, 11]]]),
         equal_nan=True,
     )
-    # each variable is cast to float on read where it can be, and its missing values are np.nan again
+    # cast per variable on read; missing values are np.nan again
     strings = edata_read.layers["strings"]
     assert np.array_equal(strings[:, 0, :].astype(np.float64), np.array([[1, np.nan], [2, 3], [4, 5]]), equal_nan=True)
     _assert_dtype_object_array_with_missing_values_equal(
@@ -203,7 +194,7 @@ def _assert_object_layers_read_back(edata: EHRData, edata_read: EHRData):
         assert type(edata_read.X) is type(edata.X)
         assert np.array_equal(_to_dense(edata_read.X), _to_dense(edata.X), equal_nan=True)
 
-    # the object that was written is left as it was
+    # the input is left unchanged
     assert edata.layers["numbers"].dtype == object
     assert edata.layers["strings"].dtype == object
 

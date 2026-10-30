@@ -2347,8 +2347,7 @@ def test_setup_variables_intervals_have_the_exact_length(
     [(ed.io.write_h5ed, ed.io.read_h5ed, "h5ed"), (ed.io.write_zarr, ed.io.read_zarr, "zarr")],
 )
 def test_write_read_of_omop_setup(omop_connection_vanilla, observation_table, write, read, suffix, tmp_path):
-    # the datetime columns and the columns the OMOP tables leave empty must not block writing
-    # what setup_obs and setup_variables built (https://github.com/theislab/ehrdata/issues/303)
+    # https://github.com/theislab/ehrdata/issues/303
     con = omop_connection_vanilla
     edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table)
     edata = ed.io.omop.setup_variables(
@@ -2372,7 +2371,7 @@ def test_write_read_of_omop_setup(omop_connection_vanilla, observation_table, wr
     assert list(edata_read.obs.columns) == list(edata.obs.columns)
     assert list(edata_read.var.columns) == list(edata.var.columns)
     assert np.allclose(edata_read.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME], equal_nan=True)
-    # the datetime columns are read back as ISO 8601 strings of the same points in time
+    # datetimes read back as ISO 8601 strings of the same times
     for df, df_read in [(edata.obs, edata_read.obs), (edata.var, edata_read.var)]:
         datetime_columns = [column for column in df.columns if pd.api.types.is_datetime64_any_dtype(df[column])]
         assert datetime_columns

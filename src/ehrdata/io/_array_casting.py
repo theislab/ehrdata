@@ -18,9 +18,9 @@ def _is_numeric_or_bool(array: Any) -> bool:
 
 
 def _cast_columns_to_float(array: Any) -> Any:
-    """Cast the values of each variable of a non-numeric array to float, leaving the variables where this fails unaltered."""
+    """Cast each variable of a non-numeric array to float where possible."""
     if not isinstance(array, np.ndarray):
-        # scipy sparse arrays are always numeric, and a non-numeric sparse.COO can only be cast as a whole
+        # scipy sparse is always numeric; sparse.COO can only be cast as a whole
         with contextlib.suppress(TypeError, ValueError):
             return array.astype(np.float64)
         return array
@@ -53,12 +53,12 @@ def _cast_variables_to_float(edata: EHRData) -> None:
 
 
 def _cast_object_array_to_float_or_str(array: Any, name: str) -> Any:
-    """Cast an `object` array held in memory to float, and if this fails, to str; return any other array as it is."""
+    """Cast an in-memory `object` array to float, else to str; return other arrays unchanged."""
     if not isinstance(array, np.ndarray | sparse.COO) or array.dtype != np.object_:
-        # a backed or dask array is written as it is
+        # backed and dask arrays are written as they are
         return array
     if isinstance(array, np.ndarray):
-        # missing values become np.nan, which a str array holds as "nan", a value harmonize_missing_values recognizes
+        # missing values become "nan" in a str array, which harmonize_missing_values reads back as np.nan
         array = np.where(pd.isna(array), np.nan, array)
     try:
         return array.astype(np.float64)
@@ -78,7 +78,7 @@ def _to_string(value: Any) -> str:
 
 
 def _to_string_array(column: pd.Series) -> pd.api.extensions.ExtensionArray:
-    """Write the values of a column as strings, datetimes and timedeltas in ISO 8601, keeping missing values missing."""
+    """Column values as strings, datetimes and timedeltas in ISO 8601; missing values stay missing."""
     is_observed = column.notna().to_numpy()
     values = column.to_numpy(dtype=object)
     return pd.array(
@@ -88,14 +88,14 @@ def _to_string_array(column: pd.Series) -> pd.api.extensions.ExtensionArray:
 
 
 def _to_numeric(column: pd.Series) -> pd.Series:
-    """Cast a column to a numeric dtype, keeping integers and booleans exact with a nullable dtype if values are missing."""
+    """Cast a column to numeric; integers and booleans stay exact, nullable if values are missing."""
     numeric = pd.to_numeric(column, dtype_backend="numpy_nullable")
     observed_values = column[column.notna()]
     if numeric.dtype == object or (
         pd.api.types.is_float_dtype(numeric.dtype)
         and observed_values.map(lambda value: isinstance(value, int | np.integer)).all()
     ):
-        # integers beyond what an int64 or uint64 holds
+        # integers beyond int64/uint64
         msg = f"Column {column.name!r} holds integers that no numeric dtype holds exactly."
         raise ValueError(msg)
     if pd.api.types.is_float_dtype(numeric.dtype) or not numeric.isna().any():
@@ -104,28 +104,24 @@ def _to_numeric(column: pd.Series) -> pd.Series:
 
 
 def _to_numpy_dtype(column: pd.Series) -> pd.Series:
-    # anndata has no writer for nullable floats, and np.nan marks their missing values just as well
+    # anndata cannot write nullable floats
     return pd.Series(
         column.to_numpy(dtype=column.dtype.numpy_dtype, na_value=np.nan), index=column.index, name=column.name
     )
 
 
 def _cast_dataframe_columns_to_writable_dtype(df: pd.DataFrame, slot: str) -> pd.DataFrame:
-    """Return a copy of a dataframe of `.obs`, `.var` or `.tem` with the columns anndata cannot write cast.
+    """Return a copy of `.obs`, `.var` or `.tem` with the columns anndata cannot write cast.
 
-    anndata has no writer for datetime and timedelta columns, and h5py rejects an `object` column holding anything
-    but strings, which is what a database read leaves behind for a column it found empty or with missing values.
-    Datetimes and timedeltas are written as ISO 8601 strings, such as `2100-01-01T08:30:00` and `P0DT1H0M0S`.
-    `object` columns are cast following the rule that `X` and the layers follow: to a numeric dtype, and to a
-    string dtype if that fails or if they hold strings next to other values. Integers and booleans stay exact,
-    in a nullable dtype if values are missing. Nullable float columns, which anndata cannot write either, are cast to
-    float. Missing values stay missing, and columns anndata can write are left as they are.
+    Datetimes and timedeltas become ISO 8601 strings. `object` columns become numeric where possible (integers and
+    booleans exact, nullable if values are missing), and strings otherwise or if they mix strings with other values.
+    Nullable floats become float. Missing values stay missing; all other columns are left as they are.
     """
     df = df.copy()
     cast_to_iso_8601 = []
     cast_to_string = []
 
-    # by position, as a dataframe with repeated column names is left for anndata to reject
+    # by position, so that anndata itself rejects repeated column names
     for position, column_name in enumerate(df.columns):
         column = df.iloc[:, position]
 
@@ -143,12 +139,12 @@ def _cast_dataframe_columns_to_writable_dtype(df: pd.DataFrame, slot: str) -> pd
                 df.isetitem(position, np.full(len(column), np.nan))
             elif is_string.all():
                 if len(observed_values) < len(column):
-                    # anndata writes an all-string column itself, but not the missing values among them
+                    # anndata cannot write missing values in an `object` string column
                     df.isetitem(position, column.astype("string"))
             else:
                 try:
                     if is_string.any():
-                        # strings next to other values stay strings, so that codes like "007" keep their leading zeros
+                        # keeps codes like "007" intact
                         msg = f"Column {column_name!r} holds strings next to other values."
                         raise ValueError(msg)
                     df.isetitem(position, _to_numeric(column))

@@ -396,8 +396,7 @@ def test_read_minimal_corpus_h5():
 
 
 def test_write_read_h5ed_casts_columns_anndata_cannot_write(X_any_array_type_322, tmp_path):
-    # datetime columns and `object` columns holding non-strings are cast on write instead of failing the write,
-    # as they did for the `.obs` and `.var` of an OMOP setup (https://github.com/theislab/ehrdata/issues/303)
+    # https://github.com/theislab/ehrdata/issues/303
     edata = _edata_with_columns_anndata_cannot_write(X_any_array_type_322)
     path = tmp_path / "columns_anndata_cannot_write.h5ed"
 
@@ -408,7 +407,7 @@ def test_write_read_h5ed_casts_columns_anndata_cannot_write(X_any_array_type_322
 
 @pytest.mark.parametrize("with_X", [True, False])
 def test_write_read_h5ed_casts_object_layers(X_any_array_type_322, with_X, tmp_path):
-    # each `object` layer is cast on write and on read, whatever `X` is, and is not overwritten by `X`
+    # each layer is cast on its own, whatever `X` is
     edata = _edata_with_object_layers(X_any_array_type_322 if with_X else None)
     path = tmp_path / "object_layers.h5ed"
 
@@ -421,7 +420,7 @@ def test_write_read_h5ed_casts_object_layers(X_any_array_type_322, with_X, tmp_p
     ("write", "read", "suffix"), [(write_h5ed, read_h5ed, "h5ed"), (write_zarr, read_zarr, "zarr")]
 )
 def test_write_backed_h5ed(write, read, suffix, tmp_path):
-    # an EHRData read in backed mode, whose string layer h5py reads as `object`, is written without being copied
+    # h5py reads the string layer as `object`; a backed EHRData cannot be copied
     edata = EHRData(X=np.zeros((2, 2)), layers={"strings": np.array([["a", None], ["c", "d"]], dtype=object)})
     write_h5ed(edata, tmp_path / "edata.h5ed")
     edata_backed = read_h5ed(

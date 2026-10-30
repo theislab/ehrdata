@@ -323,8 +323,7 @@ def test_read_minimal_corpus_zarr():
 
 
 def test_write_read_zarr_casts_columns_anndata_cannot_write(X_any_array_type_322, tmp_path):
-    # datetime columns and `object` columns holding non-strings are cast on write instead of failing the write,
-    # as they did for the `.obs` and `.var` of an OMOP setup (https://github.com/theislab/ehrdata/issues/303)
+    # https://github.com/theislab/ehrdata/issues/303
     edata = _edata_with_columns_anndata_cannot_write(X_any_array_type_322)
     path = tmp_path / "columns_anndata_cannot_write.zarr"
 
@@ -335,7 +334,7 @@ def test_write_read_zarr_casts_columns_anndata_cannot_write(X_any_array_type_322
 
 @pytest.mark.parametrize("with_X", [True, False])
 def test_write_read_zarr_casts_object_layers(X_any_array_type_322, with_X, tmp_path):
-    # each `object` layer is cast on write and on read, whatever `X` is, and is not overwritten by `X`
+    # each layer is cast on its own, whatever `X` is
     edata = _edata_with_object_layers(X_any_array_type_322 if with_X else None)
     path = tmp_path / "object_layers.zarr"
 
@@ -345,14 +344,13 @@ def test_write_read_zarr_casts_object_layers(X_any_array_type_322, with_X, tmp_p
 
 
 def test_write_zarr_keeps_string_columns_without_convert_strings_to_categoricals(X_any_array_type_322, tmp_path):
-    # the cast of the columns anndata cannot write leaves the string columns to `convert_strings_to_categoricals`
     edata = _edata_with_columns_anndata_cannot_write(X_any_array_type_322)
     path = tmp_path / "string_columns.zarr"
 
     write_zarr(edata, path, convert_strings_to_categoricals=False)
     edata_read = read_zarr(path, harmonize_missing_values=False)
 
-    # each column holds a repeated value or a missing value, so that a conversion would make it categorical
+    # each would become categorical if converted
     for column in ["birth_datetime", "gender_source_value", "race_source_value", "death_date", "concept_code"]:
         assert not isinstance(edata_read.obs[column].dtype, pd.CategoricalDtype)
     assert not isinstance(edata_read.tem["phase"].dtype, pd.CategoricalDtype)
