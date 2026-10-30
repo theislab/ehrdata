@@ -14,7 +14,10 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION,
     EHRDATA_ONDISK_VERSION_KEY,
 )
-from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
+from ehrdata.io._array_casting import (
+    _cast_dataframe_columns_to_writable_dtype,
+    _cast_variables_to_float,
+)
 from ehrdata.io._coo_codec import write_coo_zarr
 from ehrdata.io._ondisk import (
     _allow_write_nullable_strings,
@@ -120,6 +123,8 @@ def write_zarr(
 
     To write to a `.zarr` store, `X`, and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
+    The same holds for the `object` columns of `.obs`, `.var` and `.tem`; integers and booleans among them stay exact, and missing values stay missing.
+    Datetime and timedelta columns are written as ISO 8601 strings, read back as categorical with `convert_strings_to_categoricals=True` if a value repeats or is missing.
 
 
     Args:
@@ -134,16 +139,16 @@ def write_zarr(
         >>> ed.io.write_zarr("mimic_2.ehrdata.zarr", edata)
     """
     filename = Path(filename)
-    edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
 
     store = zarr.open_group(filename, mode="a", use_consolidated=False, zarr_format=3)
 
     adata, coo_obsm = encode_for_disk(edata)
+    tem = _cast_dataframe_columns_to_writable_dtype(edata.tem, "tem")
 
     if convert_strings_to_categoricals:
         adata.strings_to_categoricals(adata.obs)
         adata.strings_to_categoricals(adata.var)
-        adata.strings_to_categoricals(edata.tem)
+        adata.strings_to_categoricals(tem)
 
     # write_sharded this is a slightly modified version from https://anndata.readthedocs.io/en/stable/tutorials/zarr-v3.html
     # write_sharded is intended as a future blueprint of implementing better chunking defaults for ehrdata based based on real usecases
@@ -185,7 +190,7 @@ def write_zarr(
         for key, coo in coo_obsm.items():
             write_coo_zarr(obsm_group.require_group(key), coo)
 
-    ad.io.write_elem(store, "tem", edata.tem)
+    ad.io.write_elem(store, "tem", tem)
 
     store.attrs[EHRDATA_ENCODING_TYPE_KEY_ZARR] = EHRDATA_ENCODING_TYPE
     store.attrs[EHRDATA_ONDISK_VERSION_KEY] = EHRDATA_ONDISK_VERSION

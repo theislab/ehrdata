@@ -21,6 +21,7 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION,
     EHRDATA_ONDISK_VERSION_KEY,
 )
+from ehrdata.io._array_casting import _cast_dataframe_columns_to_writable_dtype, _cast_object_array_to_float_or_str
 from ehrdata.io._coo_codec import is_coo_group, read_coo
 
 if TYPE_CHECKING:
@@ -82,6 +83,7 @@ def encode_for_disk(edata: EHRData) -> tuple[ad.AnnData, dict[str, sparse.COO]]:
 
     Dense 3D arrays are placed into the AnnData's ``.obsm`` under the reserved keys.
     Sparse 3D arrays, not writeable with AnnData, are pulled out into the returned ``sparse_3d_data`` mapping (keyed by the same reserved ``.obsm`` keys)
+    In-memory ``object`` arrays and the ``.obs``/``.var`` columns anndata cannot write are cast, leaving ``edata`` unchanged.
     """
     _reject_stray_coo(edata)
 
@@ -89,7 +91,7 @@ def encode_for_disk(edata: EHRData) -> tuple[ad.AnnData, dict[str, sparse.COO]]:
     sparse_3d_data: dict[str, sparse.COO] = {}
     layers = {}
 
-    X = edata.X
+    X = _cast_object_array_to_float_or_str(edata.X, "X")
     if _is_3d(X):
         if isinstance(X, sparse.COO):
             sparse_3d_data[EHRDATA_OBSM_3D_X_KEY] = X
@@ -100,6 +102,7 @@ def encode_for_disk(edata: EHRData) -> tuple[ad.AnnData, dict[str, sparse.COO]]:
     for key, value in edata.layers.items():
         if key is None:  # anndata 0.13: the unified `.X` slot, already handled above
             continue
+        value = _cast_object_array_to_float_or_str(value, f"layers[{key!r}]")
         if _is_3d(value):
             target = _obsm_key_for_layer(key)
             if isinstance(value, sparse.COO):
@@ -111,8 +114,8 @@ def encode_for_disk(edata: EHRData) -> tuple[ad.AnnData, dict[str, sparse.COO]]:
 
     adata = ad.AnnData(
         X=X,
-        obs=edata.obs.copy(),
-        var=edata.var.copy(),
+        obs=_cast_dataframe_columns_to_writable_dtype(edata.obs, "obs"),
+        var=_cast_dataframe_columns_to_writable_dtype(edata.var, "var"),
         uns=dict(edata.uns),
         obsm=obsm,
         varm=dict(edata.varm),
