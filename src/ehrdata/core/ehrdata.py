@@ -64,20 +64,15 @@ def _validate_array_3d(obj: AnnData | EHRData, value: Mapping[str, Any]) -> None
 
 
 def _subset(a: np.ndarray | pd.DataFrame, subset_idx: Index):
-    # An IndexManager isn't Iterable — materialise it so the np.ix_ branches below select by index combination (outer product), not coordinate pairs.
+    # An IndexManager isn't Iterable — materialise it so that it counts as an array indexer below.
     if isinstance(subset_idx, tuple):
         subset_idx = tuple(np.asarray(x) if isinstance(x, IndexManager) else x for x in subset_idx)
-    # Select as combination of indexes, not coordinates
-    # Correcting for indexing behaviour of np.ndarray
-    if (len(subset_idx) == 2 and all(isinstance(x, Iterable) for x in subset_idx)) or (
-        len(subset_idx) == 3 and all(isinstance(x, Iterable) for x in subset_idx)
-    ):
-        subset_idx = np.ix_(*subset_idx)
-        return a[subset_idx]
-    elif len(subset_idx) == 3 and all(isinstance(x, Iterable) for x in subset_idx[:2]):
-        return a[np.ix_(*subset_idx[:2])][subset_idx[2]]
-    else:
-        return a[subset_idx]
+    # Several array indexers would select coordinates pointwise, so apply them one axis at a time to select their outer product.
+    if isinstance(subset_idx, tuple) and sum(isinstance(x, Iterable) for x in subset_idx) > 1:
+        for axis, idx in enumerate(subset_idx):
+            a = a[(slice(None),) * axis + (idx,)]
+        return a
+    return a[subset_idx]
 
 
 class AlignedActual3D(AlignedActual):

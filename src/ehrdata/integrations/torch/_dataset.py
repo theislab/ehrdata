@@ -56,10 +56,10 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
 
         self.n_timesteps = con.execute(
             f"SELECT COUNT(DISTINCT interval_step) FROM long_person_timestamp_feature_value_{self.data_tables[0]}"
-        ).fetchone()[0]
+        ).fetchall()[0][0]
         self.n_variables = con.execute(
             f"SELECT COUNT(DISTINCT data_table_concept_id) FROM long_person_timestamp_feature_value_{self.data_tables[0]}"
-        ).fetchone()[0]
+        ).fetchall()[0][0]
 
     def __len__(self):
         where_clause = f"WHERE obs_id IN ({','.join(str(_) for _ in self.idxs)})" if self.idxs else ""
@@ -68,11 +68,11 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
             FROM long_person_timestamp_feature_value_{self.data_tables[0]}
             {where_clause}
         """
-        return self.con.execute(query).fetchone()[0]
+        return self.con.execute(query).fetchall()[0][0]
 
     def __getitem__(self, obs_index):
         obs_id_query = f"SELECT DISTINCT obs_id FROM long_person_timestamp_feature_value_{self.data_tables[0]} WHERE obs_index = {obs_index}"
-        obs_id = self.con.execute(obs_id_query).fetchone()[0]
+        obs_id = self.con.execute(obs_id_query).fetchall()[0][0]
         where_clause = f"WHERE obs_index = {obs_index}"
 
         if self.idxs:

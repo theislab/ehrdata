@@ -31,3 +31,26 @@
     move_to_x
 
 ```
+
+## Time Axis
+
+```{eval-rst}
+.. autosummary::
+    :toctree:
+    :nosignatures:
+
+    rebin
+
+```
+
+## Code Vocabularies
+
+```{eval-rst}
+.. autosummary::
+    :toctree:
+    :nosignatures:
+
+    annotate_codes
+    aggregate_codes
+
+```

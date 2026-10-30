@@ -12,12 +12,17 @@
 
     dt.ehrdata_blobs
     dt.mimic_iv_omop
+    dt.mimic_iv_meds
     dt.gibleed_omop
     dt.synthea27nj_omop
     dt.physionet2012
     dt.physionet2019
+    dt.eicu_crd
+    dt.pbcseq
     dt.mimic_2
     dt.mimic_2_preprocessed
     dt.diabetes_130_raw
     dt.diabetes_130_fairlearn
+    dt.heart_failure
+    dt.heart_disease
 ```

@@ -24,6 +24,7 @@ from ehrdata.io._array_casting import (
 )
 from ehrdata.io._coo_codec import write_coo_h5
 from ehrdata.io._ondisk import (
+    _allow_write_nullable_strings,
     _check_020_ehrdata_on_disk_format,
     decode_init_dict,
     encode_for_disk,
@@ -120,6 +121,7 @@ def read_h5ed(
     return edata
 
 
+@_allow_write_nullable_strings
 def write_h5ed(
     edata: EHRData,
     filename: str | Path,

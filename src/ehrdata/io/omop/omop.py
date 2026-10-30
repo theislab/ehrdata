@@ -35,6 +35,7 @@ from ehrdata.io.omop._queries import (
     DATA_TABLE_CONCEPT_ID_TRUNK,
     SINGLE_ROW_AGGREGATION_STRATEGIES,
     UNITLESS_AGGREGATION_STRATEGIES,
+    _concept_ids_condition,
     _get_ordered_table,
     _get_table_join,
     _get_unit_fields,
@@ -106,14 +107,8 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
             column_names = backend_handle.execute("DESCRIBE temp_table").df()["column_name"].values
             select_columns = ", ".join([f'"{col}" AS "{col.lower()}"' for col in column_names])
             create_table_with_lowercase_columns_query = (
-                f"CREATE TABLE {regular_omop_table_name} AS SELECT {select_columns} FROM temp_table"
+                f"CREATE OR REPLACE TABLE {regular_omop_table_name} AS SELECT {select_columns} FROM temp_table"
             )
-
-            # write proper table
-            existing_tables = backend_handle.execute("SHOW TABLES").df()["name"].values
-            if regular_omop_table_name in existing_tables:
-                logging.info(f"Table {regular_omop_table_name} already exists. Dropping and recreating...")
-                backend_handle.execute(f"DROP VIEW {regular_omop_table_name}")
 
             backend_handle.execute(create_table_with_lowercase_columns_query)
 
@@ -153,12 +148,12 @@ def _check_one_unit_per_feature(backend_handle, data_table, unit_key="unit_conce
 
 
 def _check_one_unit_per_feature_for_aggregation(
-    backend_handle, data_table, value_field, aggregation_strategy, unit_fields
+    backend_handle, data_table, value_field, aggregation_strategy, unit_fields, *, concept_ids
 ) -> None:
     """Verify that the data table allows the chosen aggregation strategy to combine values.
 
     A strategy that is not one of SINGLE_ROW_AGGREGATION_STRATEGIES combines the values of several rows into one, which is only meaningful if these values share a unit.
-    Only the rows carrying a value are considered, as only those enter the aggregation; among these, a missing unit (NULL) is a unit of its own, as in the unit report.
+    Only the rows of the concept_ids carrying a value are considered, as only those enter the aggregation; among these, a missing unit (NULL) is a unit of its own, as in the unit report.
     Unitless aggregations are exempt: 'is_present' has no unit to begin with, and UNITLESS_AGGREGATION_STRATEGIES yield a number of data points.
     Data tables that do not have a 'unit_concept_id' are exempt, too: they tell no unit that could disagree.
     """
@@ -174,7 +169,7 @@ def _check_one_unit_per_feature_for_aggregation(
     feature_unit_pairs = backend_handle.execute(
         f"""
         SELECT DISTINCT {concept_id_key}, unit_concept_id FROM {data_table}
-        WHERE {value_field} IS NOT NULL
+        WHERE {value_field} IS NOT NULL AND {_concept_ids_condition(data_table, concept_ids)}
         """
     ).fetchall()
 
@@ -305,6 +300,8 @@ def setup_obs(
     - If `"person_cohort"`, the `cohort_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
     - If `"person_observation_period"`, the `observation_period_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
     - If `"person_visit_occurrence"`, the `visit_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
+
+    For the tables other than `"person"`, the respective end date (e.g. `observation_period_end_date`) ends the time series: data points after this day are not considered.
 
     For `"person_cohort"`, the `subject_id` of the cohort is considered to be the `person_id` for a join.
 
@@ -486,7 +483,13 @@ def setup_variables(
     concept_mapping = False
     for data_table in data_tables:
         # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
-        count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_table}").df()["count"].item()
+        count = (
+            backend_handle.execute(
+                f"SELECT COUNT(*) as count FROM {data_table} WHERE {_concept_ids_condition(data_table, concept_ids)}"
+            )
+            .df()["count"]
+            .item()
+        )
         if count == 0:
             logging.warning(f"No data found in {data_table}. Returning edata without data of {data_table}.")
             empty_table_counter += 1
@@ -494,7 +497,12 @@ def setup_variables(
 
         unit_fields = _get_unit_fields(backend_handle, data_table)
         _check_one_unit_per_feature_for_aggregation(
-            backend_handle, data_table, data_field_to_keep[data_table][0], aggregation_strategy, unit_fields
+            backend_handle,
+            data_table,
+            data_field_to_keep[data_table][0],
+            aggregation_strategy,
+            unit_fields,
+            concept_ids=concept_ids,
         )
 
         _write_long_time_interval_table(
@@ -508,6 +516,7 @@ def setup_variables(
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
             aggregation_strategy=aggregation_strategy,
+            concept_ids=concept_ids,
         )
 
         _check_one_unit_per_feature(backend_handle, data_table)
@@ -556,8 +565,8 @@ def setup_variables(
                     var,
                     unit_report,
                     how="left",
-                    left_index=True,
-                    right_on="unit_concept_id",
+                    left_on="data_table_concept_id",
+                    right_on="concept_id",
                     suffixes=("", "_unit"),
                 )
                 var = pd.merge(
@@ -607,8 +616,8 @@ def setup_variables(
     else:
         edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
 
-    for data_table in data_tables:
-        edata.uns[f"unit_report_{data_table}"] = unit_report_collector[data_table]
+    for data_table, unit_report in unit_report_collector.items():
+        edata.uns[f"unit_report_{data_table}"] = unit_report
 
     return edata
 
@@ -753,7 +762,13 @@ def setup_interval_variables(
     concept_mapping = False
     for data_table in data_tables:
         # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
-        count = backend_handle.execute(f"SELECT COUNT(*) as count FROM {data_table}").df()["count"].item()
+        count = (
+            backend_handle.execute(
+                f"SELECT COUNT(*) as count FROM {data_table} WHERE {_concept_ids_condition(data_table, concept_ids)}"
+            )
+            .df()["count"]
+            .item()
+        )
         if count == 0:
             logging.warning(f"No data found in {data_table}. Returning edata without data of {data_table}.")
             empty_table_counter += 1
@@ -761,7 +776,12 @@ def setup_interval_variables(
 
         unit_fields = _get_unit_fields(backend_handle, data_table)
         _check_one_unit_per_feature_for_aggregation(
-            backend_handle, data_table, data_field_to_keep[data_table][0], aggregation_strategy, unit_fields
+            backend_handle,
+            data_table,
+            data_field_to_keep[data_table][0],
+            aggregation_strategy,
+            unit_fields,
+            concept_ids=concept_ids,
         )
 
         _write_long_time_interval_table(
@@ -775,6 +795,7 @@ def setup_interval_variables(
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
             aggregation_strategy=aggregation_strategy,
+            concept_ids=concept_ids,
             keep_date=keep_date,
         )
 

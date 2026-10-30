@@ -59,7 +59,7 @@ If you don't have Python installed, we recommend installing [Mambaforge][].
 
 There are several alternative options to install ehrdata:
 
-1) Install the latest release of `ehrdata` from [PyPI][]:
+1. Install the latest release of `ehrdata` from [PyPI][]:
 
 ```bash
 pip install ehrdata

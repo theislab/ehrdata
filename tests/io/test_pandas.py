@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from sparse import COO
 from tests.conftest import _assert_shape_matches
 
 from ehrdata import EHRData
@@ -403,6 +404,23 @@ def test_to_pandas_longitudinal_long(edata_333):
     df = to_pandas(edata_333, layer=DEFAULT_TEM_LAYER_NAME, format="long")
     assert df.shape == (27, 4)
     assert np.array_equal(df.iloc[13, :3].values, np.array(["obs2", "var2", "t2"]).astype(object))
+    assert df.iloc[13, 3] == 14
+
+
+def test_to_pandas_longitudinal_long_named_indices(edata_333):
+    expected = to_pandas(edata_333, layer=DEFAULT_TEM_LAYER_NAME, format="long")
+    edata_333.obs.index.name = "subject_id"
+    edata_333.tem.index.name = "interval_step"
+
+    pd.testing.assert_frame_equal(to_pandas(edata_333, layer=DEFAULT_TEM_LAYER_NAME, format="long"), expected)
+
+
+def test_to_pandas_longitudinal_long_sparse(edata_333):
+    edata_333.layers[DEFAULT_TEM_LAYER_NAME] = COO.from_numpy(edata_333.layers[DEFAULT_TEM_LAYER_NAME])
+
+    df = to_pandas(edata_333, layer=DEFAULT_TEM_LAYER_NAME, format="long")
+
+    assert df.shape == (27, 4)
     assert df.iloc[13, 3] == 14
 
 
