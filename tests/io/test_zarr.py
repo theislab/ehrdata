@@ -9,10 +9,14 @@ import zarr
 from scipy.sparse import issparse
 from tests.conftest import (
     TEST_DATA_PATH,
+    _assert_columns_anndata_cannot_write_read_back,
     _assert_dtype_object_array_with_missing_values_equal,
     _assert_io_read,
+    _assert_object_layers_read_back,
     _assert_shape_matches,
     _check_aligned_anndata_parts_equal,
+    _edata_with_columns_anndata_cannot_write,
+    _edata_with_object_layers,
 )
 
 from ehrdata.core.constants import EHRDATA_ONDISK_VERSION
@@ -316,3 +320,37 @@ def test_read_minimal_corpus_zarr():
     edata_020 = read_zarr(TEST_PATH_ZARR / "edata_minimal_v0_2_0.ehrdata.zarr")
     _assert_shape_matches(edata_020, (3, 2, 2))
     assert np.array_equal(np.asarray(edata_020.layers["tem_data"]), np.arange(3 * 2 * 2, dtype=float).reshape(3, 2, 2))
+
+
+def test_write_read_zarr_casts_columns_anndata_cannot_write(X_any_array_type_322, tmp_path):
+    # https://github.com/theislab/ehrdata/issues/303
+    edata = _edata_with_columns_anndata_cannot_write(X_any_array_type_322)
+    path = tmp_path / "columns_anndata_cannot_write.zarr"
+
+    write_zarr(edata, path)
+
+    _assert_columns_anndata_cannot_write_read_back(edata, read_zarr(path, harmonize_missing_values=False))
+
+
+@pytest.mark.parametrize("with_X", [True, False])
+def test_write_read_zarr_casts_object_layers(X_any_array_type_322, with_X, tmp_path):
+    # each layer is cast on its own, whatever `X` is
+    edata = _edata_with_object_layers(X_any_array_type_322 if with_X else None)
+    path = tmp_path / "object_layers.zarr"
+
+    write_zarr(edata, path)
+
+    _assert_object_layers_read_back(edata, read_zarr(path))
+
+
+def test_write_zarr_keeps_string_columns_without_convert_strings_to_categoricals(X_any_array_type_322, tmp_path):
+    edata = _edata_with_columns_anndata_cannot_write(X_any_array_type_322)
+    path = tmp_path / "string_columns.zarr"
+
+    write_zarr(edata, path, convert_strings_to_categoricals=False)
+    edata_read = read_zarr(path, harmonize_missing_values=False)
+
+    # each would become categorical if converted
+    for column in ["birth_datetime", "gender_source_value", "race_source_value", "death_date", "concept_code"]:
+        assert not isinstance(edata_read.obs[column].dtype, pd.CategoricalDtype)
+    assert not isinstance(edata_read.tem["phase"].dtype, pd.CategoricalDtype)

@@ -1,13 +1,39 @@
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING
+import datetime as dt
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pandas as pd
+import sparse
 
 if TYPE_CHECKING:
     from ehrdata import EHRData
 from ehrdata._logger import logger
+
+
+def _is_numeric_or_bool(array: Any) -> bool:
+    return np.issubdtype(array.dtype, np.number) or np.issubdtype(array.dtype, np.bool_)
+
+
+def _cast_columns_to_float(array: Any) -> Any:
+    """Cast each variable of a non-numeric array to float where possible."""
+    if not isinstance(array, np.ndarray):
+        # scipy sparse is always numeric; sparse.COO can only be cast as a whole
+        with contextlib.suppress(TypeError, ValueError):
+            return array.astype(np.float64)
+        return array
+
+    out = array.astype(
+        object
+    ).copy()  # A fresh object array is built so columns can independently hold floats: numpy 2 / pandas 3 read string data back as a homogeneous ``StringDType`` array, into which an in-place ``astype(float64)`` assignment would merely re-stringify the values.
+
+    for column in range(out.shape[1]):
+        with contextlib.suppress(TypeError, ValueError):
+            out[:, column] = out[:, column].astype(np.float64)
+
+    return out
 
 
 def _cast_variables_to_float(edata: EHRData) -> None:
@@ -16,50 +42,121 @@ def _cast_variables_to_float(edata: EHRData) -> None:
         msg = "Cannot cast variables to float when EHRData is backed."
         raise ValueError(msg)
 
-    if edata.X is not None and not (np.issubdtype(edata.X.dtype, np.number) or np.issubdtype(edata.X.dtype, np.bool_)):
-        # note that every scipy sparse array is of a numeric dtype and will enter this if block
-        # further sparse.COO, while being allowed in theory to be str dtype, is only allowed numeric dtypes under binsparse specification which we follow closely
-        out = edata.X.astype(
-            object
-        ).copy()  # A fresh object array is built so columns can independently hold floats: numpy 2 / pandas 3 read string data back as a homogeneous ``StringDType`` array, into which an in-place ``astype(float64)`` assignment would merely re-stringify the values.
+    if edata.X is not None and not _is_numeric_or_bool(edata.X):
+        edata.X = _cast_columns_to_float(edata.X)
 
-        for column in range(out.shape[1]):
-            with contextlib.suppress(ValueError):
-                out[:, column] = out[:, column].astype(np.float64)
-
-        edata.X = out
-
-    for key in edata.layers:
-        if edata.layers[key] is not None and not (
-            np.issubdtype(edata.layers[key].dtype, np.number) or np.issubdtype(edata.layers[key].dtype, np.bool_)
-        ):
-            # note that every scipy sparse array is of a numeric dtype and will enter this if block
-            # further sparse.COO, while being allowed in theory to be str dtype, is only allowed numeric dtypes under binsparse specification which we follow closely
-            out = edata.X.astype(object).copy()
-
-            for column in range(out.shape[1]):
-                with contextlib.suppress(ValueError):
-                    out[:, column] = out[:, column].astype(np.float64)
-
-            edata.layers[key] = out
+    for key, array in list(edata.layers.items()):
+        if key is None:  # anndata 0.13: the unified `.X` slot, already handled above
+            continue
+        if array is not None and not _is_numeric_or_bool(array):
+            edata.layers[key] = _cast_columns_to_float(array)
 
 
-def _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata: EHRData) -> EHRData:
-    """Cast the dtype of object arrays to float, and if this fails, to str."""
-    if edata.X is not None and edata.X.dtype == np.object_:
-        edata = edata.copy()
-        try:
-            edata.X = edata.X.astype(np.float64)
-        except ValueError:
-            edata.X = edata.X.astype(str)
-        for layer, array in edata.layers.items():
-            if array.dtype == np.object_:
+def _cast_object_array_to_float_or_str(array: Any, name: str) -> Any:
+    """Cast an in-memory `object` array to float, else to str; return other arrays unchanged."""
+    if not isinstance(array, np.ndarray | sparse.COO) or array.dtype != np.object_:
+        # backed and dask arrays are written as they are
+        return array
+    if isinstance(array, np.ndarray):
+        # missing values become "nan" in a str array, which harmonize_missing_values reads back as np.nan
+        array = np.where(pd.isna(array), np.nan, array)
+    try:
+        return array.astype(np.float64)
+    except (TypeError, ValueError):
+        logger.warning(f"edata.{name} is of dtype object and not numeric: it is cast to dtype 'str' for writing.")
+        return array.astype(str)
+
+
+def _to_string(value: Any) -> str:
+    if isinstance(value, dt.timedelta | np.timedelta64):
+        return pd.Timedelta(value).isoformat()
+    if isinstance(value, np.datetime64):
+        return pd.Timestamp(value).isoformat()
+    if isinstance(value, dt.date | dt.time):
+        return value.isoformat()
+    return str(value)
+
+
+def _to_string_array(column: pd.Series) -> pd.api.extensions.ExtensionArray:
+    """Column values as strings, datetimes and timedeltas in ISO 8601; missing values stay missing."""
+    is_observed = column.notna().to_numpy()
+    values = column.to_numpy(dtype=object)
+    return pd.array(
+        [_to_string(value) if observed else None for value, observed in zip(values, is_observed, strict=True)],
+        dtype="string",
+    )
+
+
+def _to_numeric(column: pd.Series) -> pd.Series:
+    """Cast a column to numeric; integers and booleans stay exact, nullable if values are missing."""
+    numeric = pd.to_numeric(column, dtype_backend="numpy_nullable")
+    observed_values = column[column.notna()]
+    if numeric.dtype == object or (
+        pd.api.types.is_float_dtype(numeric.dtype)
+        and observed_values.map(lambda value: isinstance(value, int | np.integer)).all()
+    ):
+        # integers beyond int64/uint64
+        msg = f"Column {column.name!r} holds integers that no numeric dtype holds exactly."
+        raise ValueError(msg)
+    if pd.api.types.is_float_dtype(numeric.dtype) or not numeric.isna().any():
+        return _to_numpy_dtype(numeric)
+    return numeric
+
+
+def _to_numpy_dtype(column: pd.Series) -> pd.Series:
+    # anndata cannot write nullable floats
+    return pd.Series(
+        column.to_numpy(dtype=column.dtype.numpy_dtype, na_value=np.nan), index=column.index, name=column.name
+    )
+
+
+def _cast_dataframe_columns_to_writable_dtype(df: pd.DataFrame, slot: str) -> pd.DataFrame:
+    """Return a copy of `.obs`, `.var` or `.tem` with the columns anndata cannot write cast.
+
+    Datetimes and timedeltas become ISO 8601 strings. `object` columns become numeric where possible (integers and
+    booleans exact, nullable if values are missing), and strings otherwise or if they mix strings with other values.
+    Nullable floats become float. Missing values stay missing; all other columns are left as they are.
+    """
+    df = df.copy()
+    cast_to_iso_8601 = []
+    cast_to_string = []
+
+    # by position, so that anndata itself rejects repeated column names
+    for position, column_name in enumerate(df.columns):
+        column = df.iloc[:, position]
+
+        if pd.api.types.is_datetime64_any_dtype(column) or pd.api.types.is_timedelta64_dtype(column):
+            df.isetitem(position, _to_string_array(column))
+            cast_to_iso_8601.append(column_name)
+
+        elif isinstance(column.dtype, pd.Float32Dtype | pd.Float64Dtype):
+            df.isetitem(position, _to_numpy_dtype(column))
+
+        elif column.dtype == object:
+            observed_values = column[column.notna()]
+            is_string = observed_values.map(lambda value: isinstance(value, str))
+            if observed_values.empty:
+                df.isetitem(position, np.full(len(column), np.nan))
+            elif is_string.all():
+                if len(observed_values) < len(column):
+                    # anndata cannot write missing values in an `object` string column
+                    df.isetitem(position, column.astype("string"))
+            else:
                 try:
-                    edata.layers[layer] = array.astype(np.float64)
-                except ValueError:
-                    logger.warning(
-                        f"edata.layers[{layer}] is of dtype {edata.layers[layer].dtype}: this is casted to dtype 'str' for saving to zarr."
-                    )
-                    edata.layers[layer] = array.astype(str)
+                    if is_string.any():
+                        # keeps codes like "007" intact
+                        msg = f"Column {column_name!r} holds strings next to other values."
+                        raise ValueError(msg)
+                    df.isetitem(position, _to_numeric(column))
+                except (TypeError, ValueError):
+                    df.isetitem(position, _to_string_array(column))
+                    cast_to_string.append(column_name)
 
-    return edata
+    if cast_to_iso_8601:
+        logger.info(f"Columns {cast_to_iso_8601} of .{slot} are datetimes or timedeltas, written as ISO 8601 strings.")
+    if cast_to_string:
+        logger.warning(
+            f"Columns {cast_to_string} of .{slot} hold values that cannot be written as numbers, and are written as strings."
+        )
+
+    return df

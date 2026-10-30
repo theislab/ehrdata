@@ -17,7 +17,10 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION_KEY,
 )
 from ehrdata.core.ehrdata import _silence_anndata_nd_warning
-from ehrdata.io._array_casting import _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object, _cast_variables_to_float
+from ehrdata.io._array_casting import (
+    _cast_dataframe_columns_to_writable_dtype,
+    _cast_variables_to_float,
+)
 from ehrdata.io._coo_codec import write_coo_h5
 from ehrdata.io._ondisk import (
     _allow_write_nullable_strings,
@@ -130,6 +133,8 @@ def write_h5ed(
     `.h5ed` is the ehrdata on-disk format.
     To write the file, `X` and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a string dtype.
+    The same holds for the `object` columns of `.obs`, `.var` and `.tem`; integers and booleans among them stay exact, and missing values stay missing.
+    Datetime and timedelta columns are written as ISO 8601 strings, read back as categorical in `.obs` and `.var` if a value repeats or is missing.
 
 
     Args:
@@ -146,8 +151,6 @@ def write_h5ed(
     """
     filename = Path(filename)
 
-    edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
-
     adata, sparse_3d_data = encode_for_disk(edata)
     adata.write_h5ad(
         filename,
@@ -161,7 +164,7 @@ def write_h5ed(
                 write_coo_h5(
                     obsm_group.create_group(key), coo, compression=compression, compression_opts=compression_opts
                 )
-        ad.io.write_elem(f, "tem", edata.tem)
+        ad.io.write_elem(f, "tem", _cast_dataframe_columns_to_writable_dtype(edata.tem, "tem"))
         # Identify the file as ehrdata, namespaced to not clash with anndata's own encoding attrs.
         f.attrs[EHRDATA_ENCODING_TYPE_KEY] = EHRDATA_ENCODING_TYPE
         f.attrs[EHRDATA_ONDISK_VERSION_KEY] = str(EHRDATA_ONDISK_VERSION)
