@@ -12,9 +12,11 @@ from tests.conftest import (
     _assert_columns_anndata_cannot_write_read_back,
     _assert_dtype_object_array_with_missing_values_equal,
     _assert_io_read,
+    _assert_object_layers_read_back,
     _assert_shape_matches,
     _check_aligned_anndata_parts_equal,
     _edata_with_columns_anndata_cannot_write,
+    _edata_with_object_layers,
 )
 
 from ehrdata.core.constants import EHRDATA_ONDISK_VERSION
@@ -320,12 +322,37 @@ def test_read_minimal_corpus_zarr():
     assert np.array_equal(np.asarray(edata_020.layers["tem_data"]), np.arange(3 * 2 * 2, dtype=float).reshape(3, 2, 2))
 
 
-def test_write_read_zarr_casts_columns_anndata_cannot_write(tmp_path):
+def test_write_read_zarr_casts_columns_anndata_cannot_write(X_any_array_type_322, tmp_path):
     # datetime columns and `object` columns holding non-strings are cast on write instead of failing the write,
     # as they did for the `.obs` and `.var` of an OMOP setup (https://github.com/theislab/ehrdata/issues/303)
-    edata = _edata_with_columns_anndata_cannot_write()
+    edata = _edata_with_columns_anndata_cannot_write(X_any_array_type_322)
     path = tmp_path / "columns_anndata_cannot_write.zarr"
 
     write_zarr(edata, path)
 
-    _assert_columns_anndata_cannot_write_read_back(edata, read_zarr(path))
+    _assert_columns_anndata_cannot_write_read_back(edata, read_zarr(path, harmonize_missing_values=False))
+
+
+@pytest.mark.parametrize("with_X", [True, False])
+def test_write_read_zarr_casts_object_layers(X_any_array_type_322, with_X, tmp_path):
+    # each `object` layer is cast on write and on read, whatever `X` is, and is not overwritten by `X`
+    edata = _edata_with_object_layers(X_any_array_type_322 if with_X else None)
+    path = tmp_path / "object_layers.zarr"
+
+    write_zarr(edata, path)
+
+    _assert_object_layers_read_back(edata, read_zarr(path))
+
+
+def test_write_zarr_keeps_string_columns_without_convert_strings_to_categoricals(X_any_array_type_322, tmp_path):
+    # the cast of the columns anndata cannot write leaves the string columns to `convert_strings_to_categoricals`
+    edata = _edata_with_columns_anndata_cannot_write(X_any_array_type_322)
+    path = tmp_path / "string_columns.zarr"
+
+    write_zarr(edata, path, convert_strings_to_categoricals=False)
+    edata_read = read_zarr(path, harmonize_missing_values=False)
+
+    # each column holds a repeated value or a missing value, so that a conversion would make it categorical
+    for column in ["birth_datetime", "gender_source_value", "race_source_value", "death_date", "concept_code"]:
+        assert not isinstance(edata_read.obs[column].dtype, pd.CategoricalDtype)
+    assert not isinstance(edata_read.tem["phase"].dtype, pd.CategoricalDtype)

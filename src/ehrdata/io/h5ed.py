@@ -18,7 +18,6 @@ from ehrdata.core.constants import (
 )
 from ehrdata.core.ehrdata import _silence_anndata_nd_warning
 from ehrdata.io._array_casting import (
-    _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object,
     _cast_dataframe_columns_to_writable_dtype,
     _cast_variables_to_float,
 )
@@ -134,7 +133,8 @@ def write_h5ed(
     `.h5ed` is the ehrdata on-disk format.
     To write the file, `X` and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a string dtype.
-    The same holds for the columns of `.obs`, `.var` and `.tem`, which additionally cannot be written as a datetime dtype; datetime columns are written as ISO 8601 strings.
+    The same holds for the `object` columns of `.obs`, `.var` and `.tem`, with missing values staying missing: integers and booleans among them stay integers and booleans, in a nullable dtype if values are missing, while strings next to other values, and integers no numeric dtype holds exactly, are written as strings. Nullable float columns are written as float.
+    Datetime and timedelta columns cannot be written either, and are written as ISO 8601 strings; as any string column of `.obs` and `.var` with a repeated or missing value, they are read back as categorical.
 
 
     Args:
@@ -150,8 +150,6 @@ def write_h5ed(
         >>> ed.io.write_h5ed(edata, "mimic_2.h5ed")
     """
     filename = Path(filename)
-
-    edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
 
     adata, sparse_3d_data = encode_for_disk(edata)
     adata.write_h5ad(

@@ -15,7 +15,6 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION_KEY,
 )
 from ehrdata.io._array_casting import (
-    _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object,
     _cast_dataframe_columns_to_writable_dtype,
     _cast_variables_to_float,
 )
@@ -124,7 +123,8 @@ def write_zarr(
 
     To write to a `.zarr` store, `X`, and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
-    The same holds for the columns of `.obs`, `.var` and `.tem`, which additionally cannot be written as a datetime dtype; datetime columns are written as ISO 8601 strings.
+    The same holds for the `object` columns of `.obs`, `.var` and `.tem`, with missing values staying missing: integers and booleans among them stay integers and booleans, in a nullable dtype if values are missing, while strings next to other values, and integers no numeric dtype holds exactly, are written as strings. Nullable float columns are written as float.
+    Datetime and timedelta columns cannot be written either, and are written as ISO 8601 strings; as any string column with a repeated or missing value, they are read back as categorical if `convert_strings_to_categoricals=True`.
 
 
     Args:
@@ -139,7 +139,6 @@ def write_zarr(
         >>> ed.io.write_zarr("mimic_2.ehrdata.zarr", edata)
     """
     filename = Path(filename)
-    edata = _cast_arrays_dtype_to_float_or_str_if_nonnumeric_object(edata)
 
     store = zarr.open_group(filename, mode="a", use_consolidated=False, zarr_format=3)
 
