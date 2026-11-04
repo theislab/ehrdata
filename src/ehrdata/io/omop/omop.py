@@ -25,11 +25,27 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_interval_length_unit,
     _check_valid_interval_variable_data_tables,
     _check_valid_keep_date,
+    _check_valid_link_by,
     _check_valid_num_intervals,
     _check_valid_observation_table,
     _check_valid_time_precision,
+    _check_valid_value_range,
     _check_valid_variable_data_tables,
     _warn_time_precision_interval_mismatch,
+)
+from ehrdata.io.omop._observed import (
+    OBS_TABLE,
+    UNIT_MAP_TABLE,
+    VARIABLE_MAP_TABLE,
+    _check_convertible,
+    _check_one_unit_per_variable,
+    _instantiate,
+    _obs_windows,
+    _unit_map,
+    _unit_report,
+    _var_frame,
+    _variable_map,
+    _write_long_observed_table,
 )
 from ehrdata.io.omop._queries import (
     DATA_TABLE_CONCEPT_ID_TRUNK,
@@ -43,7 +59,7 @@ from ehrdata.io.omop._queries import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     import duckdb
     from duckdb import DuckDBPyConnection
@@ -367,13 +383,17 @@ def setup_variables(
     interval_length_unit: str,
     time_precision: Literal["date", "datetime"] = "date",
     num_intervals: int,
-    concept_ids: Literal["all"] | Sequence[int] = "all",
-    aggregation_strategy: Literal[
-        "last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"
-    ] = "last",
+    concept_ids: Literal["all"] | Sequence[int] | Mapping[str, Sequence[int]] = "all",
+    aggregation_strategy: Literal["last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"]
+    | Mapping[str | int, str] = "last",
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
     instantiate_tensor: bool = True,
+    value_range: Mapping[str | int, tuple[float | None, float | None]] | None = None,
+    link_by: Literal["person", "visit_occurrence"] = "person",
+    sparse: bool = False,
+    unit_conversions: pd.DataFrame | None = None,
+    cut_at_end: bool = True,
 ):
     """Extracts selected tables of a data-point character from the OMOP CDM.
 
@@ -423,6 +443,26 @@ def setup_variables(
             'unit_concept_id' or 'unit_source_value'), the value NULL/NaN is considered
             a single unit.
         instantiate_tensor: Whether to instantiate the tensor within the `EHRData` object.
+        value_range: Plausible (lower, upper) bounds of the kept value per variable, keyed like `aggregation_strategy`.
+            Rows whose value lies outside are dropped before the aggregation, so that an implausible value never enters an interval's value.
+            Use `None` for an open side.
+        link_by: How a data row is matched to an observation.
+            With `"person"`, a row belongs to every observation of its `person_id` whose time window contains it.
+            With `"visit_occurrence"`, a row belongs to the visit named by its `visit_occurrence_id`, if it lies in that visit's time window; this needs `setup_obs` with `"person_visit_occurrence"`.
+            The latter keeps the visits of one person apart even when their time windows overlap.
+        sparse: Whether to store the data as a `sparse.COO` array with `NaN` as fill value instead of a :class:`numpy.ndarray`.
+        unit_conversions: Conversions of the variables' values into one unit each, applied to every row before `value_range` and the aggregation.
+            A table with the columns `variable` (keyed like `aggregation_strategy`), `unit_concept_id` (the unit a row is recorded in), `to_unit_concept_id`, `multiplier` and optionally `offset`: the converted value is `value * multiplier + offset`.
+            Include a row with `multiplier=1` for the target unit itself. A variable in the table needs a conversion for every unit its rows carry, else a `ValueError` lists the missing ones; variables not in the table are not converted.
+        cut_at_end: Whether rows dated after the end date of the observation (e.g. `visit_end_date`) are left out, as on the default path.
+            With `False`, a row counts in any of the `num_intervals` intervals it falls into, also after the observation's end; with `link_by="visit_occurrence"` the row still has to belong to the visit.
+
+    Concept sets, an aggregation strategy per variable, `value_range`, `link_by="visit_occurrence"`, `sparse`, `unit_conversions` and `cut_at_end=False` use a path that aggregates only the intervals that have data:
+    its long table in the database holds one row per observed (observation, variable, interval), with the columns `variable` and `var_index` naming the variable.
+    This path reads the observations and their time windows from `edata.obs`, so it also serves an `EHRData` whose observations were subset after :func:`~ehrdata.io.omop.setup_obs`.
+    With a mapping as `concept_ids`, the variables are the keys of the mapping, in its order, and the rows of all concept ids of a set are aggregated together.
+    A mapping as `aggregation_strategy` must name a strategy for every variable.
+    An interval without rows is missing (NaN); if every variable uses `"count"`, it is 0 instead, as in the default path.
 
     Returns:
         An :class:`~ehrdata.EHRData` object with populated `.X`/`.layers` and `.var` field.
@@ -468,13 +508,49 @@ def setup_variables(
     _check_valid_aggregation_strategy(aggregation_strategy)
     _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
     _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info)
+    _check_valid_value_range(value_range)
 
     time_defining_table = edata.uns.get("omop_io_observation_table", None)
     if time_defining_table is None:
         msg = "The observation table must be set up first, use the `setup_obs` function."
         raise ValueError(msg)
+    _check_valid_link_by(link_by, time_defining_table)
 
     _check_valid_birthdates_for_person_table(backend_handle, time_defining_table)
+
+    from collections.abc import Mapping as _Mapping
+
+    if (
+        sparse
+        or link_by != "person"
+        or value_range is not None
+        or isinstance(concept_ids, _Mapping)
+        or isinstance(aggregation_strategy, _Mapping)
+        or unit_conversions is not None
+        or not cut_at_end
+    ):
+        return _setup_variables_observed(
+            edata,
+            backend_handle=backend_handle,
+            layer=layer,
+            data_tables=data_tables,
+            data_field_to_keep=data_field_to_keep,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            time_precision=time_precision,
+            num_intervals=num_intervals,
+            concept_ids=concept_ids,
+            aggregation_strategy=aggregation_strategy,
+            enrich_var_with_feature_info=enrich_var_with_feature_info,
+            enrich_var_with_unit_info=enrich_var_with_unit_info,
+            instantiate_tensor=instantiate_tensor,
+            value_range=value_range,
+            link_by=link_by,
+            sparse=sparse,
+            time_defining_table=time_defining_table,
+            unit_conversions=unit_conversions,
+            cut_at_end=cut_at_end,
+        )
 
     var_collector = {}
     r_collector = {}
@@ -620,6 +696,148 @@ def setup_variables(
         edata.uns[f"unit_report_{data_table}"] = unit_report
 
     return edata
+
+
+def _setup_variables_observed(
+    edata,
+    *,
+    backend_handle,
+    layer,
+    data_tables,
+    data_field_to_keep,
+    interval_length_number,
+    interval_length_unit,
+    time_precision,
+    num_intervals,
+    concept_ids,
+    aggregation_strategy,
+    enrich_var_with_feature_info,
+    enrich_var_with_unit_info,
+    instantiate_tensor,
+    value_range,
+    link_by,
+    sparse,
+    time_defining_table,
+    unit_conversions=None,
+    cut_at_end=True,
+):
+    """setup_variables on the observed-rows path (`_observed.py`)."""
+    from collections.abc import Mapping as _Mapping
+
+    from ehrdata import EHRData
+
+    if len(data_tables) > 1 and (
+        isinstance(concept_ids, _Mapping) or isinstance(aggregation_strategy, _Mapping) or value_range is not None
+    ):
+        msg = "Concept sets, per-variable aggregation strategies and value_range are supported for one data table at a time."
+        raise ValueError(msg)
+    if isinstance(concept_ids, _Mapping) and (enrich_var_with_feature_info or enrich_var_with_unit_info):
+        msg = "enrich_var_with_feature_info and enrich_var_with_unit_info are not supported with concept sets."
+        raise ValueError(msg)
+
+    n_obs = len(edata.obs)
+    obs_windows = _obs_windows(edata.obs, time_defining_table, time_precision)  # noqa: F841 (read by duckdb)
+    backend_handle.execute(f"CREATE OR REPLACE TEMP TABLE {OBS_TABLE} AS SELECT * FROM obs_windows")
+    var_collector, array_collector, unit_reports = [], [], {}
+    for data_table in data_tables:
+        variable_map = _variable_map(
+            backend_handle,
+            data_table,
+            concept_ids=concept_ids,
+            aggregation_strategy=aggregation_strategy,
+            value_range=value_range,
+            unit_conversions=unit_conversions,
+        )
+        if variable_map.empty:
+            logging.warning(f"No data found in {data_table}. Returning edata without data of {data_table}.")
+            continue
+        backend_handle.execute(f"DROP TABLE IF EXISTS {VARIABLE_MAP_TABLE}")
+        backend_handle.execute(
+            f"CREATE OR REPLACE TEMP TABLE {VARIABLE_MAP_TABLE} AS SELECT variable, CAST(concept_id AS BIGINT) AS concept_id, "
+            f"CAST(var_index AS INTEGER) AS var_index, strategy, lower, upper, converted FROM variable_map"
+        )
+        unit_fields = _get_unit_fields(backend_handle, data_table)
+        convert_units = bool(variable_map["converted"].any())
+        if unit_conversions is not None:
+            if "unit_concept_id" not in unit_fields or data_field_to_keep[data_table][0] == "is_present":
+                msg = f"unit_conversions needs a numeric value and a unit_concept_id in '{data_table}'."
+                raise ValueError(msg)
+            unit_map = _unit_map(unit_conversions)  # noqa: F841 (read by duckdb)
+            backend_handle.execute(f"CREATE OR REPLACE TEMP TABLE {UNIT_MAP_TABLE} AS SELECT * FROM unit_map")
+            _check_convertible(backend_handle, data_table, data_field_to_keep[data_table][0])
+        _check_one_unit_per_variable(backend_handle, data_table, data_field_to_keep[data_table][0], unit_fields)
+        _write_long_observed_table(
+            backend_handle,
+            time_defining_table=time_defining_table,
+            data_table=data_table,
+            time_precision=time_precision,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            data_field_to_keep=data_field_to_keep[data_table],
+            unit_fields=unit_fields,
+            variable_map=variable_map,
+            link_by=link_by,
+            convert_units=convert_units,
+            cut_at_end=cut_at_end,
+        )
+        unit_reports[data_table] = _unit_report(backend_handle, data_table, unit_fields)
+        var = _var_frame(variable_map, data_table)
+        if enrich_var_with_feature_info:
+            concepts = backend_handle.sql("SELECT * FROM concept").df()
+            concepts.columns = concepts.columns.str.lower()
+            var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id", right_on="concept_id")
+        if enrich_var_with_unit_info:
+            report = unit_reports[data_table]
+            if report["multiple_units"].any():
+                msg = "Multiple units per feature found. Enrichment with feature information not possible."
+                raise ValueError(msg)
+            var = pd.merge(var, report[["variable", "unit_concept_id"]], how="left", on="variable")
+        var_collector.append(var)
+        if instantiate_tensor:
+            array_collector.append(
+                _instantiate(
+                    backend_handle,
+                    data_table,
+                    data_field_to_keep[data_table][0],
+                    n_obs=n_obs,
+                    n_var=len(var),
+                    num_intervals=num_intervals,
+                    sparse=sparse,
+                    fill_value=0.0 if set(variable_map["strategy"]) == {"count"} else np.nan,
+                )
+            )
+        backend_handle.execute(f"DROP TABLE IF EXISTS {VARIABLE_MAP_TABLE}")
+        backend_handle.execute(f"DROP TABLE IF EXISTS {UNIT_MAP_TABLE}")
+
+    backend_handle.execute(f"DROP TABLE IF EXISTS {OBS_TABLE}")
+    if not var_collector:
+        logging.warning("No data found in any of the data tables. Returning edata without data.")
+        return edata
+
+    var = pd.concat(var_collector, axis=0).reset_index(drop=True)
+    if isinstance(concept_ids, _Mapping):
+        var.index = var["variable"].astype(str)
+    else:
+        var.index = var.index.astype(str)
+    tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
+    uns = dict(edata.uns)
+    for data_table, report in unit_reports.items():
+        uns[f"unit_report_{data_table}"] = report
+
+    if not instantiate_tensor:
+        return EHRData(obs=edata.obs, var=var, uns=uns, tem=tem)
+    if len(array_collector) == 1:
+        tem_layer = array_collector[0]
+    elif sparse:
+        import sparse as sp
+
+        tem_layer = sp.concatenate(array_collector, axis=1)
+    else:
+        tem_layer = np.concatenate(array_collector, axis=1)
+    if layer is not None:
+        return EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=uns, tem=tem)
+    return EHRData(X=tem_layer, obs=edata.obs, var=var, uns=uns, tem=tem)
 
 
 def setup_interval_variables(

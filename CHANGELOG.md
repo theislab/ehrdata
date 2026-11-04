@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Added
+
+- {func}`~ehrdata.io.omop.setup_variables` takes concept sets (`concept_ids={"name": [...]}`) that pool several concepts into one variable, an `aggregation_strategy` per variable, a `value_range` per variable that drops implausible rows before aggregating, `unit_conversions` that convert each row from the unit it was recorded in to one unit per variable, `link_by="visit_occurrence"` to attribute rows to visits by `visit_occurrence_id` rather than by person and time, `cut_at_end=False` to keep rows after an observation's end date, and `sparse=True` for a `sparse.COO` layer. These options aggregate only the intervals that hold data, so memory and time follow the number of records rather than observations × variables × intervals, and they read the observations from `edata.obs`, so a subset or reordered `edata` gets exactly its rows. Calls without them are unchanged. ([#PR](https://github.com/theislab/ehrdata/pull/PR)) @eroell
+
 ## [0.5.0]
 
 ### Added

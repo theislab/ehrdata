@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import duckdb
 
@@ -136,8 +136,20 @@ def _check_valid_num_intervals(num_intervals) -> None:
 
 
 def _check_valid_concept_ids(concept_ids) -> None:
+    if isinstance(concept_ids, Mapping):
+        if len(concept_ids) == 0:
+            msg = "concept_ids must not be empty."
+            raise ValueError(msg)
+        for name, ids in concept_ids.items():
+            if not isinstance(name, str):
+                msg = f"The keys of a concept_ids mapping are variable names and must be strings, got {name!r}."
+                raise TypeError(msg)
+            if isinstance(ids, str) or not isinstance(ids, Sequence) or len(ids) == 0:
+                msg = f"The concept set '{name}' must be a non-empty sequence of integers."
+                raise TypeError(msg)
+        return
     if concept_ids != "all" and not isinstance(concept_ids, Sequence):
-        msg = "concept_ids must be a sequence of integers or 'all'."
+        msg = "concept_ids must be a sequence of integers, a mapping of variable names to concept ids, or 'all'."
         raise TypeError(msg)
     if len(concept_ids) == 0:
         msg = "concept_ids must not be empty."
@@ -145,9 +157,32 @@ def _check_valid_concept_ids(concept_ids) -> None:
 
 
 def _check_valid_aggregation_strategy(aggregation_strategy) -> None:
-    if aggregation_strategy not in AGGREGATION_STRATEGY_KEY:
-        msg = f"aggregation_strategy must be one of {AGGREGATION_STRATEGY_KEY.keys()}."
+    strategies = aggregation_strategy.values() if isinstance(aggregation_strategy, Mapping) else [aggregation_strategy]
+    for strategy in strategies:
+        if strategy not in AGGREGATION_STRATEGY_KEY:
+            msg = f"aggregation_strategy must be one of {AGGREGATION_STRATEGY_KEY.keys()}, or a mapping to these."
+            raise TypeError(msg)
+
+
+def _check_valid_value_range(value_range) -> None:
+    if value_range is None:
+        return
+    if not isinstance(value_range, Mapping):
+        msg = "value_range must be a mapping of variables to (lower, upper) bounds."
         raise TypeError(msg)
+    for variable, bounds in value_range.items():
+        if not isinstance(bounds, Sequence) or len(bounds) != 2:
+            msg = f"The value range of {variable!r} must be a (lower, upper) pair; use None for an open side."
+            raise ValueError(msg)
+
+
+def _check_valid_link_by(link_by, observation_table) -> None:
+    if link_by not in ("person", "visit_occurrence"):
+        msg = "link_by must be 'person' or 'visit_occurrence'."
+        raise ValueError(msg)
+    if link_by == "visit_occurrence" and observation_table != "visit_occurrence":
+        msg = "link_by='visit_occurrence' requires setup_obs with observation_table='person_visit_occurrence'."
+        raise ValueError(msg)
 
 
 def _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info) -> None:
