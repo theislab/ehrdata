@@ -59,7 +59,6 @@ from ehrdata.io.omop._queries import (
     _registered,
     _value_range_filter,
     _write_long_observed_table,
-    _write_long_time_interval_table,
     _write_obs_names,
     _write_obs_windows,
 )
@@ -1068,6 +1067,7 @@ def setup_interval_variables(
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
     Its `obs_index` is the position of the row in `edata.obs`; the table `long_person_timestamp_feature_value_<data_table>_obs` holds the `obs_names` of these rows.
+    It holds one row per observation, variable and interval that has data, so its size follows the number of data points.
     This table is instantiated in the `EHRData` object if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
 
@@ -1186,7 +1186,7 @@ def setup_interval_variables(
             concept_ids=concept_ids,
         )
 
-        _write_long_time_interval_table(
+        _write_long_observed_table(
             backend_handle=backend_handle,
             data_table=data_table,
             time_precision=time_precision,
@@ -1197,15 +1197,14 @@ def setup_interval_variables(
             num_intervals=num_intervals,
             aggregation_strategy=aggregation_strategy,
             concept_ids=concept_ids,
-            keep_date=keep_date,
             link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
+            keep_date=keep_date,
         )
         _write_obs_names(backend_handle, data_table)
 
         var = backend_handle.execute(
-            f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_table}"
+            f"SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AS data_table_concept_id FROM {data_table} WHERE {_concept_ids_condition(data_table, concept_ids)}"
         ).df()
-
         var = var.sort_values("data_table_concept_id").reset_index(drop=True)
 
         if enrich_var_with_feature_info:
@@ -1234,17 +1233,16 @@ def setup_interval_variables(
                 var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id", right_on="concept_id")
 
         if instantiate_tensor:
-            ds = (
-                (backend_handle.execute(f"SELECT * FROM long_person_timestamp_feature_value_{data_table}").df())
-                .set_index(["obs_index", "data_table_concept_id", "interval_step"])
-                .to_xarray()
+            r_collector[data_table] = _instantiate_long_observed_table(
+                backend_handle,
+                data_table,
+                data_field_to_keep[data_table][0],
+                variables=var["data_table_concept_id"].to_numpy(),
+                n_obs=edata.n_obs,
+                num_intervals=num_intervals,
+                aggregation_strategy=aggregation_strategy,
+                sparse=False,
             )
-            ds = ds.sel(data_table_concept_id=var["data_table_concept_id"].values)
-
-            r_collector[data_table] = ds[data_field_to_keep[data_table][0]].values
-
-        else:
-            ds = None
 
         var_collector[data_table] = var
 

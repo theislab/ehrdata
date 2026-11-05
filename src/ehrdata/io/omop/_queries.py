@@ -206,38 +206,6 @@ def _generate_timedeltas(interval_length_number: int, interval_length_unit: str,
     return timedeltas_dataframe
 
 
-def _write_timedeltas_to_db(
-    backend_handle: duckdb.DuckDBPyConnection,
-    timedeltas_dataframe,
-) -> None:
-    backend_handle.execute("DROP TABLE IF EXISTS timedeltas")
-    backend_handle.execute(
-        """
-        CREATE TABLE timedeltas (
-            interval_start_offset INTERVAL,
-            interval_end_offset INTERVAL,
-            interval_step INTEGER
-        )
-        """
-    )
-    # DuckDB reads a pandas Timedelta of 30 days or more as calendar months, so the offsets are passed as microseconds.
-    offsets_in_microseconds = timedeltas_dataframe.assign(  # noqa: F841
-        interval_start_offset=timedeltas_dataframe["interval_start_offset"] // pd.Timedelta(microseconds=1),
-        interval_end_offset=timedeltas_dataframe["interval_end_offset"] // pd.Timedelta(microseconds=1),
-    )
-    backend_handle.execute(
-        """
-        INSERT INTO timedeltas
-        SELECT to_microseconds(interval_start_offset), to_microseconds(interval_end_offset), interval_step
-        FROM offsets_in_microseconds
-        """
-    )
-
-
-def _drop_timedeltas(backend_handle: duckdb.DuckDBPyConnection):
-    backend_handle.execute("DROP TABLE IF EXISTS timedeltas")
-
-
 def _generate_value_query(
     data_table: str,
     data_field_to_keep: Sequence,
@@ -288,106 +256,6 @@ def _generate_value_query(
         value_query = f"{value_query}, {unit_query}" if unit_query else value_query
 
     return is_present_query + value_query
-
-
-def _write_long_time_interval_table(
-    backend_handle: duckdb.DuckDBPyConnection,
-    *,
-    data_table: str,
-    time_precision: Literal["date", "datetime"],
-    interval_length_number: int,
-    interval_length_unit: str,
-    num_intervals: int,
-    aggregation_strategy: str,
-    data_field_to_keep: Sequence[str] | str,
-    unit_fields: Sequence[str] = (),
-    concept_ids: Literal["all"] | Sequence[int] = "all",
-    keep_date: str = "",
-    link_visits: bool = False,
-) -> None:
-    if isinstance(data_field_to_keep, str):
-        data_field_to_keep = [data_field_to_keep]
-
-    if keep_date == "":
-        keep_date = "timepoint"
-
-    timedeltas_dataframe = _generate_timedeltas(interval_length_number, interval_length_unit, num_intervals)
-
-    _write_timedeltas_to_db(
-        backend_handle,
-        timedeltas_dataframe,
-    )
-
-    create_long_table_query = f"CREATE TABLE long_person_timestamp_feature_value_{data_table} AS\n"
-
-    # multi-step query
-    # 1. Create person_time_defining_table, the rows of .obs from OBS_WINDOWS_TABLE: the obs_index (unique row identifier, the position in .obs), obs_id, person_id, and the start/end dates.
-    # 2. Create person_data_table (data_table is typically measurement), which contains the cross product of obs_id and the distinct concept_id s.
-    # 3. Create long_format_backbone, which is the left join of person_time_defining_table and person_data_table.
-    # 4. Create long_format_intervals, which is the cross product of long_format_backbone and timedeltas. This table contains most notably the obs_id, the concept_id, the interval start and end dates.
-    # 5. Create the final table long_person_timestamp_feature_value_<data_table>, which is the join with the data_table (typically measurement); each measurement is assigned to its obs_id, its concept_id, and the interval it fits into.
-
-    person_time_defining_cte = f"WITH person_time_defining_table AS (SELECT obs_index, obs_id, person_id, start_date, end_date FROM {OBS_WINDOWS_TABLE}), "
-
-    prepare_alias_query = (
-        person_time_defining_cte
-        + f"""person_data_table AS( \
-            WITH distinct_data_table_concept_ids AS ( \
-                SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id
-                FROM {data_table} \
-                WHERE {_concept_ids_condition(data_table, concept_ids)} \
-            )
-            SELECT obs_index, obs_id, person_id, {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id as data_table_concept_id, start_date, end_date \
-            FROM person_time_defining_table \
-            CROSS JOIN distinct_data_table_concept_ids \
-        ), \
-        long_format_backbone as ( \
-            SELECT obs_index, obs_id, person_id, data_table_concept_id, start_date, end_date \
-            FROM person_data_table \
-        ), \
-        long_format_intervals as ( \
-            SELECT obs_index, obs_id, person_id, data_table_concept_id, interval_step, start_date, end_date, start_date + interval_start_offset as interval_start, start_date + interval_end_offset as interval_end \
-            FROM long_format_backbone \
-            CROSS JOIN timedeltas \
-        ), \
-        data_table_with_presence_indicator as( \
-            SELECT *, 1 as is_present \
-            FROM ({_data_rows_query(data_table, link_visits=link_visits)}) \
-        ) \
-        """
-    )
-
-    if keep_date in ["timepoint", "start", "end"]:
-        datetime_col = _get_datetime_key(keep_date, data_table, time_precision)
-        select_query = f"""
-        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col, unit_fields=unit_fields, finer_datetime_columns=_finer_datetime_keys(keep_date, data_table, time_precision))}, lfi.obs_index \
-        FROM long_format_intervals as lfi \
-        LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND {_visit_condition("data_table_with_presence_indicator", "lfi", link_visits=link_visits)} AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{datetime_col} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col} < lfi.interval_end \
-                AND CAST(data_table_with_presence_indicator.{datetime_col} AS DATE) <= lfi.end_date \
-        GROUP BY lfi.obs_index, lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
-        """
-
-    elif keep_date == "interval":
-        datetime_col_start = _get_datetime_key("start", data_table, time_precision)
-        datetime_col_end = _get_datetime_key("end", data_table, time_precision)
-        select_query = f"""
-        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col_start, unit_fields=unit_fields, finer_datetime_columns=_finer_datetime_keys("start", data_table, time_precision))}, lfi.obs_index \
-        FROM long_format_intervals as lfi \
-        LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id \
-                AND {_visit_condition("data_table_with_presence_indicator", "lfi", link_visits=link_visits)} \
-                AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id \
-                AND (data_table_with_presence_indicator.{datetime_col_start} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col_start} < lfi.interval_end \
-                    OR data_table_with_presence_indicator.{datetime_col_end} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col_end} < lfi.interval_end \
-                    OR (data_table_with_presence_indicator.{datetime_col_start} < lfi.interval_start AND data_table_with_presence_indicator.{datetime_col_end} >= lfi.interval_end)) \
-                AND CAST(data_table_with_presence_indicator.{datetime_col_start} AS DATE) <= lfi.end_date \
-                AND CAST(lfi.interval_start AS DATE) <= lfi.end_date \
-        GROUP BY lfi.obs_index, lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
-        """
-
-    query = create_long_table_query + prepare_alias_query + select_query
-
-    backend_handle.execute(f"DROP TABLE IF EXISTS long_person_timestamp_feature_value_{data_table}")
-    backend_handle.execute(query)
 
 
 OBS_WINDOWS_TABLE = "ehrdata_obs_windows"
@@ -575,6 +443,7 @@ def _write_long_observed_table(
     strategies: Mapping[int | str, str] | None = None,
     value_ranges: pd.DataFrame | None = None,
     unit_conversions: pd.DataFrame | None = None,
+    keep_date: Literal["timepoint", "start", "end", "interval"] = "timepoint",
 ) -> None:
     """Write `long_person_timestamp_feature_value_<data_table>` with one row per observed (observation, concept, interval).
 
@@ -585,16 +454,44 @@ def _write_long_observed_table(
     With concept_sets, a row per observed (observation, variable, interval) instead: the rows of the concepts of a set are aggregated together, and the column `variable` holds the name of the set in place of `data_table_concept_id`.
 
     Each row of the data_table is joined to the observations of its person whose time window holds it, and binned into its interval there.
+    keep_date names the time of a row: the column of `DATA_TABLE_DATE_KEYS` under "timepoint", "start" or "end".
+    With "interval", a row spans from its start to its end, and belongs to every interval that holds its start or its end, or that it covers.
+    A row without an end then belongs to the interval of its start only. Its start, and the start of the interval, must not be after the end date of the observation.
     With link_visits, a row that names a visit of its person is joined to that visit only, see `_visit_condition`.
     Only the cells that receive a row carrying a value are aggregated and stored, so the table grows with the data rather than with observations x concepts x intervals.
     """
     interval_us = int(pd.Timedelta(interval_length_number, interval_length_unit) // pd.Timedelta(microseconds=1))
-    datetime_col = _get_datetime_key("timepoint", data_table, time_precision)
-    finer_datetime_cols = _finer_datetime_keys("timepoint", data_table, time_precision)
+    time_key = "start" if keep_date == "interval" else keep_date
+    datetime_col = _get_datetime_key(time_key, data_table, time_precision)
+    finer_datetime_cols = _finer_datetime_keys(time_key, data_table, time_precision)
     concept_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id"
 
     row_time = f"epoch_us(CAST(d.{datetime_col} AS TIMESTAMP))"
     start_time = "epoch_us(CAST(o.start_date AS TIMESTAMP))"
+    if keep_date == "interval":
+        # The candidate intervals of a row run from the interval of the earlier to that of the later of its start and end, within the window;
+        # the condition then keeps those that hold its start or its end, or that it covers.
+        end_time = f"epoch_us(CAST(d.{_get_datetime_key('end', data_table, time_precision)} AS TIMESTAMP))"
+        start_step = f"({row_time} - {start_time}) // {interval_us}"
+        end_step = f"coalesce(({end_time} - {start_time}) // {interval_us}, {start_step})"
+        steps_join = (
+            f", unnest(range(greatest(0, least({start_step}, {end_step})), "
+            f"least({num_intervals - 1}, greatest({start_step}, {end_step})) + 1)) AS steps(step)"
+        )
+        interval_step = "steps.step"
+        interval_start = f"{start_time} + steps.step * {interval_us}"
+        interval_end = f"{start_time} + (steps.step + 1) * {interval_us}"
+        time_condition = f"""(({row_time} >= {interval_start} AND {row_time} < {interval_end})
+                    OR ({end_time} >= {interval_start} AND {end_time} < {interval_end})
+                    OR ({row_time} < {interval_start} AND {end_time} >= {interval_end}))
+                AND CAST(d.{datetime_col} AS DATE) <= o.end_date
+                AND CAST(o.start_date + to_microseconds(steps.step * {interval_us}) AS DATE) <= o.end_date"""
+    else:
+        steps_join = ""
+        interval_step = f"({row_time} - {start_time}) // {interval_us}"
+        time_condition = f"""{row_time} >= {start_time}
+                AND {row_time} - {start_time} < {interval_us * num_intervals}
+                AND CAST(d.{datetime_col} AS DATE) <= o.end_date"""
     kept_columns = [
         column
         for column in dict.fromkeys([*data_field_to_keep, *unit_fields, datetime_col, *finer_datetime_cols])
@@ -670,16 +567,15 @@ def _write_long_observed_table(
         WITH observations AS (SELECT obs_index, obs_id, person_id, start_date, end_date FROM {OBS_WINDOWS_TABLE}),
         observed_rows AS MATERIALIZED (
             SELECT o.obs_id, o.obs_index, o.person_id, o.start_date, {key_select} AS {key_column},
-                CAST(({row_time} - {start_time}) // {interval_us} AS INTEGER) AS interval_step, 1 AS is_present{kept_select}
+                CAST({interval_step} AS INTEGER) AS interval_step, 1 AS is_present{kept_select}
             FROM ({_converted_rows_query(_data_rows_query(data_table, link_visits=link_visits), concept_key, data_field_to_keep[0], unit_fields, unit_conversions=unit_conversions)}) AS d
             {variable_join}
             {range_join}
             JOIN observations AS o ON d.person_id = o.person_id AND {_visit_condition("d", "o", link_visits=link_visits)}
+            {steps_join}
             WHERE {concept_condition}
                 AND {range_condition}
-                AND {row_time} >= {start_time}
-                AND {row_time} - {start_time} < {interval_us * num_intervals}
-                AND CAST(d.{datetime_col} AS DATE) <= o.end_date
+                AND {time_condition}
         ),
         observed_cells AS ({observed_cells})
         SELECT * FROM observed_cells WHERE is_present IS NOT NULL

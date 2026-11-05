@@ -2818,6 +2818,120 @@ def test_setup_interval_variables_clip_to_end_date_with_intervals(omop_connectio
     np.testing.assert_array_equal(edata.X[0, 1], expected)
 
 
+@pytest.mark.parametrize("keep_date", ["start", "end", "interval"])
+def test_setup_interval_variables_long_table_holds_observed_cells_only(omop_connection_vanilla, keep_date):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=100,
+        keep_date=keep_date,
+    )
+
+    num_rows = con.execute("SELECT COUNT(*) FROM long_person_timestamp_feature_value_drug_exposure").fetchone()[0]
+    assert num_rows == np.count_nonzero(~np.isnan(edata.X))
+    assert 0 < num_rows < edata.X.size
+
+
+@pytest.mark.parametrize(
+    ("keep_date", "aggregation_strategy", "expected"),
+    [
+        ("start", "last", [31, np.nan, np.nan, np.nan, np.nan, np.nan]),
+        ("end", "last", [np.nan, np.nan, np.nan, np.nan, 31, np.nan]),
+        ("interval", "last", [31, 31, 31, 31, 31, np.nan]),
+        ("start", "count", [1, 0, 0, 0, 0, 0]),
+        ("end", "count", [0, 0, 0, 0, 1, 0]),
+        ("interval", "count", [1, 1, 1, 1, 1, 0]),
+    ],
+)
+def test_setup_interval_variables_bins_by_keep_date(omop_connection_vanilla, keep_date, aggregation_strategy, expected):
+    """Each person takes both drugs from 2100-01-01 to 2100-01-31, its observation period, and one of them again in February."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=7,
+        interval_length_unit="day",
+        num_intervals=6,
+        aggregation_strategy=aggregation_strategy,
+        keep_date=keep_date,
+    )
+
+    # the intervals start on 2100-01-01, 08, 15, 22, 29 and 2100-02-05; the exposures in February start after the end date
+    assert edata.X.dtype == (np.int64 if aggregation_strategy == "count" else np.float64)
+    np.testing.assert_array_equal(edata.X, np.broadcast_to(expected, (3, 2, 6)))
+    pd.testing.assert_frame_equal(edata.var, DRUG_EXPOSURE_VAR)
+
+
+def test_setup_interval_variables_interval_spans(omop_connection_vanilla):
+    """With keep_date="interval", an exposure belongs to the intervals that hold its start or its end, and to those it covers."""
+    con = omop_connection_vanilla
+    con.execute("DELETE FROM drug_exposure WHERE person_id = 1")
+    con.execute(
+        """INSERT INTO drug_exposure (drug_exposure_id, person_id, drug_concept_id, drug_exposure_start_date,
+            drug_exposure_start_datetime, drug_exposure_end_date, drug_exposure_end_datetime, days_supply)
+        VALUES (10, 1, 19073183, '2100-01-03', '2100-01-03 00:00:00', '2100-01-17', '2100-01-17 00:00:00', 10),
+               (11, 1, 19073183, '2100-01-24', '2100-01-24 00:00:00', NULL, NULL, 20),
+               (12, 1, 19019979, '2099-12-20', '2099-12-20 00:00:00', '2100-01-10', '2100-01-10 00:00:00', 30),
+               (13, 1, 19019979, '2100-01-20', '2100-01-20 00:00:00', '2100-01-05', '2100-01-05 00:00:00', 40)"""
+    )
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+
+    def setup(keep_date, aggregation_strategy):
+        return ed.io.omop.setup_interval_variables(
+            edata,
+            backend_handle=con,
+            data_tables=["drug_exposure"],
+            data_field_to_keep=["days_supply"],
+            interval_length_number=7,
+            interval_length_unit="day",
+            num_intervals=5,
+            aggregation_strategy=aggregation_strategy,
+            keep_date=keep_date,
+        ).X[0]
+
+    # the intervals start on 2100-01-01, 08, 15, 22 and 29; var 0 is concept 19019979, var 1 concept 19073183.
+    # 10 spans the first three intervals, and 20, without an end, belongs to the interval of its start.
+    # 30 starts before the window and ends in its second interval; 40 ends before it starts and belongs to the intervals of both.
+    np.testing.assert_array_equal(setup("interval", "count"), [[2, 1, 1, 0, 0], [1, 1, 1, 1, 0]])
+    np.testing.assert_array_equal(setup("interval", "max"), [[40, 30, 40, np.nan, np.nan], [10, 10, 10, 20, np.nan]])
+    np.testing.assert_array_equal(setup("start", "count"), [[0, 0, 1, 0, 0], [1, 0, 0, 1, 0]])
+    np.testing.assert_array_equal(setup("end", "count"), [[1, 1, 0, 0, 0], [0, 0, 1, 0, 0]])
+
+
+def test_setup_interval_variables_rows_without_concept_id(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    # the February exposure of person 1 to concept 19073183
+    con.execute("UPDATE drug_exposure SET drug_concept_id = NULL WHERE drug_exposure_id = 2")
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=7,
+        interval_length_unit="day",
+        num_intervals=6,
+        aggregation_strategy="count",
+        keep_date="start",
+        clip_to_end_date=False,
+    )
+
+    assert edata.var["data_table_concept_id"].iloc[:2].tolist() == [19019979, 19073183]
+    assert pd.isna(edata.var["data_table_concept_id"].iloc[2])
+    # the exposure without a concept ID starts on 2100-02-01, in the fifth interval
+    np.testing.assert_array_equal(edata.X[:, 2], [[0, 0, 0, 0, 1, 0], [0] * 6, [0] * 6])
+    np.testing.assert_array_equal(edata.X[1:, 1], [[1, 0, 0, 0, 1, 0]] * 2)
+
+
 def _add_overlapping_visit(con):
     """Give person 1 a second visit, 5, overlapping its visit 1 of 2100-01-01 to 2100-01-31, and a third, 6, in March."""
     con.execute(
