@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from typing import Literal
 
 import duckdb
@@ -390,6 +391,37 @@ def _write_long_time_interval_table(
 OBS_WINDOWS_TABLE = "ehrdata_obs_windows"
 # The concept sets of setup_variables, registered while the long format table is written: variable, concept_id.
 VARIABLE_MAP_TABLE = "_ehrdata_variable_map"
+# The value ranges of setup_variables, resolved to concepts and registered while the queries that filter by them run: concept_id, lower, upper.
+VALUE_RANGE_TABLE = "_ehrdata_value_range"
+
+
+@contextmanager
+def _registered(backend_handle: duckdb.DuckDBPyConnection, name: str, frame: pd.DataFrame | None):
+    """Register frame under name for the duration of the block, if frame is given."""
+    if frame is None:
+        yield
+        return
+    backend_handle.register(name, frame)
+    try:
+        yield
+    finally:
+        backend_handle.unregister(name)
+
+
+def _value_range_filter(data_alias: str, concept_key: str, value_field: str, *, value_ranges) -> tuple[str, str]:
+    """The SQL join and condition that keep the rows whose value lies in the range of their concept.
+
+    Rows of concepts without a range, and rows without a value, are kept.
+    """
+    if value_ranges is None:
+        return "", "TRUE"
+    value = f"{data_alias}.{value_field}"
+    join = f"LEFT JOIN {VALUE_RANGE_TABLE} AS vr ON TRY_CAST({data_alias}.{concept_key} AS BIGINT) = vr.concept_id"
+    condition = (
+        f"(vr.concept_id IS NULL OR {value} IS NULL OR "
+        f"(({value} >= vr.lower OR vr.lower IS NULL) AND ({value} <= vr.upper OR vr.upper IS NULL)))"
+    )
+    return join, condition
 
 
 def _write_obs_windows(
@@ -482,9 +514,11 @@ def _write_long_observed_table(
     link_visits: bool = False,
     concept_sets: Mapping[str, Sequence[int]] | None = None,
     strategies: Mapping[int | str, str] | None = None,
+    value_ranges: pd.DataFrame | None = None,
 ) -> None:
     """Write `long_person_timestamp_feature_value_<data_table>` with one row per observed (observation, concept, interval).
 
+    With value_ranges, the rows whose value lies outside the range of their concept are left out before the aggregation, see `_value_range_filter`.
     With strategies, the aggregation_strategy of each variable, keyed like the variables: by concept id, or by the name of the concept set.
     All strategies aggregate the same observed rows, which are read from the data table once.
     With concept_sets, a row per observed (observation, variable, interval) instead: the rows of the concepts of a set are aggregated together, and the column `variable` holds the name of the set in place of `data_table_concept_id`.
@@ -513,6 +547,7 @@ def _write_long_observed_table(
     if not variables_of_strategy:
         variables_of_strategy = {aggregation_strategy: []}
 
+    variable_map = None
     if concept_sets is None:
         key_column, key_select, variable_join = "data_table_concept_id", f"d.{concept_key}", ""
         concept_condition = _concept_ids_condition(data_table, concept_ids)
@@ -552,10 +587,15 @@ def _write_long_observed_table(
         )
     observed_cells = " UNION ALL ".join(groups)
 
+    range_join, range_condition = _value_range_filter(
+        "d", concept_key, data_field_to_keep[0], value_ranges=value_ranges
+    )
+
     table = f"long_person_timestamp_feature_value_{data_table}"
-    try:
-        if concept_sets is not None:
-            backend_handle.register(VARIABLE_MAP_TABLE, variable_map)
+    with (
+        _registered(backend_handle, VARIABLE_MAP_TABLE, variable_map),
+        _registered(backend_handle, VALUE_RANGE_TABLE, value_ranges),
+    ):
         backend_handle.execute(f"DROP TABLE IF EXISTS {table}")
         backend_handle.execute(
             f"""
@@ -566,8 +606,10 @@ def _write_long_observed_table(
                 CAST(({row_time} - {start_time}) // {interval_us} AS INTEGER) AS interval_step, 1 AS is_present{kept_select}
             FROM ({_data_rows_query(data_table, link_visits=link_visits)}) AS d
             {variable_join}
+            {range_join}
             JOIN observations AS o ON d.person_id = o.person_id AND {_visit_condition("d", "o", link_visits=link_visits)}
             WHERE {concept_condition}
+                AND {range_condition}
                 AND {row_time} >= {start_time}
                 AND {row_time} - {start_time} < {interval_us * num_intervals}
                 AND CAST(d.{datetime_col} AS DATE) <= o.end_date
@@ -576,9 +618,6 @@ def _write_long_observed_table(
         SELECT * FROM observed_cells WHERE is_present IS NOT NULL
         """,
         )
-    finally:
-        if concept_sets is not None:
-            backend_handle.unregister(VARIABLE_MAP_TABLE)
 
 
 def _instantiate_long_observed_table(

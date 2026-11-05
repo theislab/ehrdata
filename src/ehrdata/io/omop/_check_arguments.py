@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import duckdb
 import numpy as np
@@ -225,6 +225,58 @@ def _check_valid_aggregation_fill_values(table_strategies, data_field_to_keep, n
             "other strategies, as well as data_field_to_keep='is_present', with NaN. Set up these variables in separate calls."
         )
         raise ValueError(msg)
+
+
+def _check_valid_value_range(value_range, *, concept_sets: bool) -> dict | None:
+    """Check a value_range mapping of variables to (lower, upper), and return it with integer concept ids as keys."""
+    if value_range is None:
+        return None
+    if not isinstance(value_range, Mapping):
+        msg = "value_range must be a mapping of variables to (lower, upper)."
+        raise TypeError(msg)
+    checked = {}
+    for key, bounds in value_range.items():
+        if concept_sets:
+            if not isinstance(key, str):
+                msg = f"With concept sets, value_range is keyed by the names of the sets, but has the key {key!r}."
+                raise TypeError(msg)
+        elif not isinstance(key, int | np.integer) or isinstance(key, bool):
+            msg = f"value_range is keyed by integer concept ids, but has the key {key!r}."
+            raise TypeError(msg)
+        if isinstance(bounds, str) or not isinstance(bounds, Sequence) or len(bounds) != 2:
+            msg = f"The value_range of {key!r} must be a pair (lower, upper), but is {bounds!r}."
+            raise TypeError(msg)
+        lower, upper = bounds
+        for bound in (lower, upper):
+            if bound is not None and (
+                not isinstance(bound, int | float | np.integer | np.floating)
+                or isinstance(bound, bool)
+                or np.isnan(bound)
+            ):
+                msg = f"The bounds of the value_range of {key!r} must be numbers or None, but are {bounds!r}."
+                raise TypeError(msg)
+        if lower is not None and upper is not None and lower > upper:
+            msg = f"The value_range of {key!r} has a lower bound above its upper bound: {bounds!r}."
+            raise ValueError(msg)
+        checked[key if concept_sets else int(key)] = (lower, upper)
+    return checked
+
+
+def _check_valid_value_range_variables(
+    value_range, variables_of_table, requested_concept_ids, data_field_to_keep, numeric_fields
+):
+    """Check that value_range is keyed by variables, and that their data fields are numeric values."""
+    known = {variable for table_variables in variables_of_table.values() for variable in table_variables}
+    unknown = [key for key in value_range if key not in known and key not in set(requested_concept_ids)]
+    if unknown:
+        msg = f"value_range has ranges for {unknown[:5]}, which are no variables of the data tables."
+        raise ValueError(msg)
+    for table, table_variables in variables_of_table.items():
+        if any(variable in value_range for variable in table_variables) and (
+            data_field_to_keep[table][0] == "is_present" or not numeric_fields[table]
+        ):
+            msg = f"value_range filters by value, which needs a numeric data field, but '{data_field_to_keep[table][0]}' of '{table}' is not."
+            raise TypeError(msg)
 
 
 def _check_valid_aggregation_strategies(aggregation_strategy, variables_of_table, requested_concept_ids) -> dict:
