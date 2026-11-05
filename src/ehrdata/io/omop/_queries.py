@@ -120,6 +120,58 @@ SINGLE_ROW_AGGREGATION_STRATEGIES = ("last", "first")
 UNITLESS_AGGREGATION_STRATEGIES = ("count",)
 
 
+def _links_rows_to_visits(backend_handle: duckdb.DuckDBPyConnection, time_defining_table: str, data_table: str) -> bool:
+    """Whether the rows of data_table are attributed to visit observations by their visit_occurrence_id.
+
+    That is the case if the observations are visits, data_table has a visit_occurrence_id, which 'specimen' and the era tables do not,
+    and the database has a visit_occurrence table to tell which visits the ids name.
+    """
+    if time_defining_table != "visit_occurrence":
+        return False
+
+    def columns(table: str) -> set[str]:
+        return {
+            row[0].lower()
+            for row in backend_handle.execute(
+                "SELECT column_name FROM information_schema.columns WHERE lower(table_name) = ?", [table]
+            ).fetchall()
+        }
+
+    return "visit_occurrence_id" in columns(data_table) and {"visit_occurrence_id", "person_id"} <= columns(
+        "visit_occurrence"
+    )
+
+
+LINKED_VISIT = "ehrdata_linked_visit_occurrence_id"
+
+
+def _data_rows_query(data_table: str, *, link_visits: bool) -> str:
+    """The rows of data_table, with link_visits also the visit each row names in LINKED_VISIT.
+
+    A row names a visit if its visit_occurrence_id is a visit of the same person in the visit_occurrence table; otherwise LINKED_VISIT is NULL.
+    """
+    if not link_visits:
+        return f"SELECT * FROM {data_table}"
+    return f"""
+        SELECT d.*, v.visit_occurrence_id AS {LINKED_VISIT}
+        FROM {data_table} AS d
+        LEFT JOIN (SELECT DISTINCT TRY_CAST(visit_occurrence_id AS BIGINT) AS visit_occurrence_id, person_id FROM visit_occurrence) AS v
+            ON TRY_CAST(d.visit_occurrence_id AS BIGINT) = v.visit_occurrence_id AND d.person_id = v.person_id
+    """
+
+
+def _visit_condition(data_alias: str, obs_alias: str, *, link_visits: bool) -> str:
+    """The SQL condition that a row of a data table may belong to a visit observation, besides lying in its window.
+
+    A row that names a visit of its person belongs to that visit only; any other row to every visit of its person whose window holds it.
+    """
+    if not link_visits:
+        return "TRUE"
+    return (
+        f"({data_alias}.{LINKED_VISIT} IS NULL OR {data_alias}.{LINKED_VISIT} = TRY_CAST({obs_alias}.obs_id AS BIGINT))"
+    )
+
+
 def _get_unit_fields(backend_handle: duckdb.DuckDBPyConnection, data_table: str) -> tuple[str, ...]:
     """Get the fields of UNIT_FIELDS that data_table has.
 
@@ -248,6 +300,7 @@ def _write_long_time_interval_table(
     unit_fields: Sequence[str] = (),
     concept_ids: Literal["all"] | Sequence[int] = "all",
     keep_date: str = "",
+    link_visits: bool = False,
 ) -> None:
     if isinstance(data_field_to_keep, str):
         data_field_to_keep = [data_field_to_keep]
@@ -296,7 +349,7 @@ def _write_long_time_interval_table(
         ), \
         data_table_with_presence_indicator as( \
             SELECT *, 1 as is_present \
-            FROM {data_table} \
+            FROM ({_data_rows_query(data_table, link_visits=link_visits)}) \
         ) \
         """
     )
@@ -306,7 +359,7 @@ def _write_long_time_interval_table(
         select_query = f"""
         SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col, unit_fields=unit_fields, finer_datetime_columns=_finer_datetime_keys(keep_date, data_table, time_precision))}, lfi.obs_index \
         FROM long_format_intervals as lfi \
-        LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{datetime_col} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col} < lfi.interval_end \
+        LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND {_visit_condition("data_table_with_presence_indicator", "lfi", link_visits=link_visits)} AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{datetime_col} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col} < lfi.interval_end \
                 AND CAST(data_table_with_presence_indicator.{datetime_col} AS DATE) <= lfi.end_date \
         GROUP BY lfi.obs_index, lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
@@ -318,6 +371,7 @@ def _write_long_time_interval_table(
         SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col_start, unit_fields=unit_fields, finer_datetime_columns=_finer_datetime_keys("start", data_table, time_precision))}, lfi.obs_index \
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id \
+                AND {_visit_condition("data_table_with_presence_indicator", "lfi", link_visits=link_visits)} \
                 AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id \
                 AND (data_table_with_presence_indicator.{datetime_col_start} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col_start} < lfi.interval_end \
                     OR data_table_with_presence_indicator.{datetime_col_end} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col_end} < lfi.interval_end \
@@ -416,10 +470,12 @@ def _write_long_observed_table(
     data_field_to_keep: Sequence[str],
     unit_fields: Sequence[str] = (),
     concept_ids: Literal["all"] | Sequence[int] = "all",
+    link_visits: bool = False,
 ) -> None:
     """Write `long_person_timestamp_feature_value_<data_table>` with one row per observed (observation, concept, interval).
 
     Each row of the data_table is joined to the observations of its person whose time window holds it, and binned into its interval there.
+    With link_visits, a row that names a visit of its person is joined to that visit only, see `_visit_condition`.
     Only the cells that receive a row carrying a value are aggregated and stored, so the table grows with the data rather than with observations x concepts x intervals.
     """
     interval_us = int(pd.Timedelta(interval_length_number, interval_length_unit) // pd.Timedelta(microseconds=1))
@@ -454,8 +510,8 @@ def _write_long_observed_table(
         observed_rows AS (
             SELECT o.obs_id, o.obs_index, o.person_id, o.start_date, d.{concept_key} AS data_table_concept_id,
                 CAST(({row_time} - {start_time}) // {interval_us} AS INTEGER) AS interval_step, 1 AS is_present{kept_select}
-            FROM {data_table} AS d
-            JOIN observations AS o ON d.person_id = o.person_id
+            FROM ({_data_rows_query(data_table, link_visits=link_visits)}) AS d
+            JOIN observations AS o ON d.person_id = o.person_id AND {_visit_condition("d", "o", link_visits=link_visits)}
             WHERE {_concept_ids_condition(data_table, concept_ids)}
                 AND {row_time} >= {start_time}
                 AND {row_time} - {start_time} < {interval_us * num_intervals}
