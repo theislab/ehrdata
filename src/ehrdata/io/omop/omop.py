@@ -60,6 +60,7 @@ from ehrdata.io.omop._queries import (
     _get_unit_fields,
     _instantiate_long_observed_table,
     _links_rows_to_visits,
+    _registered,
     _sql_literal,
     _write_long_observed_table,
     _write_obs_names,
@@ -279,7 +280,7 @@ def _create_feature_unit_concept_id_report(
     return df
 
 
-def _concept_set_feature_info(backend_handle, concept_sets, concepts) -> pd.DataFrame:
+def _concept_set_feature_info(concept_sets, concepts, relationships) -> pd.DataFrame:
     """One row per concept set: each field of the concept table for the concepts of the set, joined by '; ' in the order of the set.
 
     As for single concepts, a concept id that the concept table lacks is looked up by its 'Mapped from' relationship; a concept found in neither gives an empty value.
@@ -289,9 +290,6 @@ def _concept_set_feature_info(backend_handle, concept_sets, concepts) -> pd.Data
     mapped: dict = {}
     if any(concept_id not in by_id.index for concept_id in ids):
         logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
-        relationships = backend_handle.sql(
-            "SELECT concept_id_1, concept_id_2 FROM concept_relationship WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)"
-        ).df()
         mapped = relationships.drop_duplicates("concept_id_1").set_index("concept_id_1")["concept_id_2"].to_dict()
 
     def record(concept_id):
@@ -310,24 +308,64 @@ def _concept_set_feature_info(backend_handle, concept_sets, concepts) -> pd.Data
     return pd.DataFrame(rows, columns=by_id.columns)
 
 
-def _create_enriched_var_with_unit_info(backend_handle, ds, var, unit_report) -> pd.DataFrame:
-    feature_concept_id_table = var  # ds["data_table_concept_id"].to_pandas()
+CONCEPT_IDS_TABLE = "_ehrdata_concept_ids"
 
-    feature_concept_id_unit_table = pd.merge(
-        feature_concept_id_table, unit_report, how="left", left_index=True, right_on="concept_id"
+
+def _concept_rows(
+    backend_handle, concept_ids, *, unit_concept_ids=(), map_missing: bool
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """The rows of the concept table that the enrichment of the variables with concept_ids reads, and their 'Mapped from' relationships.
+
+    The relationships, columns concept_id_1 and concept_id_2, are those of the concept ids that the concept table lacks, if map_missing.
+    The concept rows, with lowercase columns, are those of concept_ids, of the concepts these are mapped to, and of unit_concept_ids.
+    Only these rows are read from the database, rather than the whole concept and concept_relationship tables.
+    """
+
+    def as_int(concept_id):
+        try:
+            return int(concept_id)
+        except (TypeError, ValueError):
+            return None
+
+    def ids_frame(ids):
+        return pd.DataFrame({"concept_id": pd.array(sorted({as_int(i) for i in ids} - {None}), dtype="Int64")})
+
+    def select(query, ids):
+        with _registered(backend_handle, CONCEPT_IDS_TABLE, ids_frame(ids)):
+            return backend_handle.sql(query).df()
+
+    in_ids = f"IN (SELECT concept_id FROM {CONCEPT_IDS_TABLE})"
+
+    def in_scan_order(query, id_column):
+        # of several rows of an id, the first or the last is used, so the rows keep the order of a scan; a join with the ids does not keep it
+        return (
+            f"SELECT * EXCLUDE (_position) FROM (SELECT *, row_number() OVER () AS _position FROM ({query})) "
+            f"WHERE TRY_CAST({id_column} AS BIGINT) {in_ids} ORDER BY _position"
+        )
+
+    present = set(
+        select(
+            f"SELECT DISTINCT TRY_CAST(concept_id AS BIGINT) AS concept_id FROM concept WHERE TRY_CAST(concept_id AS BIGINT) {in_ids}",
+            concept_ids,
+        )["concept_id"]
     )
-
-    concepts = backend_handle.sql("SELECT * FROM concept").df()
-
-    feature_concept_id_unit_info_table = pd.merge(
-        feature_concept_id_unit_table,
-        concepts,
-        how="left",
-        left_on="unit_concept_id",
-        right_on="concept_id",
+    missing = [concept_id for concept_id in concept_ids if as_int(concept_id) not in {None, *present}]
+    relationships = pd.DataFrame(columns=["concept_id_1", "concept_id_2"])
+    if map_missing and missing:
+        relationships = select(
+            in_scan_order(
+                "SELECT concept_id_1, concept_id_2 FROM concept_relationship "
+                "WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)",
+                "concept_id_1",
+            ),
+            missing,
+        )
+    concepts = select(
+        in_scan_order("SELECT * FROM concept", "concept_id"),
+        [*concept_ids, *relationships["concept_id_2"], *unit_concept_ids],
     )
-
-    return feature_concept_id_unit_info_table
+    concepts.columns = concepts.columns.str.lower()
+    return concepts, relationships
 
 
 def _is_numeric_field(backend_handle, data_table: str, field: str) -> bool:
@@ -424,18 +462,13 @@ def _check_listed_units(backend_handle, data_table, value_field) -> None:
 def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
     """Setup a connection to the OMOP CDM database.
 
-    This function sets up a connection to the OMOP CDM database.
-    It checks the capitalization of the 'person' table, and assumes the same capitalization style is used for all other tables.
-
+    Creates a table in the database for each CSV or Parquet file in `path` whose name, in lower case and without `prefix` and extension, is an OMOP CDM table.
+    The table and its columns are named in lower case, and the columns ending in `_date` and `_datetime` are cast to `DATE` and `TIMESTAMP`.
 
     Args:
         path: The path to the folder containing the CSV or Parquet files.
         backend_handle: The backend handle to the database.
         prefix: The prefix to be removed from the CSV/Parquet filenames.
-
-    Returns:
-        An EHRData object with populated .uns["omop_table_capitalization"] field.
-
     """
     _set_up_duckdb(Path(path), backend_handle, prefix)
 
@@ -898,7 +931,6 @@ def setup_variables(
     r_collector = {}
     unit_report_collector = {}
     empty_table_counter = 0
-    concept_mapping = False
     for data_table in data_tables:
         # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
         count = (
@@ -987,9 +1019,16 @@ def setup_variables(
             ).df()
             var = var.sort_values("data_table_concept_id").reset_index(drop=True)
 
+        concept_mapping = False
         if enrich_var_with_feature_info or enrich_var_with_unit_info:
-            concepts = backend_handle.sql("SELECT * FROM concept").df()
-            concepts.columns = concepts.columns.str.lower()
+            concepts, concepts_relationship = _concept_rows(
+                backend_handle,
+                [concept_id for ids in concept_sets.values() for concept_id in ids]
+                if concept_sets
+                else list(var["data_table_concept_id"]),
+                unit_concept_ids=list(unit_report["unit_concept_id"]) if enrich_var_with_unit_info else [],
+                map_missing=enrich_var_with_feature_info,
+            )
 
             if (
                 enrich_var_with_feature_info
@@ -998,9 +1037,6 @@ def setup_variables(
             ):
                 concept_mapping = True
                 logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
-                concepts_relationship = backend_handle.sql(
-                    "SELECT concept_id_1, concept_id_2 FROM concept_relationship WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)"
-                ).df()
                 concepts_dict = concepts_relationship.set_index("concept_id_1")["concept_id_2"].to_dict()
                 concepts_mapped_idx = [x not in set(concepts["concept_id"]) for x in var["data_table_concept_id"]]
                 var.loc[concepts_mapped_idx, "data_table_concept_id_mapped"] = var.loc[
@@ -1011,7 +1047,7 @@ def setup_variables(
                 )
 
         if enrich_var_with_feature_info and concept_sets:
-            var = pd.concat([var, _concept_set_feature_info(backend_handle, concept_sets, concepts)], axis=1)
+            var = pd.concat([var, _concept_set_feature_info(concept_sets, concepts, concepts_relationship)], axis=1)
         elif enrich_var_with_feature_info:
             if concept_mapping:
                 var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id_mapped", right_on="concept_id")
@@ -1265,7 +1301,6 @@ def setup_interval_variables(
     var_collector = {}
     r_collector = {}
     empty_table_counter = 0
-    concept_mapping = False
     for data_table in data_tables:
         # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
         count = (
@@ -1313,16 +1348,15 @@ def setup_interval_variables(
         ).df()
         var = var.sort_values("data_table_concept_id").reset_index(drop=True)
 
+        concept_mapping = False
         if enrich_var_with_feature_info:
-            concepts = backend_handle.sql("SELECT * FROM concept").df()
-            concepts.columns = concepts.columns.str.lower()
+            concepts, concepts_relationship = _concept_rows(
+                backend_handle, list(var["data_table_concept_id"]), map_missing=True
+            )
 
             if any(elem not in set(concepts["concept_id"]) for elem in var["data_table_concept_id"]):
                 concept_mapping = True
                 logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
-                concepts_relationship = backend_handle.sql(
-                    "SELECT concept_id_1, concept_id_2 FROM concept_relationship WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)"
-                ).df()
                 concepts_dict = concepts_relationship.set_index("concept_id_1")["concept_id_2"].to_dict()
                 concepts_mapped_idx = [x not in set(concepts["concept_id"]) for x in var["data_table_concept_id"]]
                 var.loc[concepts_mapped_idx, "data_table_concept_id_mapped"] = var.loc[

@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning][].
 - {func}`~ehrdata.io.omop.setup_interval_variables` aggregates only the intervals that hold data points, as {func}`~ehrdata.io.omop.setup_variables` does, so memory and time follow the number of data points. ([#349](https://github.com/theislab/ehrdata/pull/349)) @eroell
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with `aggregation_strategy="mode"` keep the smallest of several equally frequent values, instead of an arbitrary one. ([#341](https://github.com/theislab/ehrdata/pull/341)) @eroell
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with `observation_table="person_visit_occurrence"` attribute a data point whose `visit_occurrence_id` names a visit of its person to that visit only. Before, a data point belonged to every visit of its person whose window held it, so overlapping visits of a person shared their data points, and with `clip_to_end_date=False` a visit's intervals after its end took the data points of the person's next visit. Data points without a `visit_occurrence_id`, or with one that names no visit of their person, still belong to every visit whose window holds them. ([#344](https://github.com/theislab/ehrdata/pull/344)) @eroell
+- The enrichment of `.var` by {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` reads only the concepts it needs from the `concept` and `concept_relationship` tables, instead of both tables in full. ([#355](https://github.com/theislab/ehrdata/pull/355)) @eroell
 
 ### Fixed
 
@@ -38,6 +39,7 @@ and this project adheres to [Semantic Versioning][].
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` write `.uns['omop_io_variable_setup']`, as their docstring promised. ([#353](https://github.com/theislab/ehrdata/pull/353)) @eroell
 - {class}`~ehrdata.integrations.torch.OMOPEHRDataset` reads the setup recorded in `.uns['omop_io_variable_setup']`, and raises if a later call has replaced its values. ([#353](https://github.com/theislab/ehrdata/pull/353)) @eroell
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` no longer change the {class}`~ehrdata.EHRData` passed to them, and keep its earlier layers when they set up another `layer` of the same variables and intervals. ([#354](https://github.com/theislab/ehrdata/pull/354)) @eroell
+- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with several data tables and `enrich_var_with_feature_info` no longer raise a `KeyError` when an earlier table needed its concept ids mapped and a later one did not. ([#355](https://github.com/theislab/ehrdata/pull/355)) @eroell
 
 ## [0.5.0]
 

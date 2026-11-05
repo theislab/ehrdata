@@ -4789,3 +4789,51 @@ def test_setup_variables_warns_when_the_input_has_no_record(omop_connection_vani
     with caplog.at_level(logging.WARNING):
         ed.io.omop.setup_variables(first, layer="counts", aggregation_strategy="count", **kwargs)
     assert "no record of an earlier setup" in caplog.text
+
+
+def test_setup_variables_enrichment_maps_concepts_per_data_table(omop_connection_vanilla):
+    """The measurement concepts need their 'Mapped from' relationship to be found, the observation concepts not."""
+    con = omop_connection_vanilla
+    con.execute(
+        """INSERT INTO concept (concept_id, concept_name)
+        VALUES (3001062, 'observation concept one'), (3034263, 'observation concept two')"""
+    )
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement", "observation"],
+        data_field_to_keep={"measurement": ["value_as_number"], "observation": ["value_as_number"]},
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+        aggregation_strategy="last",
+        enrich_var_with_feature_info=True,
+    )
+    names = dict(zip(edata.var["data_table_concept_id"], edata.var["concept_name"], strict=True))
+    assert names == {
+        3022318: "Heart Rhythm",
+        3031147: "Calculated Total CO2|Blood|Blood Gas",
+        3001062: "observation concept one",
+        3034263: "observation concept two",
+    }
+
+
+def test_setup_interval_variables_enrichment_maps_concepts_per_data_table(omop_connection_vanilla):
+    """The drug_exposure concept needs no mapping; with a missing condition concept first, it did."""
+    con = omop_connection_vanilla
+    con.execute("INSERT INTO concept (concept_id, concept_name) VALUES (19073183, 'a drug')")
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["condition_occurrence", "drug_exposure"],
+        data_field_to_keep={"condition_occurrence": ["is_present"], "drug_exposure": ["is_present"]},
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+        aggregation_strategy="last",
+        enrich_var_with_feature_info=True,
+    )
+    names = dict(zip(edata.var["data_table_concept_id"], edata.var["concept_name"], strict=True))
+    assert names[19073183] == "a drug"
