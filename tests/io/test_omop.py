@@ -2816,3 +2816,187 @@ def test_setup_interval_variables_clip_to_end_date_with_intervals(omop_connectio
 
     # obs 0 is the visit of person 1, ending 2100-01-31; var 1 is concept 19073183, exposed from 2100-01-01 and 2100-02-01
     np.testing.assert_array_equal(edata.X[0, 1], expected)
+
+
+def _add_overlapping_visit(con):
+    """Give person 1 a second visit, 5, overlapping its visit 1 of 2100-01-01 to 2100-01-31, and a third, 6, in March."""
+    con.execute(
+        """INSERT INTO visit_occurrence (visit_occurrence_id, person_id, visit_concept_id, visit_start_date,
+            visit_start_datetime, visit_end_date, visit_end_datetime)
+        VALUES (5, 1, 8870, '2100-01-01', '2100-01-01 00:00:00', '2100-01-31', '2100-01-31 00:00:00'),
+               (6, 1, 8870, '2100-03-01', '2100-03-01 00:00:00', '2100-03-31', '2100-03-31 00:00:00')"""
+    )
+
+
+VISIT_ROWS = {
+    # measurement concept 3022318 of person 1, on the second day: (visit_occurrence_id, date, value)
+    "measurement": """INSERT INTO measurement (measurement_id, person_id, measurement_concept_id, measurement_date,
+            measurement_datetime, value_as_number, unit_concept_id, unit_source_value, visit_occurrence_id)
+        VALUES (10, 1, 3022318, '2100-01-02', '2100-01-02 12:00:00', 51, 9557, 'mEq/L', 1),
+               (11, 1, 3022318, '2100-01-02', '2100-01-02 13:00:00', 55, 9557, 'mEq/L', 5),
+               (12, 1, 3022318, '2100-01-02', '2100-01-02 14:00:00', 40, 9557, 'mEq/L', NULL),
+               (13, 1, 3022318, '2100-01-03', '2100-01-03 12:00:00', 80, 9557, 'mEq/L', 999),
+               (15, 1, 3022318, '2100-01-03', '2100-01-03 13:00:00', 33, 9557, 'mEq/L', 2),
+               (14, 1, 3022318, '2100-03-02', '2100-03-02 12:00:00', 90, 9557, 'mEq/L', 1)""",
+    "drug_exposure": """INSERT INTO drug_exposure (drug_exposure_id, person_id, drug_concept_id, drug_exposure_start_date,
+            drug_exposure_start_datetime, drug_exposure_end_date, drug_exposure_end_datetime, days_supply, visit_occurrence_id)
+        VALUES (10, 1, 19073183, '2100-01-02', '2100-01-02 12:00:00', '2100-01-03', '2100-01-03 00:00:00', 51, 1),
+               (11, 1, 19073183, '2100-01-02', '2100-01-02 13:00:00', '2100-01-03', '2100-01-03 00:00:00', 55, 5),
+               (12, 1, 19073183, '2100-01-02', '2100-01-02 14:00:00', '2100-01-03', '2100-01-03 00:00:00', 40, NULL),
+               (13, 1, 19073183, '2100-01-03', '2100-01-03 12:00:00', '2100-01-04', '2100-01-04 00:00:00', 80, 999),
+               (15, 1, 19073183, '2100-01-03', '2100-01-03 13:00:00', '2100-01-04', '2100-01-04 00:00:00', 33, 2),
+               (14, 1, 19073183, '2100-03-02', '2100-03-02 12:00:00', '2100-03-03', '2100-03-03 00:00:00', 90, 1)""",
+}
+
+
+@pytest.mark.parametrize(
+    ("setup_function", "data_table", "kwargs"),
+    [
+        (ed.io.omop.setup_variables, "measurement", {}),
+        (ed.io.omop.setup_interval_variables, "drug_exposure", {"keep_date": "start"}),
+        (ed.io.omop.setup_interval_variables, "drug_exposure", {"keep_date": "interval"}),
+    ],
+)
+def test_setup_functions_attribute_rows_to_the_visit_they_name(
+    omop_connection_vanilla, setup_function, data_table, kwargs
+):
+    """A row that names a visit of its person belongs to that visit only; any other row to every visit whose window holds it."""
+    con = omop_connection_vanilla
+    _add_overlapping_visit(con)
+    con.execute(VISIT_ROWS[data_table])
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    visit = {visit_id: i for i, visit_id in enumerate(edata.obs["visit_occurrence_id"])}
+    var = 0 if data_table == "measurement" else 1  # concept 3022318, or 19073183
+
+    def setup(aggregation_strategy):
+        return setup_function(
+            edata,
+            backend_handle=con,
+            data_tables=[data_table],
+            data_field_to_keep=["value_as_number" if data_table == "measurement" else "days_supply"],
+            interval_length_number=1,
+            interval_length_unit="day",
+            num_intervals=4,
+            aggregation_strategy=aggregation_strategy,
+            **kwargs,
+        ).X[:, var]
+
+    largest, count = setup("max"), setup("count")
+    # the second day: each overlapping visit takes its own row, 51 or 55, and the row without a visit, 40;
+    # with keep_date="interval" visit 1 also the exposure that lasts the whole month, which names visit 1
+    month_long = int(kwargs.get("keep_date") == "interval")
+    assert (largest[visit[1], 1], count[visit[1], 1]) == (51, 2 + month_long)
+    assert (largest[visit[5], 1], count[visit[5], 1]) == (55, 2)
+    # the third day: a visit id that is no visit, 80, or a visit of another person, 33, falls back to person and time,
+    # so both overlapping visits take these data points, and the visit of the other person does not
+    assert largest[visit[1], 2] == largest[visit[5], 2] == 80
+    if kwargs.get("keep_date") != "interval":  # with intervals, the month-long exposures cover the third day, too
+        assert count[visit[1], 2] == count[visit[5], 2] == 2
+        assert count[visit[2], 2] == 0
+    # the row of March names visit 1, outside of whose window it lies, so visit 6 does not take it
+    assert (count[visit[6]] == 0).all()
+
+
+def test_setup_variables_attributes_rows_by_visit_also_after_filtering(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    _add_overlapping_visit(con)
+    con.execute(VISIT_ROWS["measurement"])
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 4,
+        "aggregation_strategy": "count",
+    }
+    full = ed.io.omop.setup_variables(edata, **kwargs)
+    only_visit_5 = ed.io.omop.setup_variables(edata[(edata.obs["visit_occurrence_id"] == 5).to_numpy()], **kwargs)
+
+    # on the second day visit 5 has its own row and the one without a visit, not the one of visit 1,
+    # whether visit 1 is set up along or not
+    assert only_visit_5.X[0, 0, 1] == 2
+    np.testing.assert_array_equal(only_visit_5.X[0], full.X[(full.obs["visit_occurrence_id"] == 5).to_numpy()][0])
+
+
+def test_setup_interval_variables_attributes_rows_by_visit_at_the_end_date(omop_connection_vanilla):
+    """keep_date="end" bins by the end date, with the same attribution."""
+    con = omop_connection_vanilla
+    _add_overlapping_visit(con)
+    con.execute(VISIT_ROWS["drug_exposure"])
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    largest = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=4,
+        aggregation_strategy="max",
+        keep_date="end",
+    ).X[:, 1]
+    visit = {visit_id: i for i, visit_id in enumerate(edata.obs["visit_occurrence_id"])}
+    # the exposures of the second day end on the third
+    assert largest[visit[1], 2] == 51
+    assert largest[visit[5], 2] == 55
+
+
+def test_setup_variables_keeps_the_next_visit_out_of_a_longer_window(omop_connection_multiple_visit_occurrences):
+    """With clip_to_end_date=False, the window of a visit can reach the person's next visit, whose data points it does not take."""
+    con = omop_connection_multiple_visit_occurrences
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=100,
+        clip_to_end_date=False,
+    )
+    visit = {visit_id: i for i, visit_id in enumerate(edata.obs["visit_occurrence_id"])}
+
+    # visit 1 of person 1 starts 2100-01-01, its visit 4 2100-03-01, 59 days later
+    assert not np.isnan(edata.X[visit[4]]).all()
+    assert np.isnan(edata.X[visit[1], :, 31:]).all()
+
+
+def test_setup_variables_specimen_goes_to_every_overlapping_visit(omop_connection_vanilla):
+    """specimen has no visit_occurrence_id, so its data points belong to every visit whose window holds them."""
+    con = omop_connection_vanilla
+    _add_overlapping_visit(con)
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["specimen"],
+        data_field_to_keep=["quantity"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=4,
+    )
+    visit = {visit_id: i for i, visit_id in enumerate(edata.obs["visit_occurrence_id"])}
+
+    assert not np.isnan(edata.X[visit[1]]).all()
+    np.testing.assert_array_equal(edata.X[visit[5]], edata.X[visit[1]])
+
+
+def test_setup_variables_without_a_visit_table_attributes_by_person_and_time(omop_connection_vanilla):
+    """Without a visit_occurrence table, the visit ids cannot be checked, and the data points go by person and time."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 4,
+    }
+    expected = ed.io.omop.setup_variables(edata, **kwargs).X
+    con.execute("DROP TABLE visit_occurrence")
+
+    np.testing.assert_array_equal(ed.io.omop.setup_variables(edata, **kwargs).X, expected)

@@ -43,6 +43,7 @@ from ehrdata.io.omop._queries import (
     _get_table_join,
     _get_unit_fields,
     _instantiate_long_observed_table,
+    _links_rows_to_visits,
     _write_long_observed_table,
     _write_long_time_interval_table,
     _write_obs_names,
@@ -393,6 +394,9 @@ def setup_variables(
 
     The variables are set up for the rows of `edata.obs`, in their order: the time window of each row is read from the columns that :func:`~ehrdata.io.omop.setup_obs` writes to `.obs`.
     Hence `edata` can be filtered or reordered between :func:`~ehrdata.io.omop.setup_obs` and this function.
+    With `observation_table="person_visit_occurrence"`, a data point whose `visit_occurrence_id` names a visit of its person in the `visit_occurrence` table belongs to that visit only, and to no visit if it lies outside that visit's window.
+    Any other data point belongs to every visit of its person whose window holds it; the data tables without a `visit_occurrence_id`, such as `specimen`, have only such data points.
+    Visit ids are compared as integers, as OMOP defines them.
     A row without a start date in `.obs`, or without an end date unless `clip_to_end_date=False`, gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
 
     Writes a unit report of the features to `edata.uns['unit_report_<data_tables>']`.
@@ -554,6 +558,7 @@ def setup_variables(
             num_intervals=num_intervals,
             aggregation_strategy=aggregation_strategy,
             concept_ids=concept_ids,
+            link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
         )
         _write_obs_names(backend_handle, data_table)
 
@@ -713,6 +718,9 @@ def setup_interval_variables(
 
     The variables are set up for the rows of `edata.obs`, in their order: the time window of each row is read from the columns that :func:`~ehrdata.io.omop.setup_obs` writes to `.obs`.
     Hence `edata` can be filtered or reordered between :func:`~ehrdata.io.omop.setup_obs` and this function.
+    With `observation_table="person_visit_occurrence"`, a data point whose `visit_occurrence_id` names a visit of its person in the `visit_occurrence` table belongs to that visit only, and to no visit if it lies outside that visit's window.
+    Any other data point belongs to every visit of its person whose window holds it; the data tables without a `visit_occurrence_id`, such as `specimen`, have only such data points.
+    Visit ids are compared as integers, as OMOP defines them.
     A row without a start date in `.obs`, or without an end date unless `clip_to_end_date=False`, gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
 
     In contrast to `setup_variables`, tables without unit information can be present here.
@@ -851,6 +859,7 @@ def setup_interval_variables(
             aggregation_strategy=aggregation_strategy,
             concept_ids=concept_ids,
             keep_date=keep_date,
+            link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
         )
         _write_obs_names(backend_handle, data_table)
 
