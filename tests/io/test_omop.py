@@ -1,3 +1,4 @@
+import logging
 import re
 
 import numpy as np
@@ -4571,3 +4572,220 @@ def test_setup_variables_record_is_writable_with_slashes_in_set_names(omop_conne
     ed.io.write_zarr(edata, tmp_path / "sets.zarr")
     read_back = ed.io.read_zarr(tmp_path / "sets.zarr").uns["omop_io_variable_setup"]["aggregation_strategy"]
     assert list(read_back["variables"]) == ["co2/blood", "rhythm"]
+
+
+def _setup_function_kwargs(setup_function):
+    if setup_function is ed.io.omop.setup_variables:
+        return {"data_tables": ["measurement"], "data_field_to_keep": ["value_as_number"]}
+    return {"data_tables": ["drug_exposure"], "data_field_to_keep": ["days_supply"]}
+
+
+@pytest.mark.parametrize("setup_function", [ed.io.omop.setup_variables, ed.io.omop.setup_interval_variables])
+def test_setup_functions_leave_their_input_unchanged(omop_connection_vanilla, setup_function):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata.obsm["embedding"] = np.arange(2 * edata.n_obs).reshape(edata.n_obs, 2)
+    uns, obs = dict(edata.uns), edata.obs.copy()
+
+    result = setup_function(
+        edata,
+        backend_handle=con,
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+        **_setup_function_kwargs(setup_function),
+    )
+
+    assert dict(edata.uns) == uns
+    pd.testing.assert_frame_equal(edata.obs, obs)
+    assert edata.n_vars == 0
+    np.testing.assert_array_equal(result.obsm["embedding"], edata.obsm["embedding"])
+    result.uns["new"] = 1
+    assert "new" not in edata.uns
+
+
+@pytest.mark.parametrize("setup_function", [ed.io.omop.setup_variables, ed.io.omop.setup_interval_variables])
+def test_setup_functions_keep_the_layers_of_the_same_variables(omop_connection_vanilla, setup_function):
+    """A second call that sets up another layer of the same variables keeps `.X` and the earlier layers."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 3,
+        **_setup_function_kwargs(setup_function),
+    }
+    first = setup_function(edata, aggregation_strategy="last", **kwargs)
+    second = setup_function(first, layer="counts", aggregation_strategy="count", **kwargs)
+    third = setup_function(second, layer="counts", aggregation_strategy="max", **kwargs)
+
+    np.testing.assert_array_equal(second.X, first.X)
+    assert list(third.layers.keys()) == list(second.layers.keys())
+    np.testing.assert_array_equal(third.X, first.X)
+    np.testing.assert_array_equal(third.layers["counts"], setup_function(edata, aggregation_strategy="max", **kwargs).X)
+    assert "counts" not in first.layers
+
+
+def test_setup_variables_warns_when_it_drops_the_layers_of_other_variables(omop_connection_vanilla, caplog):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+    }
+    first = ed.io.omop.setup_variables(edata, num_intervals=3, **kwargs)
+
+    with caplog.at_level(logging.WARNING):
+        other = ed.io.omop.setup_variables(first, layer="other", num_intervals=4, **kwargs)
+    assert "so its X is not kept" in caplog.text
+    assert list(other.layers.keys()) == ["other"]
+
+
+def test_setup_variables_does_not_write_into_the_object_a_view_is_of(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 3,
+    }
+    first = ed.io.omop.setup_variables(edata, **kwargs)
+    first.obsm["embedding"] = np.zeros((first.n_obs, 2))
+    view = first[[0, 1]]
+    before = first.X.copy()
+
+    result = ed.io.omop.setup_variables(view, layer="counts", aggregation_strategy="count", **kwargs)
+    result.X[0, 0, 0] = -1
+    result.obsm["embedding"][0, 0] = -1
+
+    np.testing.assert_array_equal(first.X, before, strict=False)
+    assert (first.obsm["embedding"] == 0).all()
+    assert result.X[0, 0, 0] == -1
+
+
+def test_setup_variables_without_tensor_keeps_the_layer(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 3,
+    }
+    first = ed.io.omop.setup_variables(edata, **kwargs)
+    again = ed.io.omop.setup_variables(first, instantiate_tensor=False, **kwargs)
+    np.testing.assert_array_equal(again.X, first.X)
+
+
+def test_setup_variables_drops_the_layers_of_another_interval_length(omop_connection_vanilla, caplog):
+    """The same number of intervals of another length are other intervals."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "time_precision": "datetime",
+        "num_intervals": 3,
+    }
+    daily = ed.io.omop.setup_variables(edata, interval_length_unit="day", **kwargs)
+    with caplog.at_level(logging.WARNING):
+        hourly = ed.io.omop.setup_variables(daily, layer="hourly", interval_length_unit="h", **kwargs)
+    assert list(hourly.layers.keys()) == ["hourly"]
+    assert "so its X is not kept" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("num_intervals_before", "time_subset", "kept"),
+    [(2, slice(None), True), (0, slice(None), False), (2, slice(1, None), False)],
+)
+def test_setup_variables_keeps_the_layers_of_the_same_intervals_only(
+    omop_connection_vanilla, caplog, num_intervals_before, time_subset, kept
+):
+    """Layers are kept only for the same intervals, which a time subset or another look-back changes."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 3,
+    }
+    first = ed.io.omop.setup_variables(edata, num_intervals_before=2, **kwargs)[:, :, time_subset].copy()
+    with caplog.at_level(logging.WARNING):
+        second = ed.io.omop.setup_variables(
+            first, layer="counts", aggregation_strategy="count", num_intervals_before=num_intervals_before, **kwargs
+        )
+    assert second.n_t == num_intervals_before + 3
+    if kept:
+        np.testing.assert_array_equal(second.X, first.X)
+    else:
+        assert list(second.layers.keys()) == ["counts"]
+        assert "so its X is not kept" in caplog.text
+
+
+def test_setup_variables_drops_the_layers_of_another_time_precision(omop_connection_vanilla, caplog):
+    """Windows start at midnight at date precision and at the start datetime otherwise, so the intervals differ."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 3,
+    }
+    first = ed.io.omop.setup_variables(edata, time_precision="date", **kwargs)
+    with caplog.at_level(logging.WARNING):
+        second = ed.io.omop.setup_variables(first, layer="datetime", time_precision="datetime", **kwargs)
+    assert list(second.layers.keys()) == ["datetime"]
+    assert "so its X is not kept" in caplog.text
+
+
+def test_setup_variables_keeps_the_layers_of_renamed_concepts(omop_connection_vanilla):
+    """Plain concept ids are identified by their concept, so renaming them keeps the layers."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 3,
+    }
+    first = ed.io.omop.setup_variables(edata, **kwargs)
+    first.var_names = [f"concept_{concept}" for concept in first.var["data_table_concept_id"]]
+    second = ed.io.omop.setup_variables(first, layer="counts", aggregation_strategy="count", **kwargs)
+    np.testing.assert_array_equal(second.X, first.X)
+
+
+def test_setup_variables_warns_when_the_input_has_no_record(omop_connection_vanilla, caplog):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 3,
+    }
+    first = ed.io.omop.setup_variables(edata, **kwargs)
+    del first.uns["omop_io_variable_setup"]
+    with caplog.at_level(logging.WARNING):
+        ed.io.omop.setup_variables(first, layer="counts", aggregation_strategy="count", **kwargs)
+    assert "no record of an earlier setup" in caplog.text

@@ -72,6 +72,8 @@ if TYPE_CHECKING:
     import duckdb
     from duckdb import DuckDBPyConnection
 
+    from ehrdata import EHRData
+
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
 
@@ -546,6 +548,81 @@ def _variable_setup(setup_id: str, *, data_tables, data_field_to_keep, aggregati
     }
 
 
+def _same_variables(edata: EHRData, var: pd.DataFrame, tem: pd.DataFrame, setup: dict) -> bool:
+    """Whether edata has the variables var and the intervals tem, and the data tables and time axis of setup, as recorded by an earlier call."""
+    if edata.n_vars != len(var):
+        return False
+    # the names of concept sets identify them; plain concept ids are named by position, and identified by data_table_concept_id
+    if "concept_ids" in var.columns and list(edata.var_names) != [str(name) for name in var.index]:
+        return False
+    for column in ("data_table_concept_id", "concept_ids"):
+        if (column in edata.var.columns) != (column in var.columns):
+            return False
+        if column in var.columns and list(edata.var[column]) != list(var[column]):
+            return False
+    # the intervals of edata, which may be a subset of those set up earlier
+    if "interval_step" not in edata.tem.columns or list(edata.tem["interval_step"]) != list(tem["interval_step"]):
+        return False
+    earlier = edata.uns.get("omop_io_variable_setup")
+    keys = (
+        "data_tables",
+        "time_precision",
+        "interval_length_number",
+        "interval_length_unit",
+        "num_intervals",
+        "num_intervals_before",
+    )
+    return isinstance(earlier, Mapping) and all(
+        key in earlier and list(np.atleast_1d(earlier[key])) == list(np.atleast_1d(setup[key])) for key in keys
+    )
+
+
+def _setup_result(
+    edata: EHRData, *, layer: str | None, tensor, var: pd.DataFrame, tem: pd.DataFrame, setup: dict
+) -> EHRData:
+    """A new EHRData of the rows of edata with the variables var and the intervals tem, and tensor in layer, or in `.X` if layer is None.
+
+    edata is not changed: `.obs` and `.uns` are copied, and `.obsm` and `.obsp` kept; setup becomes `.uns['omop_io_variable_setup']`.
+    `.X`, the other layers, `.varm` and `.varp` are kept if edata has the same variables, data tables and time axis, as after an earlier call that set up another layer;
+    otherwise they cannot describe the new variables and are dropped, with a warning.
+    Kept arrays are those of edata, not copies; of a view, they are copied, so that the result does not write into the object the view is of.
+    Without a tensor, layer keeps what edata has there.
+    """
+    from ehrdata import EHRData
+
+    if edata.is_view:
+        edata = edata.copy()
+    layers = {key: value for key, value in edata.layers.items() if key != layer or tensor is None}
+    varm, varp = dict(edata.varm.items()), dict(edata.varp.items())
+    if not _same_variables(edata, var, tem, setup):
+        dropped = [("X" if key is None else f"layers['{key}']") for key in layers]
+        dropped += [f"varm['{key}']" for key in varm] + [f"varp['{key}']" for key in varp]
+        if dropped:
+            reason = (
+                "other variables, data tables or intervals than those set up"
+                if isinstance(edata.uns.get("omop_io_variable_setup"), Mapping)
+                else "no record of an earlier setup in .uns['omop_io_variable_setup']"
+            )
+            logging.warning(
+                f"The given EHRData has {reason}, so its {', '.join(dropped)} {'is' if len(dropped) == 1 else 'are'} not kept."
+            )
+        layers, varm, varp = {}, {}, {}
+    if tensor is not None:
+        layers[layer] = tensor
+    return EHRData(
+        X=layers.pop(None, None),
+        layers=layers,
+        obs=edata.obs.copy(),
+        var=var,
+        tem=tem,
+        uns={**edata.uns, "omop_io_variable_setup": setup},
+        obsm=dict(edata.obsm.items()),
+        obsp=dict(edata.obsp.items()),
+        varm=varm,
+        varp=varp,
+    )
+
+
 def setup_variables(
     edata,
     *,
@@ -587,9 +664,10 @@ def setup_variables(
     Visit ids are compared as integers, as OMOP defines them.
     A row without a start date in `.obs`, or without an end date unless `clip_to_end_date=False`, gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
 
-    Writes a unit report of the features to `edata.uns['unit_report_<data_tables>']`.
-    Writes the data tables, `data_field_to_keep`, the time axis, `aggregation_strategy` and `clip_to_end_date` into `edata.uns['omop_io_variable_setup']`, with a `setup_id` that also marks the long format tables of the call,
+    Writes a unit report of the features to `.uns['unit_report_<data_tables>']` of the result.
+    Writes the data tables, `data_field_to_keep`, the time axis, `aggregation_strategy` and `clip_to_end_date` into `.uns['omop_io_variable_setup']` of the result, with a `setup_id` that also marks the long format tables of the call,
     so that :class:`~ehrdata.integrations.torch.OMOPEHRDataset` reads the values of this call, and notices when a later call has replaced its tables.
+    The record describes this call only, also when the result keeps layers of earlier calls.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
     Its `obs_index` is the position of the row in `edata.obs`; the table `long_person_timestamp_feature_value_<data_table>_obs` holds the `obs_names` of these rows.
@@ -598,9 +676,10 @@ def setup_variables(
     otherwise, the table is only stored in the RDBMS for later use.
 
     Args:
-        edata: Data object to which the variables should be added.
+        edata: Data object whose observations the variables are set up for.
         backend_handle: The backend handle to the database.
         layer: The layer to store the data in. If not specified, uses `X`.
+            The input is not changed. The result keeps `.X` and the other layers of `edata` if `edata` has the same variables, data tables and time axis, as after a call that set up another layer of them.
         data_tables: The tables to be used.
         data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
             'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
@@ -704,8 +783,6 @@ def setup_variables(
         >>> )
         >>> edata_gi
     """
-    from ehrdata import EHRData
-
     _check_valid_edata(edata)
     _check_valid_backend_handle(backend_handle)
     data_tables = _check_valid_variable_data_tables(data_tables)
@@ -988,7 +1065,7 @@ def setup_variables(
 
     if empty_table_counter == len(data_tables):
         logging.warning("No data found in any of the data tables. Returning edata without data.")
-        return edata
+        return edata.copy()
 
     var = pd.concat(var_collector.values(), axis=0).reset_index(drop=True)
 
@@ -1003,30 +1080,21 @@ def setup_variables(
 
     var.index = var.pop("variable").to_numpy() if concept_sets else var.index.astype(str)
 
-    uns = {
-        **edata.uns,
-        "omop_io_variable_setup": _variable_setup(
-            setup_id,
-            data_tables=data_tables,
-            data_field_to_keep=data_field_to_keep,
-            time_precision=time_precision,
-            interval_length_number=interval_length_number,
-            interval_length_unit=interval_length_unit,
-            num_intervals=num_intervals,
-            num_intervals_before=num_intervals_before,
-            aggregation_strategy=strategy_map if strategy_map is not None else aggregation_strategy,
-            clip_to_end_date=clip_to_end_date,
-        ),
-    }
-    # AnnData does not allow to set a layer with value None
-    if instantiate_tensor:
-        edata = (
-            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=uns, tem=tem)
-            if layer is not None
-            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=uns, tem=tem)
-        )
-    else:
-        edata = EHRData(obs=edata.obs, var=var, uns=uns, tem=tem)
+    setup = _variable_setup(
+        setup_id,
+        data_tables=data_tables,
+        data_field_to_keep=data_field_to_keep,
+        time_precision=time_precision,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        num_intervals_before=num_intervals_before,
+        aggregation_strategy=strategy_map if strategy_map is not None else aggregation_strategy,
+        clip_to_end_date=clip_to_end_date,
+    )
+    edata = _setup_result(
+        edata, layer=layer, tensor=tem_layer if instantiate_tensor else None, var=var, tem=tem, setup=setup
+    )
 
     for data_table, unit_report in unit_report_collector.items():
         edata.uns[f"unit_report_{data_table}"] = unit_report
@@ -1093,7 +1161,7 @@ def setup_interval_variables(
     Those tell no unit to verify or to carry along; the tables that do have a `unit_concept_id` are treated as in `setup_variables`.
     This function will not write a unit report. Should this be relevant for your work, please do open an issue on https://github.com/theislab/ehrdata.
 
-    Writes the setup arguments into `edata.uns['omop_io_variable_setup']`, as :func:`~ehrdata.io.omop.setup_variables` does.
+    Writes the setup arguments into `.uns['omop_io_variable_setup']` of the result, as :func:`~ehrdata.io.omop.setup_variables` does.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
     Its `obs_index` is the position of the row in `edata.obs`; the table `long_person_timestamp_feature_value_<data_table>_obs` holds the `obs_names` of these rows.
@@ -1102,9 +1170,10 @@ def setup_interval_variables(
     otherwise, the table is only stored in the RDBMS for later use.
 
     Args:
-       edata: Data object to which the variables should be added.
+       edata: Data object whose observations the variables are set up for.
        backend_handle: The backend handle to the database.
        layer: The layer to store the data in. If not specified, it uses `X`.
+           The input is not changed. The result keeps `.X` and the other layers of `edata` if `edata` has the same variables, data tables and time axis, as after a call that set up another layer of them.
        data_tables: The tables to be used.
        data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
            'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
@@ -1166,8 +1235,6 @@ def setup_interval_variables(
         >>> )
         >>> edata_gi
     """
-    from ehrdata import EHRData
-
     _check_valid_edata(edata)
     _check_valid_backend_handle(backend_handle)
     data_tables = _check_valid_interval_variable_data_tables(data_tables)
@@ -1288,7 +1355,7 @@ def setup_interval_variables(
 
     if empty_table_counter == len(data_tables):
         logging.warning("No data found in any of the data tables. Returning edata without data.")
-        return edata
+        return edata.copy()
 
     var = pd.concat(var_collector.values(), axis=0).reset_index(drop=True)
 
@@ -1298,30 +1365,21 @@ def setup_interval_variables(
 
     var.index = var.index.astype(str)
 
-    uns = {
-        **edata.uns,
-        "omop_io_variable_setup": _variable_setup(
-            setup_id,
-            data_tables=data_tables,
-            data_field_to_keep=data_field_to_keep,
-            time_precision=time_precision,
-            interval_length_number=interval_length_number,
-            interval_length_unit=interval_length_unit,
-            num_intervals=num_intervals,
-            num_intervals_before=num_intervals_before,
-            aggregation_strategy=aggregation_strategy,
-            clip_to_end_date=clip_to_end_date,
-            keep_date=keep_date,
-        ),
-    }
-    # AnnData does not allow to set a layer with value None
-    if instantiate_tensor:
-        edata = (
-            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=uns, tem=tem)
-            if layer is not None
-            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=uns, tem=tem)
-        )
-    else:
-        edata = EHRData(obs=edata.obs, var=var, uns=uns, tem=tem)
+    setup = _variable_setup(
+        setup_id,
+        data_tables=data_tables,
+        data_field_to_keep=data_field_to_keep,
+        time_precision=time_precision,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        num_intervals_before=num_intervals_before,
+        aggregation_strategy=aggregation_strategy,
+        clip_to_end_date=clip_to_end_date,
+        keep_date=keep_date,
+    )
+    edata = _setup_result(
+        edata, layer=layer, tensor=tem_layer if instantiate_tensor else None, var=var, tem=tem, setup=setup
+    )
 
     return edata

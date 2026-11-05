@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning][].
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with `time_precision="datetime"` take the date where a datetime is missing, instead of leaving the data point out. ([#352](https://github.com/theislab/ehrdata/pull/352)) @eroell
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` write `.uns['omop_io_variable_setup']`, as their docstring promised. ([#353](https://github.com/theislab/ehrdata/pull/353)) @eroell
 - {class}`~ehrdata.integrations.torch.OMOPEHRDataset` reads the setup recorded in `.uns['omop_io_variable_setup']`, and raises if a later call has replaced its values. ([#353](https://github.com/theislab/ehrdata/pull/353)) @eroell
+- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` no longer change the {class}`~ehrdata.EHRData` passed to them, and keep its earlier layers when they set up another `layer` of the same variables and intervals. ([#354](https://github.com/theislab/ehrdata/pull/354)) @eroell
 
 ## [0.5.0]
 
