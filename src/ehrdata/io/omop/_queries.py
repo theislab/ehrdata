@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Literal
 
@@ -266,6 +266,12 @@ VALUE_RANGE_TABLE = "_ehrdata_value_range"
 # The unit conversions of setup_variables, resolved to concepts and registered while the queries that convert run:
 # concept_id, unit_concept_id, to_unit_concept_id, to_unit_source_value, multiplier, addend.
 UNIT_CONVERSION_TABLE = "_ehrdata_unit_conversion"
+# The rows of a data table that lie in the window of an observation, written while the long format table is written, see _write_long_observed_table.
+# qualified, so that it never names a table of the user
+OBSERVED_ROWS_TABLE = "temp.main._ehrdata_observed_rows"
+# Columns of OBSERVED_ROWS_TABLE: the concept id of the row, and whether its value lies in the value range of its concept.
+ROW_CONCEPT_ID = "ehrdata_concept_id"
+IN_RANGE = "ehrdata_in_range"
 # The column of the converted rows that tells whether a row was converted.
 CONVERTED = "ehrdata_converted"
 
@@ -450,6 +456,7 @@ def _write_long_observed_table(
     value_ranges: pd.DataFrame | None = None,
     unit_conversions: pd.DataFrame | None = None,
     keep_date: Literal["timepoint", "start", "end", "interval"] = "timepoint",
+    row_checks: Sequence[Callable[[duckdb.DuckDBPyConnection], None]] = (),
 ) -> None:
     """Write `long_person_timestamp_feature_value_<data_table>` with one row per observed (observation, concept, interval).
 
@@ -466,6 +473,10 @@ def _write_long_observed_table(
     With link_visits, a row that names a visit of its person is joined to that visit only, see `_visit_condition`.
     Only the cells that receive a row carrying a value are aggregated and stored, so the table grows with the data rather than with observations x concepts x intervals.
     The intervals run from num_intervals_before intervals before the start of the observation; interval_step counts from its start, so the earlier ones are negative.
+
+    The rows joined to an observation are written to OBSERVED_ROWS_TABLE first, with the columns ROW_CONCEPT_ID, IN_RANGE and, with unit_conversions, CONVERTED.
+    row_checks are then called on the connection, and can raise before the rows are aggregated, which leaves the long format table of an earlier call;
+    they see only the rows that the aggregation reads, or, outside the value range, would read.
     """
     interval_us = int(pd.Timedelta(interval_length_number, interval_length_unit) // pd.Timedelta(microseconds=1))
     time_key = "start" if keep_date == "interval" else keep_date
@@ -532,15 +543,15 @@ def _write_long_observed_table(
     groups = []
     for strategy, variables in variables_of_strategy.items():
         value_query = _generate_value_query(
-            "observed_rows",
+            OBSERVED_ROWS_TABLE,
             data_field_to_keep,
             AGGREGATION_STRATEGY_KEY[strategy],
             datetime_col,
             unit_fields=unit_fields,
             finer_datetime_columns=finer_datetime_cols,
         )
-        condition = (
-            f"WHERE {key_column} IN ({', '.join(_sql_literal(variable) for variable in variables)})"
+        condition = f"WHERE {IN_RANGE}" + (
+            f" AND {key_column} IN ({', '.join(_sql_literal(variable) for variable in variables)})"
             if len(variables_of_strategy) > 1
             else ""
         )
@@ -550,7 +561,7 @@ def _write_long_observed_table(
                 start_date + to_microseconds(interval_step * {interval_us}) AS interval_start,
                 start_date + to_microseconds((interval_step + 1) * {interval_us}) AS interval_end,
                 {value_query}, obs_index
-            FROM observed_rows
+            FROM {OBSERVED_ROWS_TABLE}
             {condition}
             GROUP BY obs_id, obs_index, person_id, start_date, {key_column}, interval_step"""
         )
@@ -565,33 +576,46 @@ def _write_long_observed_table(
         converted=unit_conversions is not None,
     )
 
+    converted_select = f", d.{CONVERTED}" if unit_conversions is not None else ""
     table = f"long_person_timestamp_feature_value_{data_table}"
     with (
         _registered(backend_handle, VARIABLE_MAP_TABLE, variable_map),
         _registered(backend_handle, VALUE_RANGE_TABLE, value_ranges),
         _registered(backend_handle, UNIT_CONVERSION_TABLE, unit_conversions),
     ):
-        backend_handle.execute(f"DROP TABLE IF EXISTS {table}")
-        backend_handle.execute(
-            f"""
-        CREATE TABLE {table} AS
-        WITH observations AS (SELECT obs_index, obs_id, person_id, start_date, end_date FROM {OBS_WINDOWS_TABLE}),
-        observed_rows AS MATERIALIZED (
+        created = False
+        try:
+            backend_handle.execute(
+                f"""
+            CREATE OR REPLACE TEMP TABLE {OBSERVED_ROWS_TABLE} AS
+            WITH observations AS (SELECT obs_index, obs_id, person_id, start_date, end_date FROM {OBS_WINDOWS_TABLE})
             SELECT o.obs_id, o.obs_index, o.person_id, o.start_date, {key_select} AS {key_column},
-                CAST({interval_step} AS INTEGER) AS interval_step, 1 AS is_present{kept_select}
+                CAST({interval_step} AS INTEGER) AS interval_step, 1 AS is_present{kept_select},
+                TRY_CAST(d.{concept_key} AS BIGINT) AS {ROW_CONCEPT_ID}, coalesce({range_condition}, FALSE) AS {IN_RANGE}{converted_select}
             FROM ({_converted_rows_query(_data_rows_query(data_table, link_visits=link_visits), concept_key, data_field_to_keep[0], unit_fields, unit_conversions=unit_conversions)}) AS d
             {variable_join}
             {range_join}
             JOIN observations AS o ON d.person_id = o.person_id AND {_visit_condition("d", "o", link_visits=link_visits)}
             {steps_join}
             WHERE {concept_condition}
-                AND {range_condition}
                 AND {time_condition}
-        ),
-        observed_cells AS ({observed_cells})
-        SELECT * FROM observed_cells WHERE is_present IS NOT NULL
-        """,
-        )
+            """
+            )
+            created = True
+            for check in row_checks:
+                check(backend_handle)
+            # replaced only once the checks pass, so that a raising check leaves the table of an earlier call
+            backend_handle.execute(f"DROP TABLE IF EXISTS {table}")
+            backend_handle.execute(
+                f"""
+            CREATE TABLE {table} AS
+            WITH observed_cells AS ({observed_cells})
+            SELECT * FROM observed_cells WHERE is_present IS NOT NULL
+            """
+            )
+        finally:
+            if created:
+                backend_handle.execute(f"DROP TABLE IF EXISTS {OBSERVED_ROWS_TABLE}")
 
 
 def _instantiate_long_observed_table(

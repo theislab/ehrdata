@@ -1879,6 +1879,8 @@ def test_setup_interval_variables_combining_aggregation_raises_on_multiple_units
             num_intervals=1,
             aggregation_strategy=aggregation_strategy,
             keep_date="start",
+            # the second dose_era starts after the end of the visit
+            clip_to_end_date=False,
         )
 
 
@@ -4250,3 +4252,109 @@ def test_setup_interval_variables_num_intervals_before_with_intervals(omop_conne
 def test_setup_variables_illegal_num_intervals_before(omop_connection_vanilla, num_intervals_before, error):
     with pytest.raises(error, match="num_intervals_before"):
         _setup_measurement(omop_connection_vanilla, "all", num_intervals_before=num_intervals_before)
+
+
+def _add_measurement_rows(con, rows):
+    """Add measurement rows (measurement_id, person_id, concept, datetime, value, unit_concept_id)."""
+    for measurement_id, person_id, concept_id, datetime, value, unit in rows:
+        con.execute(
+            f"""INSERT INTO measurement (measurement_id, person_id, measurement_concept_id, measurement_date,
+                measurement_datetime, value_as_number, unit_concept_id, unit_source_value)
+            VALUES ({measurement_id}, {person_id}, {concept_id}, CAST(TIMESTAMP '{datetime}' AS DATE),
+                TIMESTAMP '{datetime}', {value}, {unit}, NULL)"""
+        )
+
+
+# a row of concept 3022318 in a second unit: of a person left out of .obs, after the observation window, and in it
+ROW_OF_ANOTHER_PERSON = (40, 3, 3022318, "2100-01-01 15:00:00", 5, 8753)
+ROW_AFTER_THE_WINDOW = (41, 1, 3022318, "2100-03-01 15:00:00", 5, 8753)
+ROW_IN_THE_WINDOW = (42, 1, 3022318, "2100-01-01 18:00:00", 5, 8753)
+
+
+def _setup_measurement_of_persons(con, person_ids, **kwargs):
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = edata[edata.obs["person_id"].isin(person_ids).to_numpy()].copy()
+    kwargs = {
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 2,
+        "concept_ids": [3022318],
+        **kwargs,
+    }
+    return ed.io.omop.setup_variables(edata, backend_handle=con, **kwargs)
+
+
+@pytest.mark.parametrize("row", [ROW_OF_ANOTHER_PERSON, ROW_AFTER_THE_WINDOW])
+def test_setup_variables_unit_check_ignores_rows_outside_the_observations(omop_connection_vanilla, row):
+    """Only the rows that enter the aggregation need to share a unit."""
+    con = omop_connection_vanilla
+    _add_second_concept_values(con)
+    _add_measurement_rows(con, [row])
+    edata = _setup_measurement_of_persons(con, [1, 2], aggregation_strategy="mean")
+    assert edata.uns["unit_report_measurement"]["unit_concept_id"].tolist() == [9557]
+
+    _add_measurement_rows(con, [ROW_IN_THE_WINDOW])
+    with pytest.raises(NotImplementedError, match="more than one unit_concept_id"):
+        _setup_measurement_of_persons(con, [1, 2], aggregation_strategy="mean")
+
+
+@pytest.mark.parametrize("row", [ROW_OF_ANOTHER_PERSON, ROW_AFTER_THE_WINDOW])
+def test_setup_variables_unit_conversions_ignore_unlisted_units_outside_the_observations(omop_connection_vanilla, row):
+    """Only the rows that enter the aggregation need a listed unit."""
+    con = omop_connection_vanilla
+    _add_second_concept_values(con)
+    _add_measurement_rows(con, [row])
+    conversions = pd.DataFrame(
+        {
+            "concept_id": [3022318],
+            "unit_concept_id": [9557],
+            "to_unit_concept_id": [9557],
+            "multiplier": [1.0],
+            "offset": [0.0],
+        }
+    )
+    edata = _setup_measurement_of_persons(con, [1, 2], aggregation_strategy="mean", unit_conversions=conversions)
+    assert edata.uns["unit_report_measurement"]["unit_concept_id"].tolist() == [9557]
+
+    _add_measurement_rows(con, [ROW_IN_THE_WINDOW])
+    with pytest.raises(ValueError, match=r"concept 3022318 in unit 8753 \(1 data points\)"):
+        _setup_measurement_of_persons(con, [1, 2], aggregation_strategy="mean", unit_conversions=conversions)
+
+
+def test_setup_interval_variables_unit_check_ignores_rows_after_the_window(omop_connection_vanilla):
+    """The second dose_era of person 1, in another unit, starts after the end of its visit."""
+    con = omop_connection_vanilla
+    con.execute("UPDATE dose_era SET unit_concept_id = 8587 WHERE dose_era_id = 2")
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["dose_era"],
+        data_field_to_keep=["dose_value"],
+        interval_length_number=60,
+        interval_length_unit="day",
+        num_intervals=1,
+        aggregation_strategy="mean",
+        keep_date="start",
+    )
+    assert edata.n_vars > 0
+
+
+def test_setup_variables_raising_unit_check_keeps_the_earlier_long_table(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    con.execute("CREATE TABLE _ehrdata_observed_rows AS SELECT 1 AS user_column")
+    _add_second_concept_values(con)
+    earlier = _setup_measurement_of_persons(con, [1, 2], aggregation_strategy="mean", instantiate_tensor=False)
+    cells = con.execute("SELECT count(*) FROM long_person_timestamp_feature_value_measurement").fetchone()[0]
+
+    _add_measurement_rows(con, [ROW_IN_THE_WINDOW])
+    with pytest.raises(NotImplementedError, match="more than one unit_concept_id"):
+        _setup_measurement_of_persons(con, [1, 2], aggregation_strategy="mean")
+
+    assert con.execute("SELECT count(*) FROM long_person_timestamp_feature_value_measurement").fetchone()[0] == cells
+    assert con.execute("SELECT user_column FROM main._ehrdata_observed_rows").fetchall() == [(1,)]
+    temp_tables = con.execute("SELECT table_name FROM duckdb_tables() WHERE temporary").fetchall()
+    assert ("_ehrdata_observed_rows",) not in temp_tables
+    assert earlier.n_vars == 1

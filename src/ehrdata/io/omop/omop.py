@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -44,21 +45,21 @@ from ehrdata.io.omop._check_arguments import (
     _warn_time_precision_interval_mismatch,
 )
 from ehrdata.io.omop._queries import (
+    CONVERTED,
     DATA_TABLE_CONCEPT_ID_TRUNK,
+    IN_RANGE,
+    OBSERVED_ROWS_TABLE,
+    ROW_CONCEPT_ID,
     SINGLE_ROW_AGGREGATION_STRATEGIES,
     UNIT_CONVERSION_TABLE,
     UNITLESS_AGGREGATION_STRATEGIES,
-    VALUE_RANGE_TABLE,
-    _column_type,
     _concept_ids_condition,
-    _converted_rows_query,
     _get_ordered_table,
     _get_table_join,
     _get_unit_fields,
     _instantiate_long_observed_table,
     _links_rows_to_visits,
-    _registered,
-    _value_range_filter,
+    _sql_literal,
     _write_long_observed_table,
     _write_obs_names,
     _write_obs_windows,
@@ -180,17 +181,18 @@ def _check_one_unit_per_feature_for_aggregation(
     aggregation_strategy,
     unit_fields,
     *,
-    concept_ids,
-    concept_sets=None,
-    value_ranges=None,
-    unit_conversions=None,
+    key_column="data_table_concept_id",
+    variables=None,
 ) -> None:
-    """Verify that the data table allows the chosen aggregation strategy to combine values.
+    """Verify that the observed rows allow the chosen aggregation strategy to combine values.
 
-    With concept_sets, the features are the concept sets, whose rows are combined across their concepts.
+    Reads OBSERVED_ROWS_TABLE, the rows of the data table in the windows of the observations, while `_write_long_observed_table` runs.
+    The features are the values of key_column: the concept ids, or the names of the concept sets, whose rows are combined across their concepts.
+    With variables, only these features are checked.
 
     A strategy that is not one of SINGLE_ROW_AGGREGATION_STRATEGIES combines the values of several rows into one, which is only meaningful if these values share a unit.
-    Only the rows of the concept_ids carrying a value are considered, as only those enter the aggregation; among these, a missing unit (NULL) is a unit of its own, as in the unit report.
+    Only the rows carrying a value within the value range of their concept are considered, as only those enter the aggregation, and their units after the conversions;
+    among these, a missing unit (NULL) is a unit of its own, as in the unit report.
     Unitless aggregations are exempt: 'is_present' has no unit to begin with, and UNITLESS_AGGREGATION_STRATEGIES yield a number of data points.
     Data tables that do not have a 'unit_concept_id' are exempt, too: they tell no unit that could disagree.
     """
@@ -202,38 +204,20 @@ def _check_one_unit_per_feature_for_aggregation(
     ):
         return
 
-    concept_id_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id"
-    # the rows outside the value range of their concept are left out of the aggregation, and so of the check
-    range_join, range_condition = _value_range_filter(
-        "d",
-        concept_id_key,
-        value_field,
-        value_ranges=value_ranges,
-        value_type=_column_type(backend_handle, data_table, value_field) if value_ranges is not None else "",
-        converted=unit_conversions is not None,
+    variable_condition = (
+        f" AND {key_column} IN ({', '.join(_sql_literal(variable) for variable in variables)})"
+        if variables is not None
+        else ""
     )
-    # the units after the conversions, which the aggregation combines
-    rows = _converted_rows_query(
-        f"SELECT * FROM {data_table}", concept_id_key, value_field, unit_fields, unit_conversions=unit_conversions
-    )
-    with (
-        _registered(backend_handle, VALUE_RANGE_TABLE, value_ranges),
-        _registered(backend_handle, UNIT_CONVERSION_TABLE, unit_conversions),
-    ):
-        feature_unit_pairs = backend_handle.execute(
-            f"""
-            SELECT DISTINCT d.{concept_id_key}, d.unit_concept_id FROM ({rows}) AS d
-            {range_join}
-            WHERE d.{value_field} IS NOT NULL AND {_concept_ids_condition(data_table, concept_ids)} AND {range_condition}
-            """
-        ).fetchall()
+    feature_unit_pairs = backend_handle.execute(
+        f"""
+        SELECT DISTINCT {key_column}, unit_concept_id FROM {OBSERVED_ROWS_TABLE}
+        WHERE {value_field} IS NOT NULL AND {IN_RANGE}{variable_condition}
+        """
+    ).fetchall()
 
-    set_of_concept = (
-        {concept_id: name for name, ids in concept_sets.items() for concept_id in ids} if concept_sets else None
-    )
     feature_units: dict = {}
-    for concept_id, unit in feature_unit_pairs:
-        feature = set_of_concept[int(concept_id)] if set_of_concept else concept_id
+    for feature, unit in feature_unit_pairs:
         if unit not in feature_units.setdefault(feature, []):
             feature_units[feature].append(unit)
     multiple_units = {feature: sorted(units, key=str) for feature, units in feature_units.items() if len(units) > 1}
@@ -390,7 +374,7 @@ def _unit_conversions_of_tables(
     """The rows of unit_conversions for the concepts of each data table, or None for a table without such concepts.
 
     The concepts of a table are its variables, or the concepts of the concept sets; conversions of other concepts are not used.
-    Checks that the converted tables have numeric values and a unit_concept_id, and that the rows of their converted concepts are in listed units.
+    Checks that the converted tables have numeric values and a unit_concept_id; `_check_listed_units` checks the units of their rows.
     """
     conversions_of_table = {}
     for table, variables in variables_of_table.items():
@@ -408,30 +392,30 @@ def _unit_conversions_of_tables(
         if "unit_concept_id" not in _get_unit_fields(backend_handle, table):
             msg = f"unit_conversions converts from the unit_concept_id of the data points, which '{table}' lacks."
             raise ValueError(msg)
-        concept_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[table]}_concept_id"
-        with _registered(backend_handle, UNIT_CONVERSION_TABLE, conversions):
-            unlisted = backend_handle.execute(
-                f"""
-                SELECT TRY_CAST(d.{concept_key} AS BIGINT) AS concept_id, TRY_CAST(d.unit_concept_id AS BIGINT) AS unit, COUNT(*) AS n
-                FROM {table} AS d
-                WHERE d.{value_field} IS NOT NULL
-                    AND TRY_CAST(d.{concept_key} AS BIGINT) IN (SELECT concept_id FROM {UNIT_CONVERSION_TABLE})
-                    AND NOT EXISTS (
-                        SELECT 1 FROM {UNIT_CONVERSION_TABLE} AS uc
-                        WHERE uc.concept_id = TRY_CAST(d.{concept_key} AS BIGINT)
-                            AND uc.unit_concept_id IS NOT DISTINCT FROM TRY_CAST(d.unit_concept_id AS BIGINT)
-                    )
-                GROUP BY ALL ORDER BY n DESC
-                """
-            ).fetchall()
-        if unlisted:
-            listing = ", ".join(
-                f"concept {concept_id} in unit {unit} ({n} data points)" for concept_id, unit, n in unlisted[:5]
-            )
-            msg = f"unit_conversions lists no conversion for {len(unlisted)} (concept, unit) pair(s) of '{table}': {listing}."
-            raise ValueError(msg)
         conversions_of_table[table] = conversions
     return conversions_of_table
+
+
+def _check_listed_units(backend_handle, data_table, value_field) -> None:
+    """Raise if an observed row of a converted concept carries a value in a unit that the unit conversions do not list for it.
+
+    Reads OBSERVED_ROWS_TABLE while `_write_long_observed_table` runs, so only the rows that enter the aggregation count, whatever their value range;
+    The count is per observation: a data point in two overlapping visits counts twice.
+    """
+    unlisted = backend_handle.execute(
+        f"""
+        SELECT {ROW_CONCEPT_ID}, unit_concept_id, COUNT(*) AS n FROM {OBSERVED_ROWS_TABLE}
+        WHERE {value_field} IS NOT NULL AND NOT {CONVERTED}
+            AND {ROW_CONCEPT_ID} IN (SELECT concept_id FROM {UNIT_CONVERSION_TABLE})
+        GROUP BY ALL ORDER BY n DESC, {ROW_CONCEPT_ID}, unit_concept_id
+        """
+    ).fetchall()
+    if unlisted:
+        listing = ", ".join(
+            f"concept {concept_id} in unit {unit} ({n} data points)" for concept_id, unit, n in unlisted[:5]
+        )
+        msg = f"unit_conversions lists no conversion for {len(unlisted)} (concept, unit) pair(s) of '{data_table}': {listing}."
+        raise ValueError(msg)
 
 
 def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
@@ -620,7 +604,7 @@ def setup_variables(
             without the column `to_unit_source_value`, that is the `concept_code` of the target unit in the `concept` table.
             A missing `unit_concept_id` converts the data points without a unit, which OMOP often records as `unit_concept_id=0`, a unit that needs a row of its own.
             A unit that needs no conversion takes a row with multiplier 1, and a missing offset is 0.
-            Every data point with a value of a listed concept must be in one of its listed units, a concept is converted to one unit only,
+            Every data point with a value of a listed concept that enters the aggregation must be in one of its listed units, a concept is converted to one unit only,
             and `value_range` applies to the converted values. Conversions of concepts that are no variables of the call are not used, so one table can serve several calls.
             As with a mapping of `aggregation_strategy`, rows without a concept ID then belong to no variable.
             In the long format table of a converted data table, the values are of double precision and `unit_concept_id` an integer.
@@ -643,7 +627,7 @@ def setup_variables(
             Data points at the same time, for instance of two concepts of a concept set, are ordered by their value.
             All kept fields are read from that very data point, so that e.g. the units describe the value that is kept.
             Every other strategy combines the values of several data points into one, which requires a single unit per feature.
-            A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points carrying a value (a missing unit is a unit of its own here).
+            A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points that carry a value and enter the aggregation, those in the intervals of an observation (a missing unit is a unit of its own here).
             Exempt are `'count'` and `data_field_to_keep='is_present'`, whose values are numbers of data points and hence carry no unit.
             For `'mode'`, of several equally frequent values the smallest is kept.
             Intervals without data points hold 0 for `'count'`, and a missing value for every other strategy and for `data_field_to_keep='is_present'`.
@@ -838,30 +822,24 @@ def setup_variables(
         variables_of_strategy: dict = {}
         for variable, strategy in (strategies or {}).items():
             variables_of_strategy.setdefault(strategy, []).append(variable)
-        for strategy, variables in (variables_of_strategy or {aggregation_strategy: None}).items():
-            # each variable is checked with its own strategy
-            strategy_sets = (
-                {name: concept_sets[name] for name in variables}
-                if concept_sets and variables is not None
-                else concept_sets
+        # the checks run on the rows in the windows of the observations, before these are aggregated
+        value_field = data_field_to_keep[data_table][0]
+        row_checks = []
+        if table_unit_conversions is not None:
+            row_checks.append(partial(_check_listed_units, data_table=data_table, value_field=value_field))
+        # each variable is checked with its own strategy
+        row_checks.extend(
+            partial(
+                _check_one_unit_per_feature_for_aggregation,
+                data_table=data_table,
+                value_field=value_field,
+                aggregation_strategy=strategy,
+                unit_fields=unit_fields,
+                key_column=key_column,
+                variables=variables,
             )
-            if variables is None:
-                strategy_concept_ids = table_concept_ids
-            elif concept_sets:
-                strategy_concept_ids = [concept_id for name in variables for concept_id in concept_sets[name]]
-            else:
-                strategy_concept_ids = variables
-            _check_one_unit_per_feature_for_aggregation(
-                backend_handle,
-                data_table,
-                data_field_to_keep[data_table][0],
-                strategy,
-                unit_fields,
-                concept_ids=strategy_concept_ids,
-                concept_sets=strategy_sets,
-                value_ranges=value_ranges,
-                unit_conversions=table_unit_conversions,
-            )
+            for strategy, variables in (variables_of_strategy or {aggregation_strategy: None}).items()
+        )
 
         _write_long_observed_table(
             backend_handle=backend_handle,
@@ -880,6 +858,7 @@ def setup_variables(
             strategies=strategies,
             value_ranges=value_ranges,
             unit_conversions=table_unit_conversions,
+            row_checks=row_checks,
         )
         _write_obs_names(backend_handle, data_table)
 
@@ -1105,7 +1084,7 @@ def setup_interval_variables(
            For `'last'` and `'first'`, only data points that have a value in the data field of interest (the first field of `data_field_to_keep`) are considered.
            All kept fields are read from that very data point, so that e.g. the units describe the value that is kept.
            Every other strategy combines the values of several data points into one, which requires a single unit per feature.
-           A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points carrying a value (a missing unit is a unit of its own here).
+           A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points that carry a value and enter the aggregation, those in the intervals of an observation (a missing unit is a unit of its own here).
            Exempt are `'count'`, `data_field_to_keep='is_present'`, and the data tables that have no `unit_concept_id` at all.
        enrich_var_with_feature_info: Whether to enrich the var table with feature
            information. If a concept_id is not found in the concept table, their respective alternate `concept_id` included in the concept_relationship table is retrieved to add the available feature information.
@@ -1191,14 +1170,6 @@ def setup_interval_variables(
             continue
 
         unit_fields = _get_unit_fields(backend_handle, data_table)
-        _check_one_unit_per_feature_for_aggregation(
-            backend_handle,
-            data_table,
-            data_field_to_keep[data_table][0],
-            aggregation_strategy,
-            unit_fields,
-            concept_ids=concept_ids,
-        )
 
         _write_long_observed_table(
             backend_handle=backend_handle,
@@ -1214,6 +1185,15 @@ def setup_interval_variables(
             concept_ids=concept_ids,
             link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
             keep_date=keep_date,
+            row_checks=[
+                partial(
+                    _check_one_unit_per_feature_for_aggregation,
+                    data_table=data_table,
+                    value_field=data_field_to_keep[data_table][0],
+                    aggregation_strategy=aggregation_strategy,
+                    unit_fields=unit_fields,
+                )
+            ],
         )
         _write_obs_names(backend_handle, data_table)
 
