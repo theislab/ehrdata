@@ -2377,3 +2377,30 @@ def test_write_read_of_omop_setup(omop_connection_vanilla, observation_table, wr
         assert datetime_columns
         for column in datetime_columns:
             assert pd.to_datetime(df_read[column].astype(object), format="ISO8601").tolist() == df[column].tolist()
+
+
+@pytest.mark.parametrize(
+    ("setup_function", "data_tables", "kwargs"),
+    [
+        (ed.io.omop.setup_variables, ["measurement", "observation"], {}),
+        (ed.io.omop.setup_interval_variables, ["drug_exposure", "condition_occurrence"], {"keep_date": "start"}),
+    ],
+)
+def test_setup_functions_leave_data_field_to_keep_unchanged(
+    omop_connection_vanilla, setup_function, data_tables, kwargs
+):
+    con = omop_connection_vanilla
+    data_field_to_keep = dict.fromkeys(data_tables, "is_present")
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    setup_function(
+        edata,
+        backend_handle=con,
+        data_tables=data_tables,
+        data_field_to_keep=data_field_to_keep,
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=4,
+        **kwargs,
+    )
+
+    assert data_field_to_keep == dict.fromkeys(data_tables, "is_present")

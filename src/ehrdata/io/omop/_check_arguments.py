@@ -103,12 +103,13 @@ def _check_valid_data_field_to_keep(data_field_to_keep, data_tables) -> dict[str
         if set(data_field_to_keep.keys()) != set(data_tables):
             msg = "data_field_to_keep keys must be equal to data_tables."
             raise ValueError(msg)
-        for key, value in data_field_to_keep.items():
-            if isinstance(value, str):
-                data_field_to_keep[key] = [value]
-            if not isinstance(value, Sequence):
-                msg = "data_field_to_keep values must be a string or Sequence."
-                raise TypeError(msg)
+        if not all(isinstance(value, Sequence) for value in data_field_to_keep.values()):
+            msg = "data_field_to_keep values must be a string or Sequence."
+            raise TypeError(msg)
+        # a new dict, so that the caller's argument is left as it is
+        data_field_to_keep = {
+            key: [value] if isinstance(value, str) else value for key, value in data_field_to_keep.items()
+        }
     if not valid_type:
         msg = f"Expected data_field_to_keep to be a string, Sequence, or dict, but is {type(data_field_to_keep)}"
         raise TypeError(msg)
