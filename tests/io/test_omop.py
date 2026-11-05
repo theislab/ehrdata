@@ -2558,3 +2558,157 @@ def test_setup_variables_datetime_field_keeps_its_dtype(omop_connection_vanilla)
     assert edata.X.dtype.kind == "M"
     assert np.isnat(edata.X).any()
     assert not np.isnat(edata.X).all()
+
+
+SETUP_FUNCTIONS = {
+    "setup_variables": (
+        ed.io.omop.setup_variables,
+        {"data_tables": ["measurement"], "data_field_to_keep": ["value_as_number"]},
+    ),
+    "setup_interval_variables": (
+        ed.io.omop.setup_interval_variables,
+        {"data_tables": ["drug_exposure"], "data_field_to_keep": ["days_supply"], "keep_date": "start"},
+    ),
+}
+
+
+@pytest.mark.parametrize("observation_table", VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY)
+@pytest.mark.parametrize("setup_function", SETUP_FUNCTIONS)
+@pytest.mark.parametrize("order", [[2, 1, 0], [2, 0], [1]])
+@pytest.mark.parametrize("time_precision", ["date", "datetime"])
+def test_setup_functions_follow_the_rows_of_obs(
+    omop_connection_vanilla, observation_table, setup_function, order, time_precision
+):
+    """The variables are set up for the rows of .obs, in their order, also after .obs was filtered or reordered."""
+    function, kwargs = SETUP_FUNCTIONS[setup_function]
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table)
+    kwargs = {
+        "time_precision": time_precision,
+        "backend_handle": con,
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 4,
+        **kwargs,
+    }
+
+    edata_full = function(edata, **kwargs)
+    edata_subset = function(edata[order], **kwargs)
+
+    assert edata_subset.n_obs == len(order)
+    assert edata_subset.obs_names.tolist() == edata.obs_names[order].tolist()
+    np.testing.assert_array_equal(edata_subset.X, edata_full.X[order])
+
+
+@pytest.mark.parametrize("setup_function", SETUP_FUNCTIONS)
+def test_setup_functions_keep_repeated_cohort_subjects_apart(omop_connection_vanilla, setup_function):
+    """A subject in a cohort twice has two rows, each with the time window of its own cohort entry."""
+    function, kwargs = SETUP_FUNCTIONS[setup_function]
+    con = omop_connection_vanilla
+    # subject 1 enters a second cohort a day earlier, so that its data of 2100-01-01 fall into the second interval
+    con.execute("INSERT INTO cohort VALUES (2, 1, '2099-12-31', '2100-01-31')")
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_cohort")
+    edata = function(
+        edata, backend_handle=con, interval_length_number=1, interval_length_unit="day", num_intervals=4, **kwargs
+    )
+
+    assert edata.n_obs == 4
+    for obs_index, cohort_start in enumerate(pd.to_datetime(edata.obs["cohort_start_date"])):
+        observed_intervals = np.flatnonzero(~np.isnan(edata.X[obs_index]).all(axis=0))
+        assert observed_intervals.tolist() == [(pd.Timestamp("2100-01-01") - cohort_start).days]
+
+
+def test_setup_variables_reads_dates_of_obs_written_as_text(omop_connection_vanilla):
+    """Dates in .obs may be text, for instance after writing and reading the EHRData."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 4,
+    }
+    edata_text = edata.copy()
+    for column in ["observation_period_start_date", "observation_period_end_date"]:
+        edata_text.obs[column] = edata_text.obs[column].astype(str)
+
+    np.testing.assert_array_equal(
+        ed.io.omop.setup_variables(edata_text, **kwargs).X, ed.io.omop.setup_variables(edata, **kwargs).X
+    )
+
+
+def test_setup_variables_requires_the_time_window_in_obs(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata.obs = edata.obs.drop(columns=["observation_period_end_date"])
+    with pytest.raises(ValueError, match=r"lacks the column\(s\) \['observation_period_end_date'\]"):
+        ed.io.omop.setup_variables(
+            edata,
+            backend_handle=con,
+            data_tables=["measurement"],
+            data_field_to_keep=["value_as_number"],
+            interval_length_number=1,
+            interval_length_unit="day",
+            num_intervals=4,
+        )
+
+
+def test_setup_variables_on_persons_with_a_birth_datetime(omop_connection_vanilla):
+    """With observation_table="person", .obs can be filtered to the persons that have a birth_datetime."""
+    con = omop_connection_vanilla
+    con.execute("UPDATE person SET birth_datetime = '1970-01-01 00:00:00' WHERE person_id = 1")
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 365,
+        "interval_length_unit": "day",
+        "num_intervals": 200,
+    }
+    with pytest.raises(ValueError, match="with NULL birth_datetime"):
+        ed.io.omop.setup_variables(edata, **kwargs)
+
+    edata = edata[edata.obs["birth_datetime"].notna().to_numpy()].copy()
+    edata = ed.io.omop.setup_variables(edata, **kwargs)
+    assert edata.obs["person_id"].tolist() == [1]
+    assert not np.isnan(edata.X).all()
+
+
+def test_setup_variables_row_without_window_gets_no_data(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata.obs["observation_period_end_date"] = edata.obs["observation_period_end_date"].astype(object)
+    edata.obs.iloc[0, edata.obs.columns.get_loc("observation_period_end_date")] = None
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=4,
+    )
+
+    assert np.isnan(edata.X[0]).all()
+    assert not np.isnan(edata.X[1]).all()
+
+
+def test_setup_variables_with_a_database_table_named_like_the_windows(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    con.execute("CREATE TABLE windows (x INTEGER)")
+    con.execute("CREATE TABLE _ehrdata_obs_windows_frame (x INTEGER)")
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=4,
+    )
+
+    assert not np.isnan(edata.X).all()

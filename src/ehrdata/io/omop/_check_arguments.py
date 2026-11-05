@@ -235,30 +235,25 @@ def _warn_time_precision_interval_mismatch(interval_length_unit: str, time_preci
         )
 
 
-def _check_valid_birthdates_for_person_table(backend_handle, time_defining_table: str) -> None:
-    """Check that all persons have valid birthdates when using person as observation table.
+def _check_valid_birthdates_for_person_table(start_dates, time_defining_table: str) -> None:
+    """Check that all persons in .obs have valid birthdates when using person as observation table.
 
     Args:
-        backend_handle: DuckDB connection handle.
+        start_dates: The birth_datetime column of .obs, parsed as datetimes.
         time_defining_table: The observation table being used.
 
     Raises:
         ValueError: If the observation table is 'person' and any persons have NULL or invalid birthdates.
     """
     if time_defining_table == "person":
-        # Check for NULL birth_datetime values
-        query = """
-            SELECT COUNT(*) as null_count
-            FROM person
-            WHERE birth_datetime IS NULL
-        """
-        null_count = backend_handle.execute(query).fetchall()[0][0]
+        null_count = int(start_dates.isna().sum())
 
         if null_count > 0:
             msg = (
                 f"Found {null_count} person(s) with NULL birth_datetime. "
                 f"When using observation_table='person', all persons must have valid birthdates. "
-                f"Please ensure birth_datetime is populated for all persons, or consider using "
-                f"'person_observation_period' or 'person_visit_occurrence' in ehrdata.io.omop.setup_obs."
+                f"Please ensure birth_datetime is populated for all persons, filter edata to the persons with a "
+                f"birth_datetime, or consider using 'person_observation_period' or 'person_visit_occurrence' in "
+                f"ehrdata.io.omop.setup_obs."
             )
             raise ValueError(msg)

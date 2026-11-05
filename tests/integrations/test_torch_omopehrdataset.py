@@ -116,3 +116,35 @@ def test_ehrdataset_requires_the_variables(omop_connection_vanilla):
     edata = ed.io.omop.setup_obs(con, observation_table="person_observation_period", death_table=True)
     with pytest.raises(ValueError, match="needs the EHRData returned by setup_variables"):
         ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+
+
+def test_ehrdataset_keeps_repeated_cohort_subjects_apart(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    # subject 1 enters a second cohort a day earlier, so that its data fall into another interval
+    con.execute("INSERT INTO cohort VALUES (2, 1, '2099-12-31', '2100-01-31')")
+    edata = ed.io.omop.setup_obs(con, observation_table="person_cohort", death_table=True)
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": "measurement",
+        "data_field_to_keep": "value_as_number",
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 3,
+    }
+    edata_tensor = ed.io.omop.setup_variables(edata, **kwargs)
+    edata = ed.io.omop.setup_variables(edata, instantiate_tensor=False, **kwargs)
+
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"], datetime=False)
+    assert len(ehr_dataset) == 4
+    for index in range(4):
+        item, target = ehr_dataset[index]
+        torch.testing.assert_close(item, torch.tensor(edata_tensor.X[index], dtype=torch.float32), equal_nan=True)
+        assert target.shape == (1, 1)
+
+
+def test_ehrdataset_rejects_rows_the_variables_were_not_set_up_for(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = _setup(con, "measurement", "value_as_number", instantiate_tensor=False)
+    edata.obs_names = [f"other_{name}" for name in edata.obs_names]
+    with pytest.raises(ValueError, match="were not set up for the rows"):
+        ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])

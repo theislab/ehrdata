@@ -238,7 +238,6 @@ def _generate_value_query(
 def _write_long_time_interval_table(
     backend_handle: duckdb.DuckDBPyConnection,
     *,
-    time_defining_table: str,
     data_table: str,
     time_precision: Literal["date", "datetime"],
     interval_length_number: int,
@@ -266,15 +265,13 @@ def _write_long_time_interval_table(
     create_long_table_query = f"CREATE TABLE long_person_timestamp_feature_value_{data_table} AS\n"
 
     # multi-step query
-    # 1. Create person_time_defining_table, which matches the one created for obs. Needs to contain the obs_id (unique row identifier), person_id, and the start/end dates.
+    # 1. Create person_time_defining_table, the rows of .obs from OBS_WINDOWS_TABLE: the obs_index (unique row identifier, the position in .obs), obs_id, person_id, and the start/end dates.
     # 2. Create person_data_table (data_table is typically measurement), which contains the cross product of obs_id and the distinct concept_id s.
     # 3. Create long_format_backbone, which is the left join of person_time_defining_table and person_data_table.
     # 4. Create long_format_intervals, which is the cross product of long_format_backbone and timedeltas. This table contains most notably the obs_id, the concept_id, the interval start and end dates.
     # 5. Create the final table long_person_timestamp_feature_value_<data_table>, which is the join with the data_table (typically measurement); each measurement is assigned to its obs_id, its concept_id, and the interval it fits into.
 
-    person_time_defining_cte = (
-        f"WITH person_time_defining_table AS ({_observations_query(time_defining_table, time_precision)}), "
-    )
+    person_time_defining_cte = f"WITH person_time_defining_table AS (SELECT obs_index, obs_id, person_id, start_date, end_date FROM {OBS_WINDOWS_TABLE}), "
 
     prepare_alias_query = (
         person_time_defining_cte
@@ -284,16 +281,16 @@ def _write_long_time_interval_table(
                 FROM {data_table} \
                 WHERE {_concept_ids_condition(data_table, concept_ids)} \
             )
-            SELECT obs_id, person_id, {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id as data_table_concept_id, start_date, end_date \
+            SELECT obs_index, obs_id, person_id, {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id as data_table_concept_id, start_date, end_date \
             FROM person_time_defining_table \
             CROSS JOIN distinct_data_table_concept_ids \
         ), \
         long_format_backbone as ( \
-            SELECT obs_id, person_id, data_table_concept_id, start_date, end_date \
+            SELECT obs_index, obs_id, person_id, data_table_concept_id, start_date, end_date \
             FROM person_data_table \
         ), \
         long_format_intervals as ( \
-            SELECT obs_id, person_id, data_table_concept_id, interval_step, start_date, end_date, start_date + interval_start_offset as interval_start, start_date + interval_end_offset as interval_end \
+            SELECT obs_index, obs_id, person_id, data_table_concept_id, interval_step, start_date, end_date, start_date + interval_start_offset as interval_start, start_date + interval_end_offset as interval_end \
             FROM long_format_backbone \
             CROSS JOIN timedeltas \
         ), \
@@ -307,18 +304,18 @@ def _write_long_time_interval_table(
     if keep_date in ["timepoint", "start", "end"]:
         datetime_col = _get_datetime_key(keep_date, data_table, time_precision)
         select_query = f"""
-        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col, unit_fields=unit_fields, finer_datetime_columns=_finer_datetime_keys(keep_date, data_table, time_precision))} \
+        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col, unit_fields=unit_fields, finer_datetime_columns=_finer_datetime_keys(keep_date, data_table, time_precision))}, lfi.obs_index \
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AND data_table_with_presence_indicator.{datetime_col} >= lfi.interval_start AND data_table_with_presence_indicator.{datetime_col} < lfi.interval_end \
                 AND CAST(data_table_with_presence_indicator.{datetime_col} AS DATE) <= lfi.end_date \
-        GROUP BY lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
+        GROUP BY lfi.obs_index, lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
 
     elif keep_date == "interval":
         datetime_col_start = _get_datetime_key("start", data_table, time_precision)
         datetime_col_end = _get_datetime_key("end", data_table, time_precision)
         select_query = f"""
-        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col_start, unit_fields=unit_fields, finer_datetime_columns=_finer_datetime_keys("start", data_table, time_precision))} \
+        SELECT lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end, {_generate_value_query("data_table_with_presence_indicator", data_field_to_keep, AGGREGATION_STRATEGY_KEY[aggregation_strategy], datetime_col_start, unit_fields=unit_fields, finer_datetime_columns=_finer_datetime_keys("start", data_table, time_precision))}, lfi.obs_index \
         FROM long_format_intervals as lfi \
         LEFT JOIN data_table_with_presence_indicator ON lfi.person_id = data_table_with_presence_indicator.person_id \
                 AND lfi.data_table_concept_id = data_table_with_presence_indicator.{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id \
@@ -327,7 +324,7 @@ def _write_long_time_interval_table(
                     OR (data_table_with_presence_indicator.{datetime_col_start} < lfi.interval_start AND data_table_with_presence_indicator.{datetime_col_end} >= lfi.interval_end)) \
                 AND CAST(data_table_with_presence_indicator.{datetime_col_start} AS DATE) <= lfi.end_date \
                 AND CAST(lfi.interval_start AS DATE) <= lfi.end_date \
-        GROUP BY lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
+        GROUP BY lfi.obs_index, lfi.obs_id, lfi.person_id, lfi.data_table_concept_id, interval_step, interval_start, interval_end
         """
 
     query = create_long_table_query + prepare_alias_query + select_query
@@ -335,49 +332,74 @@ def _write_long_time_interval_table(
     backend_handle.execute(f"DROP TABLE IF EXISTS long_person_timestamp_feature_value_{data_table}")
     backend_handle.execute(query)
 
-    add_obs_range_index_query = f"""
-        ALTER TABLE long_person_timestamp_feature_value_{data_table}
-        ADD COLUMN obs_index INTEGER;
 
-        WITH RankedObs AS (
-            SELECT obs_id,
-                ROW_NUMBER() OVER (ORDER BY obs_id) - 1 AS idx
-            FROM (SELECT DISTINCT obs_id FROM long_person_timestamp_feature_value_{data_table}) AS unique_obs
-        )
-        UPDATE long_person_timestamp_feature_value_{data_table}
-        SET obs_index = RO.idx
-        FROM RankedObs RO
-        WHERE long_person_timestamp_feature_value_{data_table}.obs_id = RO.obs_id;
+OBS_WINDOWS_TABLE = "ehrdata_obs_windows"
+
+
+def _write_obs_windows(
+    backend_handle: duckdb.DuckDBPyConnection,
+    obs: pd.DataFrame,
+    time_defining_table: str,
+    time_precision: Literal["date", "datetime"],
+) -> None:
+    """Write the time window of every row of `obs` to OBS_WINDOWS_TABLE: obs_index, obs_name, obs_id, person_id, start_date and end_date.
+
+    obs_index is the position of the row in `obs`, so that the variables follow the rows of `.obs`, also after they were filtered or reordered since :func:`~ehrdata.io.omop.setup_obs`.
+    The start and end dates are those of the columns written by :func:`~ehrdata.io.omop.setup_obs`; a row without a start or end date gets no data.
+    The long format tables are written from OBS_WINDOWS_TABLE, so this runs first.
     """
-    backend_handle.execute(add_obs_range_index_query)
+    from ehrdata.io.omop._check_arguments import _check_valid_birthdates_for_person_table
 
-    rename_table_query = f"ALTER TABLE long_person_timestamp_feature_value_{data_table} RENAME TO long_person_timestamp_feature_value_{data_table}"
-    backend_handle.execute(rename_table_query)
-
-
-def _observations_query(time_defining_table: str, time_precision: Literal["date", "datetime"]) -> str:
-    """The observations of the time_defining_table: person_id, obs_id, start_date, end_date and obs_index.
-
-    obs_index is the position of the observation when sorted by obs_id, which is the order of :func:`~ehrdata.io.omop.setup_obs`.
-    """
+    columns = {column.lower(): column for column in obs.columns}
+    id_key = TIME_DEFINING_TABLE_ID_KEY[time_defining_table]
     start_key = _get_datetime_key("start", time_defining_table, time_precision)
-    if time_defining_table == "person":
-        source = f"SELECT person_id, person_id AS obs_id, {start_key} AS start_date, CAST('2999-12-31 23:59:59' AS TIMESTAMP) AS end_date FROM person"
-    else:
-        # The end date rather than datetime, as OMOP end dates are inclusive and end datetimes are optional.
-        source = f"""
-            SELECT person.person_id AS person_id, {time_defining_table}.{TIME_DEFINING_TABLE_ID_KEY[time_defining_table]} AS obs_id,
-                {start_key} AS start_date, {_get_datetime_key("end", time_defining_table, "date")} AS end_date
-            FROM person
-            JOIN {time_defining_table} ON person.person_id = {time_defining_table}.{TIME_DEFINING_TABLE_SUBJECT_KEY[time_defining_table]}
-        """
-    return f"SELECT *, CAST(DENSE_RANK() OVER (ORDER BY obs_id) - 1 AS INTEGER) AS obs_index FROM ({source})"
+    # The end date rather than datetime, as OMOP end dates are inclusive and end datetimes are optional.
+    end_key = None if time_defining_table == "person" else _get_datetime_key("end", time_defining_table, "date")
+    missing = [key for key in dict.fromkeys([id_key, "person_id", start_key, end_key]) if key and key not in columns]
+    if missing:
+        msg = f"The time window of each observation is read from .obs, which lacks the column(s) {missing} that setup_obs writes."
+        raise ValueError(msg)
+
+    start_dates = pd.to_datetime(obs[columns[start_key]])
+    _check_valid_birthdates_for_person_table(start_dates, time_defining_table)
+    windows = pd.DataFrame(
+        {
+            "obs_index": np.arange(len(obs), dtype=np.int32),
+            "obs_name": obs.index.astype(str).to_numpy(),
+            "obs_id": obs[columns[id_key]].to_numpy(),
+            "person_id": obs[columns["person_id"]].to_numpy(),
+            "start_date": start_dates.to_numpy(),
+            "end_date": pd.to_datetime(obs[columns[end_key]]).to_numpy() if end_key else pd.NaT,
+        }
+    )
+    end_date = "CAST('2999-12-31 23:59:59' AS TIMESTAMP)" if end_key is None else "CAST(end_date AS DATE)"
+    # registered under a name of its own, as a table of the database would shadow a Python variable
+    backend_handle.register("_ehrdata_obs_windows_frame", windows)
+    try:
+        backend_handle.execute(
+            f"""
+            CREATE OR REPLACE TEMP TABLE {OBS_WINDOWS_TABLE} AS
+            SELECT obs_index, obs_name, obs_id, person_id, CAST(start_date AS TIMESTAMP) AS start_date, {end_date} AS end_date
+            FROM _ehrdata_obs_windows_frame
+            """
+        )
+    finally:
+        backend_handle.unregister("_ehrdata_obs_windows_frame")
+
+
+def _write_obs_names(backend_handle: duckdb.DuckDBPyConnection, data_table: str) -> None:
+    """Write `long_person_timestamp_feature_value_<data_table>_obs`: the obs_index and obs_name of every row of `.obs` the long format table was set up for.
+
+    The obs_index of the long format table is a position in that `.obs`, which an `EHRData` filtered or reordered later no longer shares; its obs_names map its rows back.
+    """
+    backend_handle.execute(
+        f"CREATE OR REPLACE TABLE long_person_timestamp_feature_value_{data_table}_obs AS SELECT obs_index, obs_name FROM {OBS_WINDOWS_TABLE}"
+    )
 
 
 def _write_long_observed_table(
     backend_handle: duckdb.DuckDBPyConnection,
     *,
-    time_defining_table: str,
     data_table: str,
     time_precision: Literal["date", "datetime"],
     interval_length_number: int,
@@ -421,7 +443,7 @@ def _write_long_observed_table(
     backend_handle.execute(
         f"""
         CREATE TABLE {table} AS
-        WITH observations AS ({_observations_query(time_defining_table, time_precision)}),
+        WITH observations AS (SELECT obs_index, obs_id, person_id, start_date, end_date FROM {OBS_WINDOWS_TABLE}),
         observed_rows AS (
             SELECT o.obs_id, o.obs_index, o.person_id, o.start_date, d.{concept_key} AS data_table_concept_id,
                 CAST(({row_time} - {start_time}) // {interval_us} AS INTEGER) AS interval_step, 1 AS is_present{kept_select}
