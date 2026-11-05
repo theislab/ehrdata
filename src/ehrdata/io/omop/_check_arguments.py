@@ -5,6 +5,7 @@ from collections.abc import Sequence
 
 import duckdb
 import numpy as np
+import pandas as pd
 
 from ehrdata.io.omop._queries import (
     AGGREGATION_STRATEGY_KEY,
@@ -154,6 +155,8 @@ def _check_valid_concept_sets(concept_sets, data_tables, enrich_var_with_feature
         if not isinstance(name, str) or name == "":
             msg = f"The names of concept sets must be non-empty strings, but one is {name!r}."
             raise TypeError(msg)
+        if isinstance(ids, np.ndarray | pd.Series | pd.Index) and np.ndim(ids) == 1:
+            ids = list(ids)
         if isinstance(ids, str) or not isinstance(ids, Sequence) or len(ids) == 0:
             msg = f"The concept set '{name}' must be a non-empty sequence of integers."
             raise TypeError(msg)

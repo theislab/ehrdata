@@ -3092,6 +3092,9 @@ def test_setup_variables_concept_sets_enrich_var_with_unit_info(omop_connection_
     edata = _setup_measurement(con, {"bicarbonate": [3031147]}, enrich_var_with_unit_info=True)
 
     assert edata.var.loc["bicarbonate", "unit_concept_id"] == 9557
+    # the unit's concept is in prefixed columns, apart from the concept ids of the set
+    assert "concept_id" not in edata.var.columns
+    assert {"unit_concept_name", "unit_vocabulary_id"} <= set(edata.var.columns)
 
 
 def test_setup_variables_concept_sets_sparse_and_dataset(omop_connection_vanilla):
@@ -3161,3 +3164,71 @@ def test_setup_interval_variables_rejects_concept_sets(omop_connection_vanilla):
             num_intervals=4,
             concept_ids={"a": [19073183]},
         )
+
+
+@pytest.mark.parametrize(
+    ("aggregation_strategy", "expected"),
+    [("mean", (18 + 19 + 51) / 3), ("median", 19), ("mode", 18), ("std", np.std([18, 19, 51], ddof=1))],
+)
+def test_setup_variables_concept_sets_combine_values_across_concepts(
+    omop_connection_vanilla, aggregation_strategy, expected
+):
+    """Person 1 has 18 and 19 of concept 3031147, and 51 of concept 3022318, in the 12 h from noon on 2100-01-01."""
+    con = omop_connection_vanilla
+    _add_second_concept_values(con)
+    edata = _setup_measurement(
+        con, {"both": [3031147, 3022318]}, aggregation_strategy=aggregation_strategy, time_precision="datetime"
+    )
+
+    assert edata.X[0, 0, 1] == pytest.approx(expected)
+
+
+def test_setup_variables_concept_sets_is_present(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = _setup_measurement(
+        con, {"both": [3031147, 3022318]}, data_field_to_keep=["is_present"], aggregation_strategy="count"
+    )
+
+    assert set(np.unique(edata.X[~np.isnan(edata.X)])) == {1}
+
+
+@pytest.mark.parametrize("aggregation_strategy", ["last", "count"])
+def test_setup_variables_concept_sets_without_any_data(omop_connection_vanilla, aggregation_strategy):
+    """Sets without data points are variables, also if no set has any."""
+    con = omop_connection_vanilla
+    edata = _setup_measurement(con, {"a": [123456789], "b": [987654321]}, aggregation_strategy=aggregation_strategy)
+
+    assert list(edata.var_names) == ["a", "b"]
+    np.testing.assert_array_equal(edata.X, np.full(edata.X.shape, 0 if aggregation_strategy == "count" else np.nan))
+
+
+def test_setup_variables_concept_sets_on_a_text_concept_column(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    _add_second_concept_values(con)
+    expected = _setup_measurement(con, {"both": [3031147, 3022318]}, aggregation_strategy="mean").X
+    con.execute(
+        "CREATE OR REPLACE TABLE measurement AS "
+        "SELECT * REPLACE (CAST(measurement_concept_id AS VARCHAR) AS measurement_concept_id) FROM measurement"
+    )
+
+    np.testing.assert_array_equal(
+        _setup_measurement(con, {"both": [3031147, 3022318]}, aggregation_strategy="mean").X, expected
+    )
+
+
+@pytest.mark.parametrize("ids", [np.array([3031147, 3022318]), pd.Series([3031147, 3022318]), (3031147, 3022318)])
+def test_setup_variables_concept_sets_of_arrays(omop_connection_vanilla, ids):
+    con = omop_connection_vanilla
+    expected = _setup_measurement(con, {"both": [3031147, 3022318]}).X
+
+    np.testing.assert_array_equal(_setup_measurement(con, {"both": ids}).X, expected)
+
+
+def test_ehrdataset_rejects_a_long_table_of_another_setup(omop_connection_vanilla):
+    pytest.importorskip("torch")
+    con = omop_connection_vanilla
+    edata = _setup_measurement(con, {"both": [3031147, 3022318]}, instantiate_tensor=False)
+    _setup_measurement(con, [3031147, 3022318], instantiate_tensor=False)
+
+    with pytest.raises(ValueError, match="was set up by another call of setup_variables"):
+        ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])

@@ -194,7 +194,7 @@ def _check_one_unit_per_feature_for_aggregation(
     )
     feature_units: dict = {}
     for concept_id, unit in feature_unit_pairs:
-        feature = set_of_concept[concept_id] if set_of_concept else concept_id
+        feature = set_of_concept[int(concept_id)] if set_of_concept else concept_id
         if unit not in feature_units.setdefault(feature, []):
             feature_units[feature].append(unit)
     multiple_units = {feature: sorted(units, key=str) for feature, units in feature_units.items() if len(units) > 1}
@@ -405,6 +405,7 @@ def setup_variables(
 
     The distinct `concept_id`s encountered in the selected tables form the variables in the EHRData object.
     The variables are sorted by the `concept_id` for each `data_table` in ascending order, and stacked together in the order that the `data_tables` are specified.
+    With concept sets (see `concept_ids`), the variables are the sets instead.
 
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
@@ -448,8 +449,11 @@ def setup_variables(
             each set is one variable, named by its key and in the order of the mapping, that combines the data points of its concepts.
             The variables are the sets, also those without data points, and `.var["concept_ids"]` lists the concept IDs of each.
             Concept sets take one data table, a concept may belong to one set only, and `enrich_var_with_feature_info` is not available for them.
+            With `enrich_var_with_unit_info`, the columns of the unit's concept are prefixed with `unit_`.
+            The long format table then holds the column `variable` in place of `data_table_concept_id`, and the unit report is keyed by `variable` in place of `concept_id`.
         aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
             For `'last'` and `'first'`, only data points that have a value in the data field of interest (the first field of `data_field_to_keep`) are considered.
+            Data points at the same time, for instance of two concepts of a concept set, are ordered by their value.
             All kept fields are read from that very data point, so that e.g. the units describe the value that is kept.
             Every other strategy combines the values of several data points into one, which requires a single unit per feature.
             A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points carrying a value (a missing unit is a unit of its own here).
@@ -558,7 +562,8 @@ def setup_variables(
             .df()["count"]
             .item()
         )
-        if count == 0:
+        # concept sets are variables also without data points
+        if count == 0 and not concept_sets:
             logging.warning(f"No data found in {data_table}. Returning edata without data of {data_table}.")
             empty_table_counter += 1
             continue
@@ -651,14 +656,18 @@ def setup_variables(
                     right_on="variable" if concept_sets else "concept_id",
                     suffixes=("", "_unit"),
                 )
-                var = pd.merge(
-                    var,
-                    concepts,
-                    how="left",
-                    left_on="unit_concept_id",
-                    right_on="concept_id",
-                    suffixes=("", "_unit_concept"),
-                )
+                if concept_sets:
+                    # the columns of the unit's concept, prefixed, so that they do not read as the concept of the variable
+                    var = pd.merge(var, concepts.add_prefix("unit_"), how="left", on="unit_concept_id")
+                else:
+                    var = pd.merge(
+                        var,
+                        concepts,
+                        how="left",
+                        left_on="unit_concept_id",
+                        right_on="concept_id",
+                        suffixes=("", "_unit_concept"),
+                    )
 
         if instantiate_tensor:
             r_collector[data_table] = _instantiate_long_observed_table(

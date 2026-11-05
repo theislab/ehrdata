@@ -75,6 +75,15 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         else:
             msg = "OMOPEHRDataset needs the EHRData returned by setup_variables, whose .var lists the concepts."
             raise ValueError(msg)
+        long_table_columns = {
+            row[0] for row in con.execute(f"DESCRIBE long_person_timestamp_feature_value_{data_tables[0]}").fetchall()
+        }
+        if self.key_column not in long_table_columns:
+            msg = (
+                f"The long format table of '{data_tables[0]}' was set up by another call of setup_variables than edata, "
+                f"{'without' if self.key_column == 'variable' else 'with'} concept sets."
+            )
+            raise ValueError(msg)
         self.variable_index = {variable: i for i, variable in enumerate(variables)}
         self.n_variables = len(variables)
         self.n_timesteps = len(edata.tem)

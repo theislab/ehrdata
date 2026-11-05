@@ -517,11 +517,12 @@ def _write_long_observed_table(
             [(str(name), int(concept_id)) for name, ids in concept_sets.items() for concept_id in ids],
             columns=["variable", "concept_id"],
         )
-        backend_handle.register(VARIABLE_MAP_TABLE, variable_map)
 
     table = f"long_person_timestamp_feature_value_{data_table}"
-    backend_handle.execute(f"DROP TABLE IF EXISTS {table}")
     try:
+        if concept_sets is not None:
+            backend_handle.register(VARIABLE_MAP_TABLE, variable_map)
+        backend_handle.execute(f"DROP TABLE IF EXISTS {table}")
         backend_handle.execute(
             f"""
         CREATE TABLE {table} AS
