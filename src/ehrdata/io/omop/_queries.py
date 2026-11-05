@@ -395,6 +395,36 @@ OBS_WINDOWS_TABLE = "ehrdata_obs_windows"
 VARIABLE_MAP_TABLE = "_ehrdata_variable_map"
 # The value ranges of setup_variables, resolved to concepts and registered while the queries that filter by them run: concept_id, lower, upper.
 VALUE_RANGE_TABLE = "_ehrdata_value_range"
+# The unit conversions of setup_variables, resolved to concepts and registered while the queries that convert run:
+# concept_id, unit_concept_id, to_unit_concept_id, to_unit_source_value, multiplier, addend.
+UNIT_CONVERSION_TABLE = "_ehrdata_unit_conversion"
+
+
+def _converted_rows_query(
+    rows_query: str, concept_key: str, value_field: str, unit_fields: Sequence[str], *, unit_conversions
+) -> str:
+    """The rows of rows_query, with the values and units of the rows that unit_conversions lists converted.
+
+    A row is converted if its concept and unit are a row of UNIT_CONVERSION_TABLE: its value becomes value * multiplier + addend, and its unit the target unit, in both unit fields.
+    The other rows are kept as they are; with unit_conversions, their unit_concept_id is read as an integer.
+    """
+    if unit_conversions is None:
+        return rows_query
+    replaced = [
+        f"CASE WHEN uc.concept_id IS NULL THEN r.{value_field} ELSE r.{value_field} * uc.multiplier + uc.addend END AS {value_field}",
+        "CASE WHEN uc.concept_id IS NULL THEN TRY_CAST(r.unit_concept_id AS BIGINT) ELSE uc.to_unit_concept_id END AS unit_concept_id",
+    ]
+    if "unit_source_value" in unit_fields:
+        replaced.append(
+            "CASE WHEN uc.concept_id IS NULL THEN CAST(r.unit_source_value AS VARCHAR) ELSE uc.to_unit_source_value END AS unit_source_value"
+        )
+    return f"""
+        SELECT r.* REPLACE ({", ".join(replaced)})
+        FROM ({rows_query}) AS r
+        LEFT JOIN {UNIT_CONVERSION_TABLE} AS uc
+            ON TRY_CAST(r.{concept_key} AS BIGINT) = uc.concept_id
+            AND TRY_CAST(r.unit_concept_id AS BIGINT) IS NOT DISTINCT FROM uc.unit_concept_id
+    """
 
 
 @contextmanager
@@ -528,9 +558,11 @@ def _write_long_observed_table(
     concept_sets: Mapping[str, Sequence[int]] | None = None,
     strategies: Mapping[int | str, str] | None = None,
     value_ranges: pd.DataFrame | None = None,
+    unit_conversions: pd.DataFrame | None = None,
 ) -> None:
     """Write `long_person_timestamp_feature_value_<data_table>` with one row per observed (observation, concept, interval).
 
+    With unit_conversions, the values and units of the rows it lists are converted first, see `_converted_rows_query`.
     With value_ranges, the rows whose value lies outside the range of their concept are left out before the aggregation, see `_value_range_filter`.
     With strategies, the aggregation_strategy of each variable, keyed like the variables: by concept id, or by the name of the concept set.
     All strategies aggregate the same observed rows, which are read from the data table once.
@@ -612,6 +644,7 @@ def _write_long_observed_table(
     with (
         _registered(backend_handle, VARIABLE_MAP_TABLE, variable_map),
         _registered(backend_handle, VALUE_RANGE_TABLE, value_ranges),
+        _registered(backend_handle, UNIT_CONVERSION_TABLE, unit_conversions),
     ):
         backend_handle.execute(f"DROP TABLE IF EXISTS {table}")
         backend_handle.execute(
@@ -621,7 +654,7 @@ def _write_long_observed_table(
         observed_rows AS MATERIALIZED (
             SELECT o.obs_id, o.obs_index, o.person_id, o.start_date, {key_select} AS {key_column},
                 CAST(({row_time} - {start_time}) // {interval_us} AS INTEGER) AS interval_step, 1 AS is_present{kept_select}
-            FROM ({_data_rows_query(data_table, link_visits=link_visits)}) AS d
+            FROM ({_converted_rows_query(_data_rows_query(data_table, link_visits=link_visits), concept_key, data_field_to_keep[0], unit_fields, unit_conversions=unit_conversions)}) AS d
             {variable_join}
             {range_join}
             JOIN observations AS o ON d.person_id = o.person_id AND {_visit_condition("d", "o", link_visits=link_visits)}

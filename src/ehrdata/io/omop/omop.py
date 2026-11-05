@@ -36,6 +36,7 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_observation_table,
     _check_valid_sparse,
     _check_valid_time_precision,
+    _check_valid_unit_conversions,
     _check_valid_value_range,
     _check_valid_value_range_variables,
     _check_valid_variable_data_tables,
@@ -44,10 +45,12 @@ from ehrdata.io.omop._check_arguments import (
 from ehrdata.io.omop._queries import (
     DATA_TABLE_CONCEPT_ID_TRUNK,
     SINGLE_ROW_AGGREGATION_STRATEGIES,
+    UNIT_CONVERSION_TABLE,
     UNITLESS_AGGREGATION_STRATEGIES,
     VALUE_RANGE_TABLE,
     _column_type,
     _concept_ids_condition,
+    _converted_rows_query,
     _get_ordered_table,
     _get_table_join,
     _get_unit_fields,
@@ -180,6 +183,7 @@ def _check_one_unit_per_feature_for_aggregation(
     concept_ids,
     concept_sets=None,
     value_ranges=None,
+    unit_conversions=None,
 ) -> None:
     """Verify that the data table allows the chosen aggregation strategy to combine values.
 
@@ -207,10 +211,17 @@ def _check_one_unit_per_feature_for_aggregation(
         value_ranges=value_ranges,
         value_type=_column_type(backend_handle, data_table, value_field) if value_ranges is not None else "",
     )
-    with _registered(backend_handle, VALUE_RANGE_TABLE, value_ranges):
+    # the units after the conversions, which the aggregation combines
+    rows = _converted_rows_query(
+        f"SELECT * FROM {data_table}", concept_id_key, value_field, unit_fields, unit_conversions=unit_conversions
+    )
+    with (
+        _registered(backend_handle, VALUE_RANGE_TABLE, value_ranges),
+        _registered(backend_handle, UNIT_CONVERSION_TABLE, unit_conversions),
+    ):
         feature_unit_pairs = backend_handle.execute(
             f"""
-            SELECT DISTINCT d.{concept_id_key}, d.unit_concept_id FROM {data_table} AS d
+            SELECT DISTINCT d.{concept_id_key}, d.unit_concept_id FROM ({rows}) AS d
             {range_join}
             WHERE d.{value_field} IS NOT NULL AND {_concept_ids_condition(data_table, concept_ids)} AND {range_condition}
             """
@@ -355,6 +366,77 @@ def _is_numeric_field(backend_handle, data_table: str, field: str) -> bool:
     )
 
 
+def _unit_concept_codes(backend_handle, unit_concept_ids: pd.Series) -> pd.Series:
+    """The concept_code of each unit concept in the concept table, such as its UCUM code, or a missing value."""
+    tables = {
+        row[0].lower() for row in backend_handle.execute("SELECT table_name FROM information_schema.tables").fetchall()
+    }
+    if "concept" not in tables:
+        return pd.Series(pd.NA, index=unit_concept_ids.index, dtype="string")
+    ids = sorted({int(unit) for unit in unit_concept_ids.dropna()})
+    codes = dict(
+        backend_handle.execute(
+            f"SELECT concept_id, concept_code FROM concept WHERE concept_id IN ({', '.join(map(str, ids)) or 'NULL'})"
+        ).fetchall()
+    )
+    return unit_concept_ids.map(lambda unit: codes.get(int(unit), pd.NA) if pd.notna(unit) else pd.NA).astype("string")
+
+
+def _check_valid_unit_conversion_concepts(
+    backend_handle, unit_conversions, *, variables_of_table, requested_concept_ids, data_field_to_keep, numeric_fields
+) -> None:
+    """Check that the concepts of unit_conversions are variables with numeric values and units, and that their rows are in listed units."""
+    concepts = set(unit_conversions["concept_id"].astype(int))
+    concepts_of_table = {
+        table: {
+            int(row[0])
+            for row in backend_handle.execute(
+                f"SELECT DISTINCT TRY_CAST({DATA_TABLE_CONCEPT_ID_TRUNK[table]}_concept_id AS BIGINT) FROM {table}"
+            ).fetchall()
+            if row[0] is not None
+        }
+        & concepts
+        for table in variables_of_table
+    }
+    found = set().union(*concepts_of_table.values())
+    unknown = sorted(concepts - found - set(requested_concept_ids))
+    if unknown:
+        msg = f"unit_conversions has conversions for the concept(s) {unknown[:5]}, which have no data points in the data tables."
+        raise ValueError(msg)
+    for table, table_concepts in concepts_of_table.items():
+        if not table_concepts:
+            continue
+        value_field = data_field_to_keep[table][0]
+        if value_field == "is_present" or not numeric_fields[table]:
+            msg = f"unit_conversions converts values, which needs a numeric data field, but '{value_field}' of '{table}' is not."
+            raise TypeError(msg)
+        if "unit_concept_id" not in _get_unit_fields(backend_handle, table):
+            msg = f"unit_conversions converts from the unit_concept_id of the data points, which '{table}' lacks."
+            raise ValueError(msg)
+        concept_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[table]}_concept_id"
+        with _registered(backend_handle, UNIT_CONVERSION_TABLE, unit_conversions):
+            unlisted = backend_handle.execute(
+                f"""
+                SELECT TRY_CAST(d.{concept_key} AS BIGINT) AS concept_id, TRY_CAST(d.unit_concept_id AS BIGINT) AS unit, COUNT(*) AS n
+                FROM {table} AS d
+                WHERE d.{value_field} IS NOT NULL
+                    AND TRY_CAST(d.{concept_key} AS BIGINT) IN (SELECT concept_id FROM {UNIT_CONVERSION_TABLE})
+                    AND NOT EXISTS (
+                        SELECT 1 FROM {UNIT_CONVERSION_TABLE} AS uc
+                        WHERE uc.concept_id = TRY_CAST(d.{concept_key} AS BIGINT)
+                            AND uc.unit_concept_id IS NOT DISTINCT FROM TRY_CAST(d.unit_concept_id AS BIGINT)
+                    )
+                GROUP BY ALL ORDER BY n DESC
+                """
+            ).fetchall()
+        if unlisted:
+            listing = ", ".join(
+                f"concept {concept_id} in unit {unit} ({n} data points)" for concept_id, unit, n in unlisted[:5]
+            )
+            msg = f"unit_conversions lists no conversion for {len(unlisted)} (concept, unit) pair(s) of '{table}': {listing}."
+            raise ValueError(msg)
+
+
 def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
     """Setup a connection to the OMOP CDM database.
 
@@ -474,6 +556,7 @@ def setup_variables(
     time_precision: Literal["date", "datetime"] = "date",
     clip_to_end_date: bool = True,
     value_range: Mapping[int | str, tuple[float | None, float | None]] | None = None,
+    unit_conversions: pd.DataFrame | None = None,
     num_intervals: int,
     concept_ids: Literal["all"] | Sequence[int] | Mapping[str, Sequence[int]] = "all",
     aggregation_strategy: Literal["last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"]
@@ -532,6 +615,14 @@ def setup_variables(
             The range of a concept set applies to each of its concepts, and the range of a concept to it in every data table that has it.
             As with a mapping of `aggregation_strategy`, rows without a concept ID then belong to no variable,
             and a key that is no variable raises, unless it is one of `concept_ids` without data points.
+        unit_conversions: Conversions of the values of concepts from the units they were recorded in to one unit, before the aggregation.
+            A :class:`~pandas.DataFrame` with one row per recorded unit of a concept: the columns `concept_id` (or `variable`, the name of a concept set, for all its concepts),
+            `unit_concept_id`, `to_unit_concept_id` and `multiplier`, and optionally `offset` (0 if absent) and `to_unit_source_value`.
+            A value becomes `value * multiplier + offset`, and its unit the target unit, in `unit_concept_id` and in `unit_source_value`;
+            without the column `to_unit_source_value`, that is the `concept_code` of the target unit in the `concept` table.
+            A missing `unit_concept_id` converts the data points without a unit, and a unit that needs no conversion takes a row with multiplier 1.
+            Every data point with a value of a listed concept must be in one of its listed units, a concept is converted to one unit only,
+            and `value_range` applies to the converted values.
         interval_length_number: Numeric value of the length of one interval.
         interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
         num_intervals: Number of intervals.
@@ -620,6 +711,10 @@ def setup_variables(
         _check_valid_concept_ids(concept_ids)
     key_column = "variable" if concept_sets else "data_table_concept_id"
     value_range = _check_valid_value_range(value_range, concept_sets=concept_sets is not None)
+    unit_conversions_given = (
+        isinstance(unit_conversions, pd.DataFrame) and "to_unit_source_value" in unit_conversions.columns
+    )
+    unit_conversions = _check_valid_unit_conversions(unit_conversions, concept_sets)
     strategy_map = None
     if isinstance(aggregation_strategy, Mapping):
         strategy_map = _check_valid_aggregation_strategy_mapping(
@@ -653,8 +748,8 @@ def setup_variables(
     n_obs = edata.n_obs
 
     table_strategies = variables_of_table = value_ranges = None
-    if strategy_map is not None or value_range is not None:
-        # the variables are the concepts with a concept id: with strategies or ranges per variable, rows without one belong to no variable
+    if strategy_map is not None or value_range is not None or unit_conversions is not None:
+        # the variables are the concepts with a concept id: with strategies, ranges or conversions per variable, rows without one belong to no variable
         variables_of_table = (
             {data_tables[0]: list(concept_sets)}
             if concept_sets
@@ -677,6 +772,19 @@ def setup_variables(
         if strategy_map is not None:
             table_strategies = _check_valid_aggregation_strategies(strategy_map, variables_of_table, requested)
             _check_valid_aggregation_fill_values(table_strategies, data_field_to_keep, numeric_fields, sparse=sparse)
+        if unit_conversions is not None:
+            _check_valid_unit_conversion_concepts(
+                backend_handle,
+                unit_conversions,
+                variables_of_table=variables_of_table,
+                requested_concept_ids=requested,
+                data_field_to_keep=data_field_to_keep,
+                numeric_fields=numeric_fields,
+            )
+            if not unit_conversions_given:
+                unit_conversions["to_unit_source_value"] = _unit_concept_codes(
+                    backend_handle, unit_conversions["to_unit_concept_id"]
+                )
         if value_range is not None:
             _check_valid_value_range_variables(
                 value_range, variables_of_table, requested, data_field_to_keep, numeric_fields
@@ -746,6 +854,7 @@ def setup_variables(
                 concept_ids=strategy_concept_ids,
                 concept_sets=strategy_sets,
                 value_ranges=value_ranges,
+                unit_conversions=unit_conversions,
             )
 
         _write_long_observed_table(
@@ -763,6 +872,7 @@ def setup_variables(
             concept_sets=concept_sets,
             strategies=strategies,
             value_ranges=value_ranges,
+            unit_conversions=unit_conversions,
         )
         _write_obs_names(backend_handle, data_table)
 
