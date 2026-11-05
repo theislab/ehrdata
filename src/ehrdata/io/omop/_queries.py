@@ -454,13 +454,15 @@ def _write_obs_windows(
         backend_handle.unregister("_ehrdata_obs_windows_frame")
 
 
-def _write_obs_names(backend_handle: duckdb.DuckDBPyConnection, data_table: str) -> None:
+def _write_obs_names(backend_handle: duckdb.DuckDBPyConnection, data_table: str, setup_id: str) -> None:
     """Write `long_person_timestamp_feature_value_<data_table>_obs`: the obs_index and obs_name of every row of `.obs` the long format table was set up for.
 
     The obs_index of the long format table is a position in that `.obs`, which an `EHRData` filtered or reordered later no longer shares; its obs_names map its rows back.
+    The column setup_id holds the `setup_id` of `.uns['omop_io_variable_setup']` of the call that wrote the long format table.
     """
     backend_handle.execute(
-        f"CREATE OR REPLACE TABLE long_person_timestamp_feature_value_{data_table}_obs AS SELECT obs_index, obs_name FROM {OBS_WINDOWS_TABLE}"
+        f"CREATE OR REPLACE TABLE long_person_timestamp_feature_value_{data_table}_obs AS SELECT obs_index, obs_name, ? AS setup_id FROM {OBS_WINDOWS_TABLE}",
+        [setup_id],
     )
 
 

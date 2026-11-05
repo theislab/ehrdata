@@ -178,6 +178,13 @@ def test_ehrdataset_items_match_the_tensor_with_intervals_before_the_start(omop_
         expected = torch.tensor(edata_tensor.X[obs_index], dtype=torch.float32)
         torch.testing.assert_close(ehr_dataset[obs_index][0], expected, equal_nan=True)
 
+    # without .tem["interval_step"], the intervals are those of the setup
+    edata.tem = edata.tem.drop(columns="interval_step")
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"], datetime=False)
+    for obs_index in range(edata.n_obs):
+        expected = torch.tensor(edata_tensor.X[obs_index], dtype=torch.float32)
+        torch.testing.assert_close(ehr_dataset[obs_index][0], expected, equal_nan=True)
+
 
 def test_ehrdataset_items_match_the_tensor_of_a_subset_of_the_intervals(omop_connection_vanilla):
     """An edata whose time axis is a subset of the intervals set up holds only these intervals."""
@@ -205,3 +212,219 @@ def test_ehrdataset_items_match_the_tensor_of_a_subset_of_the_intervals(omop_con
     for obs_index in range(subset.n_obs):
         expected = torch.tensor(subset.X[obs_index], dtype=torch.float32)
         torch.testing.assert_close(ehr_dataset[obs_index][0], expected, equal_nan=True)
+
+
+def test_ehrdataset_rejects_a_long_table_of_a_later_call(omop_connection_vanilla):
+    """A later setup_variables call replaces the long format table that an earlier edata reads."""
+    con = omop_connection_vanilla
+    edata = _setup(con, "measurement", "value_as_number", aggregation_strategy="mean")
+    _setup(con, "measurement", "value_as_number", aggregation_strategy="max")
+    with pytest.raises(ValueError, match="written by another call"):
+        ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+
+
+def test_ehrdataset_raises_for_items_after_a_later_call(omop_connection_vanilla):
+    """A later setup_variables call can replace the long format table after the dataset was created."""
+    con = omop_connection_vanilla
+    edata = _setup(con, "measurement", "value_as_number")
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+    ehr_dataset[0]
+    _setup(con, "measurement", "value_as_number")
+    with pytest.raises(ValueError, match="replaced by a later call"):
+        ehr_dataset[0]
+
+
+def test_ehrdataset_needs_the_long_table(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = _setup(con, "measurement", "value_as_number")
+    con.execute("DROP TABLE long_person_timestamp_feature_value_measurement")
+    with pytest.raises(ValueError, match="no long format table"):
+        ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+
+
+def test_ehrdataset_needs_the_setup_of_setup_variables(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = _setup(con, "measurement", "value_as_number")
+    del edata.uns["omop_io_variable_setup"]
+    with pytest.raises(ValueError, match="omop_io_variable_setup"):
+        ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+
+
+@pytest.mark.parametrize(
+    ("data_field_to_keep", "aggregation_strategy"),
+    [
+        ("value_as_number", "count"),
+        ("value_as_number", {3031147: "count", 3022318: "max"}),
+        ("is_present", "count"),
+        ("value_as_concept_id", "last"),
+    ],
+)
+def test_ehrdataset_items_match_the_tensor_of_the_setup(
+    omop_connection_vanilla, data_field_to_keep, aggregation_strategy
+):
+    """The items hold the field of the setup, and 0 in the empty cells of counted variables, as its tensor."""
+    con = omop_connection_vanilla
+    edata = _setup(con, "measurement", data_field_to_keep, aggregation_strategy=aggregation_strategy)
+
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"], datetime=False)
+    for obs_index in range(edata.n_obs):
+        expected = torch.tensor(edata.X[obs_index].astype(float), dtype=torch.float32)
+        torch.testing.assert_close(ehr_dataset[obs_index][0], expected, equal_nan=True)
+
+
+def test_ehrdataset_needs_a_numeric_field(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = _setup(con, "measurement", "unit_source_value", aggregation_strategy="last")
+    with pytest.raises(TypeError, match="numeric data field"):
+        ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+
+
+@pytest.mark.parametrize(
+    ("death_date", "death_datetime", "datetime", "expected"),
+    [
+        # the observation periods run from 2100-01-01 to 2100-01-31
+        ("2100-01-31", "2100-01-31 18:00:00", True, 1),
+        ("2100-01-31", None, True, 1),
+        ("2100-01-01", None, True, 1),
+        ("2100-02-01", "2100-02-01 00:00:00", True, 0),
+        ("2099-12-31", "2099-12-31 23:00:00", False, 0),
+        (None, "2100-01-15 12:00:00", True, 1),
+    ],
+)
+def test_ehrdataset_mortality_in_the_window(omop_connection_vanilla, death_date, death_datetime, datetime, expected):
+    con = omop_connection_vanilla
+    con.execute(
+        "UPDATE death SET death_date = CAST(? AS DATE), death_datetime = CAST(? AS TIMESTAMP) WHERE person_id = 1",
+        [death_date, death_datetime],
+    )
+    edata = _setup(con, "measurement", "value_as_number")
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"], datetime=datetime)
+    row = list(edata.obs["person_id"]).index(1)
+    assert ehr_dataset[row][1].item() == expected
+
+
+def test_ehrdataset_mortality_of_persons(omop_connection_vanilla):
+    """The observations of the person table have no end date, so any death after the birth counts."""
+    con = omop_connection_vanilla
+    con.execute("UPDATE person SET birth_datetime = TIMESTAMP '2099-01-01 00:00:00'")
+    edata = ed.io.omop.setup_obs(con, observation_table="person")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables="measurement",
+        data_field_to_keep="value_as_number",
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+    )
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+    targets = {int(person): ehr_dataset[i][1].item() for i, person in enumerate(edata.obs["person_id"])}
+    assert targets == {1: 1, 2: 1, 3: 0, 4: 0}
+
+
+def test_ehrdataset_mortality_needs_a_death_table(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = _setup(con, "measurement", "value_as_number")
+    con.execute("DROP TABLE death")
+    with pytest.raises(ValueError, match="'death' table"):
+        ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+
+
+def test_ehrdataset_of_concept_sets_with_count_read_back_from_disk(omop_connection_vanilla, tmp_path):
+    con = omop_connection_vanilla
+    edata = _setup(
+        con,
+        "measurement",
+        "value_as_number",
+        concept_ids={"co2/blood": [3031147], "rhythm": [3022318]},
+        aggregation_strategy={"co2/blood": "max", "rhythm": "count"},
+    )
+    ed.io.write_zarr(edata, tmp_path / "edata.zarr")
+    read_back = ed.io.read_zarr(tmp_path / "edata.zarr")
+
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, read_back, data_tables=["measurement"], datetime=False)
+    for obs_index in range(edata.n_obs):
+        expected = torch.tensor(edata.X[obs_index].astype(float), dtype=torch.float32)
+        torch.testing.assert_close(ehr_dataset[obs_index][0], expected, equal_nan=True)
+
+
+def test_ehrdataset_mortality_without_death_datetime_column(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    con.execute("UPDATE death SET death_date = DATE '2100-01-31' WHERE person_id = 1")
+    con.execute("ALTER TABLE death DROP COLUMN death_datetime")
+    edata = _setup(con, "measurement", "value_as_number")
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+    assert ehr_dataset[list(edata.obs["person_id"]).index(1)][1].item() == 1
+
+
+@pytest.mark.parametrize(("death_datetime", "expected"), [("2100-01-01 09:00:00", 0), ("2100-01-01 11:00:00", 1)])
+def test_ehrdataset_mortality_of_a_visit_from_its_start_datetime(omop_connection_vanilla, death_datetime, expected):
+    con = omop_connection_vanilla
+    con.execute(
+        "UPDATE visit_occurrence SET visit_start_datetime = TIMESTAMP '2100-01-01 10:00:00' WHERE person_id = 1"
+    )
+    con.execute(
+        "UPDATE death SET death_date = DATE '2100-01-01', death_datetime = CAST(? AS TIMESTAMP) WHERE person_id = 1",
+        [death_datetime],
+    )
+    edata = ed.io.omop.setup_obs(con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables="measurement",
+        data_field_to_keep="value_as_number",
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+    )
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"], datetime=True)
+    assert ehr_dataset[list(edata.obs["person_id"]).index(1)][1].item() == expected
+
+
+@pytest.mark.parametrize(("time_precision", "expected"), [("date", 1), ("datetime", 0)])
+def test_ehrdataset_mortality_compares_at_the_precision_of_the_setup(omop_connection_vanilla, time_precision, expected):
+    """By default, a death at 09:00 on the day of a visit that starts at 10:00 counts at date precision only."""
+    con = omop_connection_vanilla
+    con.execute(
+        "UPDATE visit_occurrence SET visit_start_datetime = TIMESTAMP '2100-01-01 10:00:00' WHERE person_id = 1"
+    )
+    con.execute(
+        "UPDATE death SET death_date = DATE '2100-01-01', death_datetime = TIMESTAMP '2100-01-01 09:00:00' WHERE person_id = 1"
+    )
+    edata = ed.io.omop.setup_obs(con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables="measurement",
+        data_field_to_keep="value_as_number",
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+        time_precision=time_precision,
+    )
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+    assert ehr_dataset[list(edata.obs["person_id"]).index(1)][1].item() == expected
+
+
+def test_ehrdataset_mortality_of_a_visit_without_end_date(omop_connection_vanilla):
+    """An observation without an end date has no death in its window, unless it is a person, which has no end."""
+    con = omop_connection_vanilla
+    con.execute("UPDATE death SET death_date = DATE '2100-01-02', death_datetime = NULL WHERE person_id = 1")
+    edata = ed.io.omop.setup_obs(con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables="measurement",
+        data_field_to_keep="value_as_number",
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+        clip_to_end_date=False,
+    )
+    row = list(edata.obs["person_id"]).index(1)
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+    assert ehr_dataset[row][1].item() == 1
+    end_column = next(column for column in edata.obs.columns if column.lower() == "visit_end_date")
+    edata.obs[end_column] = edata.obs[end_column].astype(object)
+    edata.obs.iloc[row, edata.obs.columns.get_loc(end_column)] = None
+    assert ehr_dataset[row][1].item() == 0
