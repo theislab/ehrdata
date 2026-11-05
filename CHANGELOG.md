@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning][].
 
 - {func}`~ehrdata.io.omop.setup_variables` takes `sparse=True` to store the tensor as a `sparse.COO` array. Its query now aggregates only the intervals that hold data points, rather than every combination of observation, variable and interval, so memory and time follow the number of data points. ([#341](https://github.com/theislab/ehrdata/pull/341)) @eroell
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` take `clip_to_end_date=False` to keep the data points after the end date of an observation, such as the `visit_end_date`, in all `num_intervals` intervals. ([#343](https://github.com/theislab/ehrdata/pull/343)) @eroell
+- {func}`~ehrdata.io.omop.setup_variables` takes concept sets, a mapping of variable names to concept ids such as `concept_ids={"name": [concept_id_1, concept_id_2]}`, to combine the data points of several concepts into one variable. The variables are named by the keys, in their order, and `.var["concept_ids"]` lists the concepts of each; the unit check and the unit report work per variable. ([#PR](https://github.com/theislab/ehrdata/pull/PR)) @eroell
 
 ### Changed
 

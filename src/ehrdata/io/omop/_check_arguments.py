@@ -4,6 +4,7 @@ import logging
 from collections.abc import Sequence
 
 import duckdb
+import numpy as np
 
 from ehrdata.io.omop._queries import (
     AGGREGATION_STRATEGY_KEY,
@@ -134,6 +135,38 @@ def _check_valid_num_intervals(num_intervals) -> None:
     if not isinstance(num_intervals, int):
         msg = "Expected num_intervals to be an integer."
         raise TypeError(msg)
+
+
+def _check_valid_concept_sets(concept_sets, data_tables, enrich_var_with_feature_info) -> dict[str, list[int]]:
+    """Check a mapping of names to concept ids, and return it as a dict of lists."""
+    if len(data_tables) != 1:
+        msg = f"Concept sets take one data table, but data_tables is {list(data_tables)}."
+        raise ValueError(msg)
+    if enrich_var_with_feature_info:
+        msg = "enrich_var_with_feature_info describes single concepts, and is not available for concept sets."
+        raise ValueError(msg)
+    if len(concept_sets) == 0:
+        msg = "concept_ids must not be empty."
+        raise ValueError(msg)
+    checked: dict[str, list[int]] = {}
+    set_of_concept: dict[int, str] = {}
+    for name, ids in concept_sets.items():
+        if not isinstance(name, str) or name == "":
+            msg = f"The names of concept sets must be non-empty strings, but one is {name!r}."
+            raise TypeError(msg)
+        if isinstance(ids, str) or not isinstance(ids, Sequence) or len(ids) == 0:
+            msg = f"The concept set '{name}' must be a non-empty sequence of integers."
+            raise TypeError(msg)
+        if not all(isinstance(concept_id, int | np.integer) and not isinstance(concept_id, bool) for concept_id in ids):
+            msg = f"The concept set '{name}' must hold integer concept ids."
+            raise TypeError(msg)
+        checked[name] = list(dict.fromkeys(int(concept_id) for concept_id in ids))
+        for concept_id in checked[name]:
+            if concept_id in set_of_concept:
+                msg = f"The concept {concept_id} belongs to the concept sets '{set_of_concept[concept_id]}' and '{name}', but may belong to one only."
+                raise ValueError(msg)
+            set_of_concept[concept_id] = name
+    return checked
 
 
 def _check_valid_concept_ids(concept_ids) -> None:

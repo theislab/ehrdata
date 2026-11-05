@@ -3000,3 +3000,164 @@ def test_setup_variables_without_a_visit_table_attributes_by_person_and_time(omo
     con.execute("DROP TABLE visit_occurrence")
 
     np.testing.assert_array_equal(ed.io.omop.setup_variables(edata, **kwargs).X, expected)
+
+
+def _setup_measurement(con, concept_ids, **kwargs):
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 12,
+        "interval_length_unit": "h",
+        "num_intervals": 4,
+        **kwargs,
+    }
+    return ed.io.omop.setup_variables(edata, backend_handle=con, concept_ids=concept_ids, **kwargs)
+
+
+def _add_second_concept_values(con, unit_concept_id=9557, unit_source_value="mEq/L"):
+    """Give concept 3022318, whose toy rows have no value, a value per person on 2100-01-01 15:00."""
+    con.execute(
+        f"""INSERT INTO measurement (measurement_id, person_id, measurement_concept_id, measurement_date,
+            measurement_datetime, value_as_number, unit_concept_id, unit_source_value)
+        SELECT 100 + person_id, person_id, 3022318, DATE '2100-01-01', TIMESTAMP '2100-01-01 15:00:00',
+            50 + person_id, {unit_concept_id}, '{unit_source_value}' FROM person"""
+    )
+
+
+@pytest.mark.parametrize("aggregation_strategy", ["count", "max", "min", "sum", "last", "first"])
+def test_setup_variables_concept_sets_combine_their_concepts(omop_connection_vanilla, aggregation_strategy):
+    con = omop_connection_vanilla
+    _add_second_concept_values(con)
+    single = _setup_measurement(con, [3031147, 3022318], aggregation_strategy=aggregation_strategy)
+    concept_set = _setup_measurement(
+        con, {"both": [3031147, 3022318], "absent": [123456789]}, aggregation_strategy=aggregation_strategy
+    )
+
+    assert list(concept_set.var_names) == ["both", "absent"]
+    assert concept_set.var["concept_ids"].tolist() == ["3031147,3022318", "123456789"]
+    first, second = (single.X[:, single.var["data_table_concept_id"].tolist().index(c)] for c in (3031147, 3022318))
+    combine = {
+        "count": np.add,
+        "sum": lambda a, b: np.where(np.isnan(a), b, np.where(np.isnan(b), a, a + b)),
+        "max": np.fmax,
+        "min": np.fmin,
+        # the rows of 3022318 come after those of 3031147, at 15:00
+        "last": lambda a, b: np.where(np.isnan(b), a, b),
+        "first": lambda a, b: np.where(np.isnan(a), b, a),
+    }[aggregation_strategy]
+    np.testing.assert_array_equal(concept_set.X[:, 0], combine(first, second))
+    expected_empty = 0 if aggregation_strategy == "count" else np.nan
+    np.testing.assert_array_equal(concept_set.X[:, 1], np.full_like(concept_set.X[:, 1], expected_empty))
+
+
+def test_setup_variables_concept_set_of_one_concept_equals_the_concept(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    single = _setup_measurement(con, [3031147])
+    concept_set = _setup_measurement(con, {"bicarbonate": [3031147]})
+
+    np.testing.assert_array_equal(concept_set.X, single.X)
+    unit_report = concept_set.uns["unit_report_measurement"]
+    assert unit_report["variable"].tolist() == ["bicarbonate"]
+    assert unit_report["unit_concept_id"].tolist() == single.uns["unit_report_measurement"]["unit_concept_id"].tolist()
+
+
+def test_setup_variables_concept_sets_check_the_units_per_set(omop_connection_vanilla):
+    """Each concept has one unit, but the set combines two, which a strategy combining values cannot."""
+    con = omop_connection_vanilla
+    _add_second_concept_values(con, unit_concept_id=8753, unit_source_value="mmol/L")
+    _setup_measurement(con, [3031147, 3022318], aggregation_strategy="mean")
+
+    with pytest.raises(
+        NotImplementedError, match=r"1 feature\(s\) have more than one unit_concept_id .*\(both: \[8753, 9557\]\)"
+    ):
+        _setup_measurement(con, {"both": [3031147, 3022318]}, aggregation_strategy="mean")
+    # hourly, so that the rows of both units are kept in cells of their own
+    edata = _setup_measurement(
+        con,
+        {"both": [3031147, 3022318]},
+        aggregation_strategy="last",
+        interval_length_number=1,
+        interval_length_unit="h",
+        num_intervals=24,
+        time_precision="datetime",
+    )
+    unit_report = edata.uns["unit_report_measurement"]
+    assert sorted(unit_report["unit_concept_id"].tolist()) == [8753, 9557]
+    assert unit_report["multiple_units"].all()
+
+
+def test_setup_variables_concept_sets_enrich_var_with_unit_info(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = _setup_measurement(con, {"bicarbonate": [3031147]}, enrich_var_with_unit_info=True)
+
+    assert edata.var.loc["bicarbonate", "unit_concept_id"] == 9557
+
+
+def test_setup_variables_concept_sets_sparse_and_dataset(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    _add_second_concept_values(con)
+    concept_sets = {"both": [3031147, 3022318], "second": [123456789]}
+    dense = _setup_measurement(con, concept_sets)
+    sparse_edata = _setup_measurement(con, concept_sets, sparse=True)
+    np.testing.assert_array_equal(sparse_edata.X.todense(), dense.X)
+
+    torch = pytest.importorskip("torch")
+    edata = _setup_measurement(con, concept_sets, instantiate_tensor=False)
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"], datetime=False)
+    for index in range(edata.n_obs):
+        torch.testing.assert_close(
+            ehr_dataset[index][0], torch.tensor(dense.X[index], dtype=torch.float32), equal_nan=True
+        )
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        (
+            {
+                "data_tables": ["measurement", "observation"],
+                "data_field_to_keep": dict.fromkeys(["measurement", "observation"], "value_as_number"),
+            },
+            ValueError,
+            "Concept sets take one data table",
+        ),
+        ({"enrich_var_with_feature_info": True}, ValueError, "not available for concept sets"),
+    ],
+)
+def test_setup_variables_concept_sets_reject_other_arguments(omop_connection_vanilla, kwargs, error, match):
+    with pytest.raises(error, match=match):
+        _setup_measurement(omop_connection_vanilla, {"bicarbonate": [3031147]}, **kwargs)
+
+
+@pytest.mark.parametrize(
+    ("concept_ids", "error", "match"),
+    [
+        ({}, ValueError, "must not be empty"),
+        ({"a": []}, TypeError, "non-empty sequence of integers"),
+        ({"a": "3031147"}, TypeError, "non-empty sequence of integers"),
+        ({"a": [3031147.0]}, TypeError, "integer concept ids"),
+        ({"a": [True]}, TypeError, "integer concept ids"),
+        ({1: [3031147]}, TypeError, "non-empty strings"),
+        ({"a": [3031147], "b": [3031147, 3022318]}, ValueError, "may belong to one only"),
+    ],
+)
+def test_setup_variables_illegal_concept_sets(omop_connection_vanilla, concept_ids, error, match):
+    with pytest.raises(error, match=match):
+        _setup_measurement(omop_connection_vanilla, concept_ids)
+
+
+def test_setup_interval_variables_rejects_concept_sets(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    with pytest.raises(TypeError, match="concept_ids must be a sequence of integers or 'all'"):
+        ed.io.omop.setup_interval_variables(
+            edata,
+            backend_handle=con,
+            data_tables=["drug_exposure"],
+            data_field_to_keep=["days_supply"],
+            interval_length_number=1,
+            interval_length_unit="day",
+            num_intervals=4,
+            concept_ids={"a": [19073183]},
+        )
