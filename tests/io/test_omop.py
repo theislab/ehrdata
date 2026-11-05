@@ -3795,11 +3795,12 @@ def test_setup_variables_unit_conversions_take_the_code_of_the_target_unit(omop_
         ),
         (
             [3031147],
-            BICARBONATE_CONVERSIONS.assign(concept_id=[3031147, 999]),
+            BICARBONATE_CONVERSIONS.assign(to_unit_concept_id=[True, True]),
             {},
-            ValueError,
-            "which have no data points",
+            TypeError,
+            "integer concept ids",
         ),
+        ([3031147], BICARBONATE_CONVERSIONS.assign(offset=["a", 0]), {}, TypeError, "finite numbers"),
         ([3031147], BICARBONATE_CONVERSIONS, {"data_field_to_keep": ["is_present"]}, TypeError, "numeric data field"),
         (
             [3031147],
@@ -3815,3 +3816,107 @@ def test_setup_variables_illegal_unit_conversions(
 ):
     with pytest.raises(error, match=match):
         _setup_measurement(omop_connection_vanilla, concept_ids, unit_conversions=unit_conversions, **kwargs)
+
+
+def test_setup_variables_unit_conversions_of_other_concepts_are_not_used(omop_connection_vanilla):
+    """One conversion table can serve several calls: rows of concepts that are no variables of a call are left aside."""
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    con.execute("UPDATE measurement SET unit_concept_id = 8842 WHERE measurement_concept_id = 3022318")
+    other = pd.DataFrame({"concept_id": [999], "unit_concept_id": [1], "to_unit_concept_id": [1], "multiplier": [1]})
+    conversions = pd.concat([BICARBONATE_CONVERSIONS, other])
+    edata = _setup_measurement(con, [3031147], aggregation_strategy="mean", unit_conversions=conversions)
+
+    np.testing.assert_allclose(edata.X[:, 0, 0], [18.5, 20.5, 22.5])
+
+
+def test_setup_variables_unit_conversions_leave_other_data_tables_as_they_are(omop_connection_vanilla):
+    """A data table without converted concepts keeps its fields, also a text field or is_present."""
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    for observation_field in ["value_as_string", "is_present"]:
+        kwargs = {
+            "backend_handle": con,
+            "data_tables": ["measurement", "observation"],
+            "data_field_to_keep": {"measurement": "value_as_number", "observation": observation_field},
+            "interval_length_number": 1,
+            "interval_length_unit": "day",
+            "num_intervals": 4,
+            "concept_ids": [3031147, 3001062],
+        }
+        converted = ed.io.omop.setup_variables(edata, unit_conversions=BICARBONATE_CONVERSIONS, **kwargs)
+        plain = ed.io.omop.setup_variables(edata, **kwargs)
+        converted_values, plain_values = converted.X[:, 1:], plain.X[:, 1:]
+        np.testing.assert_array_equal(pd.isna(converted_values), pd.isna(plain_values))
+        assert converted_values[~pd.isna(converted_values)].tolist() == plain_values[~pd.isna(plain_values)].tolist()
+
+
+def test_setup_variables_unit_conversions_of_a_concept_set_with_an_absent_concept(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    conversions = BICARBONATE_CONVERSIONS.drop(columns="concept_id").assign(variable="bicarbonate")
+    edata = _setup_measurement(
+        con, {"bicarbonate": [3031147, 123456789]}, aggregation_strategy="mean", unit_conversions=conversions
+    )
+
+    np.testing.assert_allclose(edata.X[:, 0, 0], [18.5, 20.5, 22.5])
+
+
+def test_setup_variables_unit_conversions_and_value_range_on_single_precision(omop_connection_vanilla):
+    """A converted value at a bound of the range is kept, also if the value field is of single precision."""
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    con.execute(
+        "CREATE OR REPLACE TABLE measurement AS "
+        "SELECT * REPLACE (CAST(value_as_number AS REAL) AS value_as_number) FROM measurement"
+    )
+    edata = _setup_measurement(
+        con,
+        [3031147],
+        aggregation_strategy="count",
+        unit_conversions=BICARBONATE_CONVERSIONS,
+        value_range={3031147: (19, 20)},
+    )
+
+    # 19 of person 1, and 20 of person 2, converted from 20000
+    np.testing.assert_array_equal(edata.X[:, 0, 0], [1, 1, 0])
+
+
+def test_setup_variables_unit_conversions_unit_zero_and_missing_offsets(omop_connection_vanilla):
+    """unit_concept_id 0 is a unit of its own, and a missing offset is 0."""
+    con = omop_connection_vanilla
+    con.execute("UPDATE measurement SET unit_concept_id = 0 WHERE person_id = 3")
+    conversions = pd.DataFrame(
+        {
+            "concept_id": [3031147, 3031147],
+            "unit_concept_id": [9557, 0],
+            "to_unit_concept_id": [9557, 9557],
+            "multiplier": [1, 2],
+            "offset": [np.nan, 1],
+        }
+    )
+    edata = _setup_measurement(con, [3031147], aggregation_strategy="max", unit_conversions=conversions)
+
+    np.testing.assert_allclose(edata.X[:, 0, 0], [19, 21, 47])
+    with pytest.raises(ValueError, match="in unit 0"):
+        _setup_measurement(con, [3031147], unit_conversions=conversions.iloc[:1])
+
+
+def test_setup_variables_unit_conversions_take_the_code_of_a_text_concept_table(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    con.execute(
+        "CREATE OR REPLACE TABLE concept AS SELECT * REPLACE (CAST(concept_id AS VARCHAR) AS concept_id, "
+        "CAST(concept_code AS VARCHAR) AS concept_code) FROM concept"
+    )
+    con.execute(
+        "INSERT INTO concept (concept_id, concept_name, domain_id, vocabulary_id, concept_class_id, concept_code) "
+        "VALUES ('9557', 'milliequivalent per liter', 'Unit', 'UCUM', 'Unit', 'meq/L')"
+    )
+    conversions = BICARBONATE_CONVERSIONS.drop(columns="to_unit_source_value").iloc[:1]
+    _setup_measurement(con, [3031147], unit_conversions=conversions)
+
+    unit_source_values = con.execute(
+        "SELECT DISTINCT unit_source_value FROM long_person_timestamp_feature_value_measurement"
+    ).fetchall()
+    assert unit_source_values == [("meq/L",)]

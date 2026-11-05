@@ -276,9 +276,14 @@ def _check_valid_value_range(value_range, *, concept_sets: bool) -> dict | None:
 UNIT_CONVERSION_COLUMNS = ("unit_concept_id", "to_unit_concept_id", "multiplier")
 
 
+def _is_nan(value) -> bool:
+    return isinstance(value, float | np.floating) and np.isnan(value)
+
+
 def _integer_column(frame: pd.DataFrame, column: str, *, nullable: bool) -> pd.Series:
     values = pd.to_numeric(frame[column], errors="coerce")
-    invalid = (values.isna() & frame[column].notna()) | (values.notna() & (values % 1 != 0))
+    is_bool = frame[column].map(lambda value: isinstance(value, bool | np.bool_)).astype(bool)
+    invalid = (values.isna() & frame[column].notna()) | (values.notna() & (values % 1 != 0)) | is_bool
     if invalid.any() or (not nullable and values.isna().any()):
         msg = f"The column '{column}' of unit_conversions must hold integer concept ids{', or missing values' if nullable else ''}."
         raise TypeError(msg)
@@ -317,11 +322,15 @@ def _check_valid_unit_conversions(unit_conversions, concept_sets) -> pd.DataFram
     concept_id = _integer_column(frame, "concept_id", nullable=False)
 
     multiplier = pd.to_numeric(frame["multiplier"], errors="coerce")
-    addend = (
-        pd.to_numeric(frame["offset"], errors="coerce")
-        if "offset" in frame.columns
-        else pd.Series(0.0, index=frame.index)
-    )
+    # a missing offset is 0, but a given one must be a number
+    if "offset" in frame.columns:
+        addend = pd.to_numeric(frame["offset"], errors="coerce")
+        if (addend.isna() & frame["offset"].notna() & ~frame["offset"].map(_is_nan)).any():
+            msg = "The column 'offset' of unit_conversions must hold finite numbers, or missing values for 0."
+            raise TypeError(msg)
+        addend = addend.fillna(0.0)
+    else:
+        addend = pd.Series(0.0, index=frame.index)
     for name, values in (("multiplier", multiplier), ("offset", addend)):
         if not np.isfinite(values.astype("float64")).all():
             msg = f"The column '{name}' of unit_conversions must hold finite numbers."

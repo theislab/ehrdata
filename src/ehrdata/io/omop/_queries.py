@@ -398,6 +398,8 @@ VALUE_RANGE_TABLE = "_ehrdata_value_range"
 # The unit conversions of setup_variables, resolved to concepts and registered while the queries that convert run:
 # concept_id, unit_concept_id, to_unit_concept_id, to_unit_source_value, multiplier, addend.
 UNIT_CONVERSION_TABLE = "_ehrdata_unit_conversion"
+# The column of the converted rows that tells whether a row was converted.
+CONVERTED = "ehrdata_converted"
 
 
 def _converted_rows_query(
@@ -406,7 +408,8 @@ def _converted_rows_query(
     """The rows of rows_query, with the values and units of the rows that unit_conversions lists converted.
 
     A row is converted if its concept and unit are a row of UNIT_CONVERSION_TABLE: its value becomes value * multiplier + addend, and its unit the target unit, in both unit fields.
-    The other rows are kept as they are; with unit_conversions, their unit_concept_id is read as an integer.
+    The other rows are kept as they are; with unit_conversions, their unit_concept_id is read as an integer, and the value field takes the type of the converted values.
+    The column CONVERTED tells which rows were converted.
     """
     if unit_conversions is None:
         return rows_query
@@ -419,7 +422,7 @@ def _converted_rows_query(
             "CASE WHEN uc.concept_id IS NULL THEN CAST(r.unit_source_value AS VARCHAR) ELSE uc.to_unit_source_value END AS unit_source_value"
         )
     return f"""
-        SELECT r.* REPLACE ({", ".join(replaced)})
+        SELECT r.* REPLACE ({", ".join(replaced)}), uc.concept_id IS NOT NULL AS {CONVERTED}
         FROM ({rows_query}) AS r
         LEFT JOIN {UNIT_CONVERSION_TABLE} AS uc
             ON TRY_CAST(r.{concept_key} AS BIGINT) = uc.concept_id
@@ -441,18 +444,31 @@ def _registered(backend_handle: duckdb.DuckDBPyConnection, name: str, frame: pd.
 
 
 def _value_range_filter(
-    data_alias: str, concept_key: str, value_field: str, *, value_ranges, value_type: str = "DOUBLE"
+    data_alias: str,
+    concept_key: str,
+    value_field: str,
+    *,
+    value_ranges,
+    value_type: str = "DOUBLE",
+    converted: bool = False,
 ) -> tuple[str, str]:
     """The SQL join and condition that keep the rows whose value lies in the range of their concept, bounds included.
 
     Rows of concepts without a range, and rows without a value, are kept; NaN lies in no range.
     The bounds are compared in the type of the value field, so that a bound equal to a stored single-precision value includes it.
+    With converted, the rows of _converted_rows_query: their converted values are of double precision, as the bounds then are.
     """
     if value_ranges is None:
         return "", "TRUE"
     value = f"{data_alias}.{value_field}"
     bound_type = "FLOAT" if value_type.upper() in {"FLOAT", "FLOAT4", "REAL"} else "DOUBLE"
-    lower, upper = f"CAST(vr.lower AS {bound_type})", f"CAST(vr.upper AS {bound_type})"
+    if converted and bound_type == "FLOAT":
+        lower, upper = (
+            f"CASE WHEN {data_alias}.{CONVERTED} THEN vr.{bound} ELSE CAST(vr.{bound} AS FLOAT) END"
+            for bound in ("lower", "upper")
+        )
+    else:
+        lower, upper = f"CAST(vr.lower AS {bound_type})", f"CAST(vr.upper AS {bound_type})"
     join = f"LEFT JOIN {VALUE_RANGE_TABLE} AS vr ON TRY_CAST({data_alias}.{concept_key} AS BIGINT) = vr.concept_id"
     condition = (
         f"(vr.concept_id IS NULL OR {value} IS NULL OR "
@@ -638,6 +654,7 @@ def _write_long_observed_table(
         data_field_to_keep[0],
         value_ranges=value_ranges,
         value_type=_column_type(backend_handle, data_table, data_field_to_keep[0]) if value_ranges is not None else "",
+        converted=unit_conversions is not None,
     )
 
     table = f"long_person_timestamp_feature_value_{data_table}"
