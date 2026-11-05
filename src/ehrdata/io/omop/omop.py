@@ -15,7 +15,6 @@ from ehrdata.io.omop._check_arguments import (
     VALID_OBSERVATION_TABLES_SINGLE,
     _check_valid_aggregation_strategy,
     _check_valid_backend_handle,
-    _check_valid_birthdates_for_person_table,
     _check_valid_concept_ids,
     _check_valid_data_field_to_keep,
     _check_valid_death_table,
@@ -42,9 +41,10 @@ from ehrdata.io.omop._queries import (
     _get_table_join,
     _get_unit_fields,
     _instantiate_long_observed_table,
-    _observations_query,
     _write_long_observed_table,
     _write_long_time_interval_table,
+    _write_obs_names,
+    _write_obs_windows,
 )
 
 if TYPE_CHECKING:
@@ -388,10 +388,15 @@ def setup_variables(
 
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
+    The variables are set up for the rows of `edata.obs`, in their order: the time window of each row is read from the columns that :func:`~ehrdata.io.omop.setup_obs` writes to `.obs`.
+    Hence `edata` can be filtered or reordered between :func:`~ehrdata.io.omop.setup_obs` and this function.
+    A row without a start or end date in `.obs` gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
+
     Writes a unit report of the features to `edata.uns['unit_report_<data_tables>']`.
     Writes the setup arguments into `edata.uns['omop_io_variable_setup']`.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
+    Its `obs_index` is the position of the row in `edata.obs`; the table `long_person_timestamp_feature_value_<data_table>_obs` holds the `obs_names` of these rows.
     It holds one row per observation, variable and interval that has data, so its size follows the number of data points.
     This table is instantiated into `.X`/`.layers` if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
@@ -496,11 +501,8 @@ def setup_variables(
         msg = "The observation table must be set up first, use the `setup_obs` function."
         raise ValueError(msg)
 
-    _check_valid_birthdates_for_person_table(backend_handle, time_defining_table)
-
-    n_obs = backend_handle.execute(
-        f"SELECT COUNT(DISTINCT obs_id) FROM ({_observations_query(time_defining_table, time_precision)})"
-    ).fetchone()[0]
+    _write_obs_windows(backend_handle, edata.obs, time_defining_table, time_precision)
+    n_obs = edata.n_obs
 
     var_collector = {}
     r_collector = {}
@@ -533,7 +535,6 @@ def setup_variables(
 
         _write_long_observed_table(
             backend_handle=backend_handle,
-            time_defining_table=time_defining_table,
             data_table=data_table,
             time_precision=time_precision,
             data_field_to_keep=data_field_to_keep[data_table],
@@ -544,6 +545,7 @@ def setup_variables(
             aggregation_strategy=aggregation_strategy,
             concept_ids=concept_ids,
         )
+        _write_obs_names(backend_handle, data_table)
 
         _check_one_unit_per_feature(backend_handle, data_table)
         unit_report = _create_feature_unit_concept_id_report(backend_handle, data_table=data_table)
@@ -698,11 +700,16 @@ def setup_interval_variables(
     The variables are sorted by the `concept_id` for each `data_table` in ascending order, and stacked together in the order that the `data_tables` are specified.
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
+    The variables are set up for the rows of `edata.obs`, in their order: the time window of each row is read from the columns that :func:`~ehrdata.io.omop.setup_obs` writes to `.obs`.
+    Hence `edata` can be filtered or reordered between :func:`~ehrdata.io.omop.setup_obs` and this function.
+    A row without a start or end date in `.obs` gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
+
     In contrast to `setup_variables`, tables without unit information can be present here.
     Those tell no unit to verify or to carry along; the tables that do have a `unit_concept_id` are treated as in `setup_variables`.
     This function will not write a unit report. Should this be relevant for your work, please do open an issue on https://github.com/theislab/ehrdata.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
+    Its `obs_index` is the position of the row in `edata.obs`; the table `long_person_timestamp_feature_value_<data_table>_obs` holds the `obs_names` of these rows.
     This table is instantiated in the `EHRData` object if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
 
@@ -784,7 +791,7 @@ def setup_interval_variables(
         msg = "The observation table must be set up first, use the `setup_obs` function."
         raise ValueError(msg)
 
-    _check_valid_birthdates_for_person_table(backend_handle, time_defining_table)
+    _write_obs_windows(backend_handle, edata.obs, time_defining_table, time_precision)
 
     var_collector = {}
     r_collector = {}
@@ -816,7 +823,6 @@ def setup_interval_variables(
 
         _write_long_time_interval_table(
             backend_handle=backend_handle,
-            time_defining_table=time_defining_table,
             data_table=data_table,
             time_precision=time_precision,
             data_field_to_keep=data_field_to_keep[data_table],
@@ -828,6 +834,7 @@ def setup_interval_variables(
             concept_ids=concept_ids,
             keep_date=keep_date,
         )
+        _write_obs_names(backend_handle, data_table)
 
         var = backend_handle.execute(
             f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_table}"
@@ -863,7 +870,7 @@ def setup_interval_variables(
         if instantiate_tensor:
             ds = (
                 (backend_handle.execute(f"SELECT * FROM long_person_timestamp_feature_value_{data_table}").df())
-                .set_index(["obs_id", "data_table_concept_id", "interval_step"])
+                .set_index(["obs_index", "data_table_concept_id", "interval_step"])
                 .to_xarray()
             )
             ds = ds.sel(data_table_concept_id=var["data_table_concept_id"].values)

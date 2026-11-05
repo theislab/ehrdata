@@ -1,11 +1,12 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
+import pandas as pd
 from duckdb import DuckDBPyConnection
 
 from ehrdata._compat import lazy_import_torch
 from ehrdata.core import EHRData
-from ehrdata.io.omop._queries import DATA_TABLE_CONCEPT_ID_TRUNK, DATA_TABLE_DATE_KEYS, TIME_DEFINING_TABLE_ID_KEY
+from ehrdata.io.omop._queries import DATA_TABLE_CONCEPT_ID_TRUNK, DATA_TABLE_DATE_KEYS
 
 if TYPE_CHECKING:
     import torch
@@ -25,8 +26,9 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
 
     Args:
         con: The connection to the database.
-        edata: Central data object, as returned by :func:`~ehrdata.io.omop.setup_variables`.
-            Its `.obs` defines the items, and its `.var` and `.tem` the variables and intervals of each item.
+        edata: Central data object, as returned by :func:`~ehrdata.io.omop.setup_variables`, or a subset of it.
+            Its `.obs` defines the items: item `i` is the row `i` of the tensor that :func:`~ehrdata.io.omop.setup_variables` sets up for this `.obs`.
+            Its `.var` and `.tem` define the variables and intervals of each item.
         data_tables: The OMOP data tables to extract.
         target: The target variable to be used.
         datetime: If True, use datetime, if False, use date.
@@ -72,42 +74,54 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         self.n_variables = len(concepts)
         self.n_timesteps = len(edata.tem)
 
-        obs_ids = edata.obs[TIME_DEFINING_TABLE_ID_KEY[edata.uns["omop_io_observation_table"]]]
-        self.obs_ids = obs_ids if idxs is None else obs_ids.iloc[list(idxs)]
+        # The obs_index of the long format table is the position in the .obs it was set up for; map the rows of edata to it by obs_names.
+        setup_obs_names = con.execute(
+            f"SELECT obs_name, obs_index FROM long_person_timestamp_feature_value_{data_tables[0]}_obs"
+        ).fetchall()
+        obs_index_of = dict(setup_obs_names)
+        if len(obs_index_of) < len(setup_obs_names):
+            msg = "The .obs that the variables were set up for has duplicate obs_names, which cannot be mapped to its rows."
+            raise ValueError(msg)
+        missing = [name for name in edata.obs_names if name not in obs_index_of]
+        if missing:
+            msg = f"The variables in '{data_tables[0]}' were not set up for the rows {missing[:5]} of edata.obs; run setup_variables on this edata."
+            raise ValueError(msg)
+        self.rows = list(range(edata.n_obs)) if idxs is None else [int(row) for row in idxs]
+        obs_index = [obs_index_of[name] for name in edata.obs_names]
+        self.obs_index = [obs_index[row] for row in self.rows]
 
     def __len__(self):
-        return len(self.obs_ids)
+        return len(self.rows)
 
     def __getitem__(self, index):
-        obs_id = int(self.obs_ids.iloc[index])
+        row = self.rows[index]
 
         query = f"""
             SELECT data_table_concept_id, interval_step, COALESCE(CAST(value_as_number AS DOUBLE), 'NaN') AS value_as_number
             FROM long_person_timestamp_feature_value_{self.data_tables[0]}
-            WHERE obs_id = ?
+            WHERE obs_index = ?
         """
         long_format_data = [
-            row for row in self.con.execute(query, [obs_id]).fetchall() if row[0] in self.variable_index
+            cell
+            for cell in self.con.execute(query, [self.obs_index[index]]).fetchall()
+            if cell[0] in self.variable_index
         ]
 
         # convert long format to a variables x intervals tensor, with NaN in the cells without data
         result = torch.full((self.n_variables, self.n_timesteps), float("nan"))
         if long_format_data:
-            feature_idx = torch.tensor([self.variable_index[row[0]] for row in long_format_data])
-            step_idx = torch.tensor([row[1] for row in long_format_data])
-            values = torch.tensor([row[2] for row in long_format_data], dtype=torch.float32)
+            feature_idx = torch.tensor([self.variable_index[cell[0]] for cell in long_format_data])
+            step_idx = torch.tensor([cell[1] for cell in long_format_data])
+            values = torch.tensor([cell[2] for cell in long_format_data], dtype=torch.float32)
             result.index_put_((feature_idx, step_idx), values)
 
         if self.target != "mortality":
             msg = f"Target {self.target} is not implemented"
             raise NotImplementedError(msg)
 
-        # If person has an entry in the death table that is within the observation period, report 1, else 0:
-        # Left join ensures that for every observation unit, 0 or 1 is obtained
+        # If the person has an entry in the death table within the observation's window, report 1, else 0.
+        # The window is that of the row of edata.obs, so that rows of the same person, such as repeated cohort entries, keep their own.
         omop_io_observation_table = self.edata.uns["omop_io_observation_table"]
-
-        # Get the actual table ID column name and value
-        obs_id_column = TIME_DEFINING_TABLE_ID_KEY[omop_io_observation_table]
 
         # Get the appropriate date/datetime column names based on precision
         time_precision = "datetime" if self.datetime else "date"
@@ -118,17 +132,16 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
             time_precision, DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table]["date"]
         )
 
-        target_query = f"""
-        SELECT
-            CASE
-                WHEN death_datetime BETWEEN {start_date_col} AND {end_date_col} THEN 1
-                ELSE 0
-            END AS mortality
-        FROM {self.edata.uns["omop_io_observation_table"]}
-        LEFT JOIN death USING (person_id)
-        WHERE {obs_id_column} = ?
+        obs = self.edata.obs.iloc[row]
+        columns = {column.lower(): column for column in self.edata.obs.columns}
+        start, end = (pd.to_datetime(obs[columns[column]]) for column in (start_date_col, end_date_col))
+        target_query = """
+        SELECT COALESCE(MAX(CASE WHEN death_datetime BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) AS mortality
+        FROM death
+        WHERE person_id = ?
         """
-
-        targets = torch.tensor(self.con.execute(target_query, [obs_id]).fetchall(), dtype=torch.float32)
+        window = [None if pd.isna(date) else date.to_pydatetime() for date in (start, end)]
+        person_id = int(obs[columns["person_id"]])
+        targets = torch.tensor(self.con.execute(target_query, [*window, person_id]).fetchall(), dtype=torch.float32)
 
         return result, targets

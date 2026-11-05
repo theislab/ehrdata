@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning][].
 ### Fixed
 
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` no longer modify a `data_field_to_keep` dict passed to them. They wrapped its string values in lists in place, so a dict reused for a later call carried lists instead of the strings it was given. ([#340](https://github.com/theislab/ehrdata/pull/340)) @eroell
+- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` read the time window of each observation from `edata.obs`, and set up the variables for its rows in their order, improving the handling of edgecases in function execution order. With `observation_table="person"`, the rows of `.obs` rather than of the `person` table need a `birth_datetime`. ([#342](https://github.com/theislab/ehrdata/pull/342)) @eroell
+- {class}`~ehrdata.integrations.torch.OMOPEHRDataset` maps the rows of its {class}`~ehrdata.EHRData` to the rows the variables were set up for by their `obs_names`, so each item equals the row of the tensor also for repeated cohort subjects, and computes the target from the window of the row. With `observation_table="person_cohort"` it failed before on the target. ([#342](https://github.com/theislab/ehrdata/pull/342)) @eroell
 
 ## [0.5.0]
 
