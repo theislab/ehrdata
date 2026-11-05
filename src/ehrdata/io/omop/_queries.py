@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Literal
 
 import duckdb
@@ -388,6 +388,8 @@ def _write_long_time_interval_table(
 
 
 OBS_WINDOWS_TABLE = "ehrdata_obs_windows"
+# The concept sets of setup_variables, registered while the long format table is written: variable, concept_id.
+VARIABLE_MAP_TABLE = "_ehrdata_variable_map"
 
 
 def _write_obs_windows(
@@ -471,8 +473,11 @@ def _write_long_observed_table(
     unit_fields: Sequence[str] = (),
     concept_ids: Literal["all"] | Sequence[int] = "all",
     link_visits: bool = False,
+    concept_sets: Mapping[str, Sequence[int]] | None = None,
 ) -> None:
     """Write `long_person_timestamp_feature_value_<data_table>` with one row per observed (observation, concept, interval).
+
+    With concept_sets, a row per observed (observation, variable, interval) instead: the rows of the concepts of a set are aggregated together, and the column `variable` holds the name of the set in place of `data_table_concept_id`.
 
     Each row of the data_table is joined to the observations of its person whose time window holds it, and binned into its interval there.
     With link_visits, a row that names a visit of its person is joined to that visit only, see `_visit_condition`.
@@ -501,33 +506,52 @@ def _write_long_observed_table(
         finer_datetime_columns=finer_datetime_cols,
     )
 
+    if concept_sets is None:
+        key_column, key_select, variable_join = "data_table_concept_id", f"d.{concept_key}", ""
+        concept_condition = _concept_ids_condition(data_table, concept_ids)
+    else:
+        key_column, key_select = "variable", "vm.variable"
+        variable_join = f"JOIN {VARIABLE_MAP_TABLE} AS vm ON d.{concept_key} = vm.concept_id"
+        concept_condition = "TRUE"
+        variable_map = pd.DataFrame(
+            [(str(name), int(concept_id)) for name, ids in concept_sets.items() for concept_id in ids],
+            columns=["variable", "concept_id"],
+        )
+
     table = f"long_person_timestamp_feature_value_{data_table}"
-    backend_handle.execute(f"DROP TABLE IF EXISTS {table}")
-    backend_handle.execute(
-        f"""
+    try:
+        if concept_sets is not None:
+            backend_handle.register(VARIABLE_MAP_TABLE, variable_map)
+        backend_handle.execute(f"DROP TABLE IF EXISTS {table}")
+        backend_handle.execute(
+            f"""
         CREATE TABLE {table} AS
         WITH observations AS (SELECT obs_index, obs_id, person_id, start_date, end_date FROM {OBS_WINDOWS_TABLE}),
         observed_rows AS (
-            SELECT o.obs_id, o.obs_index, o.person_id, o.start_date, d.{concept_key} AS data_table_concept_id,
+            SELECT o.obs_id, o.obs_index, o.person_id, o.start_date, {key_select} AS {key_column},
                 CAST(({row_time} - {start_time}) // {interval_us} AS INTEGER) AS interval_step, 1 AS is_present{kept_select}
             FROM ({_data_rows_query(data_table, link_visits=link_visits)}) AS d
+            {variable_join}
             JOIN observations AS o ON d.person_id = o.person_id AND {_visit_condition("d", "o", link_visits=link_visits)}
-            WHERE {_concept_ids_condition(data_table, concept_ids)}
+            WHERE {concept_condition}
                 AND {row_time} >= {start_time}
                 AND {row_time} - {start_time} < {interval_us * num_intervals}
                 AND CAST(d.{datetime_col} AS DATE) <= o.end_date
         ),
         observed_cells AS (
-            SELECT obs_id, person_id, data_table_concept_id, interval_step,
+            SELECT obs_id, person_id, {key_column}, interval_step,
                 start_date + to_microseconds(interval_step * {interval_us}) AS interval_start,
                 start_date + to_microseconds((interval_step + 1) * {interval_us}) AS interval_end,
                 {value_query}, obs_index
             FROM observed_rows
-            GROUP BY obs_id, obs_index, person_id, start_date, data_table_concept_id, interval_step
+            GROUP BY obs_id, obs_index, person_id, start_date, {key_column}, interval_step
         )
         SELECT * FROM observed_cells WHERE is_present IS NOT NULL
-        """
-    )
+        """,
+        )
+    finally:
+        if concept_sets is not None:
+            backend_handle.unregister(VARIABLE_MAP_TABLE)
 
 
 def _instantiate_long_observed_table(
@@ -535,23 +559,26 @@ def _instantiate_long_observed_table(
     data_table: str,
     value_field: str,
     *,
-    concept_ids: Sequence[int],
+    variables: Sequence,
     n_obs: int,
     num_intervals: int,
     aggregation_strategy: str,
     sparse: bool,
+    key_column: str = "data_table_concept_id",
 ):
-    """The (n_obs, len(concept_ids), num_intervals) array of `long_person_timestamp_feature_value_<data_table>`.
+    """The (n_obs, len(variables), num_intervals) array of `long_person_timestamp_feature_value_<data_table>`.
+
+    variables are the values of key_column in the order of the variables: the concept ids, or the names of the concept sets.
 
     Cells without a row hold 0 for `aggregation_strategy="count"`, and a missing value otherwise.
     The value field 'is_present' is 1 or missing whatever the aggregation_strategy, as its column holds the presence rather than the aggregate.
     """
     cells = backend_handle.execute(
-        f"SELECT obs_index, data_table_concept_id, interval_step, {value_field} AS value FROM long_person_timestamp_feature_value_{data_table}"
+        f"SELECT obs_index, {key_column} AS key, interval_step, {value_field} AS value FROM long_person_timestamp_feature_value_{data_table}"
     ).df()
-    var_index = pd.Index(concept_ids).get_indexer(cells["data_table_concept_id"])
+    var_index = pd.Index(variables).get_indexer(cells["key"])
     coords = (cells["obs_index"].to_numpy(), var_index, cells["interval_step"].to_numpy())
-    shape = (n_obs, len(concept_ids), num_intervals)
+    shape = (n_obs, len(variables), num_intervals)
     values = cells["value"]
 
     if aggregation_strategy == "count" and value_field != "is_present":

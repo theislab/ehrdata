@@ -57,21 +57,35 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         self.datetime = datetime
         self.idxs = idxs
 
-        if "data_table_concept_id" not in edata.var.columns:
+        # The long format table holds only the observed cells, so the variables and intervals are taken from edata.
+        if "data_table_concept_id" in edata.var.columns:
+            # the concepts of edata.var that occur in the data table, in the order of edata.var
+            self.key_column = "data_table_concept_id"
+            concept_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_tables[0]]}_concept_id"
+            table_concepts = {
+                row[0] for row in con.execute(f"SELECT DISTINCT {concept_key} FROM {data_tables[0]}").fetchall()
+            }
+            variables = [
+                concept for concept in dict.fromkeys(edata.var["data_table_concept_id"]) if concept in table_concepts
+            ]
+        elif "concept_ids" in edata.var.columns:
+            # concept sets, named by edata.var_names
+            self.key_column = "variable"
+            variables = list(edata.var_names)
+        else:
             msg = "OMOPEHRDataset needs the EHRData returned by setup_variables, whose .var lists the concepts."
             raise ValueError(msg)
-
-        # The long format table holds only the observed cells, so the variables and intervals are taken from edata:
-        # the concepts of edata.var that occur in the data table, in the order of edata.var.
-        concept_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_tables[0]]}_concept_id"
-        table_concepts = {
-            row[0] for row in con.execute(f"SELECT DISTINCT {concept_key} FROM {data_tables[0]}").fetchall()
+        long_table_columns = {
+            row[0] for row in con.execute(f"DESCRIBE long_person_timestamp_feature_value_{data_tables[0]}").fetchall()
         }
-        concepts = [
-            concept for concept in dict.fromkeys(edata.var["data_table_concept_id"]) if concept in table_concepts
-        ]
-        self.variable_index = {concept: i for i, concept in enumerate(concepts)}
-        self.n_variables = len(concepts)
+        if self.key_column not in long_table_columns:
+            msg = (
+                f"The long format table of '{data_tables[0]}' was set up by another call of setup_variables than edata, "
+                f"{'without' if self.key_column == 'variable' else 'with'} concept sets."
+            )
+            raise ValueError(msg)
+        self.variable_index = {variable: i for i, variable in enumerate(variables)}
+        self.n_variables = len(variables)
         self.n_timesteps = len(edata.tem)
 
         # The obs_index of the long format table is the position in the .obs it was set up for; map the rows of edata to it by obs_names.
@@ -97,7 +111,7 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         row = self.rows[index]
 
         query = f"""
-            SELECT data_table_concept_id, interval_step, COALESCE(CAST(value_as_number AS DOUBLE), 'NaN') AS value_as_number
+            SELECT {self.key_column}, interval_step, COALESCE(CAST(value_as_number AS DOUBLE), 'NaN') AS value_as_number
             FROM long_person_timestamp_feature_value_{self.data_tables[0]}
             WHERE obs_index = ?
         """

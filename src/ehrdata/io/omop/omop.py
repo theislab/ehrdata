@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -18,6 +19,7 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_clip_to_end_date,
     _check_valid_clip_to_end_date_for_observation_table,
     _check_valid_concept_ids,
+    _check_valid_concept_sets,
     _check_valid_data_field_to_keep,
     _check_valid_death_table,
     _check_valid_edata,
@@ -131,9 +133,11 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
     logging.info(f"unused files: {unused_files}")
 
 
-def _collect_units_per_feature(backend_handle, data_table, unit_key="unit_concept_id") -> dict:
+def _collect_units_per_feature(
+    backend_handle, data_table, unit_key="unit_concept_id", key_column="data_table_concept_id"
+) -> dict:
     query = f"""
-    SELECT DISTINCT data_table_concept_id, {unit_key} FROM long_person_timestamp_feature_value_{data_table}
+    SELECT DISTINCT {key_column}, {unit_key} FROM long_person_timestamp_feature_value_{data_table}
     WHERE is_present = 1
     """
     result = backend_handle.execute(query).fetchall()
@@ -147,8 +151,10 @@ def _collect_units_per_feature(backend_handle, data_table, unit_key="unit_concep
     return feature_units
 
 
-def _check_one_unit_per_feature(backend_handle, data_table, unit_key="unit_concept_id") -> None:
-    feature_units = _collect_units_per_feature(backend_handle, data_table, unit_key=unit_key)
+def _check_one_unit_per_feature(
+    backend_handle, data_table, unit_key="unit_concept_id", key_column="data_table_concept_id"
+) -> None:
+    feature_units = _collect_units_per_feature(backend_handle, data_table, unit_key=unit_key, key_column=key_column)
     num_units = np.array([len(units) for _, units in feature_units.items()])
 
     # print(f"no units for features: {np.argwhere(num_units == 0)}")
@@ -156,9 +162,11 @@ def _check_one_unit_per_feature(backend_handle, data_table, unit_key="unit_conce
 
 
 def _check_one_unit_per_feature_for_aggregation(
-    backend_handle, data_table, value_field, aggregation_strategy, unit_fields, *, concept_ids
+    backend_handle, data_table, value_field, aggregation_strategy, unit_fields, *, concept_ids, concept_sets=None
 ) -> None:
     """Verify that the data table allows the chosen aggregation strategy to combine values.
+
+    With concept_sets, the features are the concept sets, whose rows are combined across their concepts.
 
     A strategy that is not one of SINGLE_ROW_AGGREGATION_STRATEGIES combines the values of several rows into one, which is only meaningful if these values share a unit.
     Only the rows of the concept_ids carrying a value are considered, as only those enter the aggregation; among these, a missing unit (NULL) is a unit of its own, as in the unit report.
@@ -181,9 +189,14 @@ def _check_one_unit_per_feature_for_aggregation(
         """
     ).fetchall()
 
+    set_of_concept = (
+        {concept_id: name for name, ids in concept_sets.items() for concept_id in ids} if concept_sets else None
+    )
     feature_units: dict = {}
-    for feature, unit in feature_unit_pairs:
-        feature_units.setdefault(feature, []).append(unit)
+    for concept_id, unit in feature_unit_pairs:
+        feature = set_of_concept[int(concept_id)] if set_of_concept else concept_id
+        if unit not in feature_units.setdefault(feature, []):
+            feature_units[feature].append(unit)
     multiple_units = {feature: sorted(units, key=str) for feature, units in feature_units.items() if len(units) > 1}
 
     if multiple_units:
@@ -201,17 +214,22 @@ def _check_one_unit_per_feature_for_aggregation(
         raise NotImplementedError(msg)
 
 
-def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.DataFrame:
-    feature_units_concept = _collect_units_per_feature(backend_handle, data_table, unit_key="unit_concept_id")
+def _create_feature_unit_concept_id_report(
+    backend_handle, data_table, key_column="data_table_concept_id", report_key="concept_id"
+) -> pd.DataFrame:
+    """The units of each feature among its observed cells, one row per (feature, unit) in the column report_key."""
+    feature_units_concept = _collect_units_per_feature(
+        backend_handle, data_table, unit_key="unit_concept_id", key_column=key_column
+    )
     feature_units_long_format = []
     for feature, units in feature_units_concept.items():
         if len(units) == 0:
-            feature_units_long_format.append({"concept_id": feature, "no_units": True, "multiple_units": False})
+            feature_units_long_format.append({report_key: feature, "no_units": True, "multiple_units": False})
         elif len(units) > 1:
             feature_units_long_format.extend(
                 [
                     {
-                        "concept_id": feature,
+                        report_key: feature,
                         "unit_concept_id": unit,
                         "no_units": False,
                         "multiple_units": True,
@@ -222,19 +240,48 @@ def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.Dat
         else:
             feature_units_long_format.append(
                 {
-                    "concept_id": feature,
+                    report_key: feature,
                     "unit_concept_id": units[0],
                     "no_units": False,
                     "multiple_units": False,
                 }
             )
 
-    df = pd.DataFrame(
-        feature_units_long_format, columns=["concept_id", "unit_concept_id", "no_units", "multiple_units"]
-    )
+    df = pd.DataFrame(feature_units_long_format, columns=[report_key, "unit_concept_id", "no_units", "multiple_units"])
     df["unit_concept_id"] = df["unit_concept_id"].astype("Int64")
 
     return df
+
+
+def _concept_set_feature_info(backend_handle, concept_sets, concepts) -> pd.DataFrame:
+    """One row per concept set: each field of the concept table for the concepts of the set, joined by '; ' in the order of the set.
+
+    As for single concepts, a concept id that the concept table lacks is looked up by its 'Mapped from' relationship; a concept found in neither gives an empty value.
+    """
+    by_id = concepts.drop_duplicates("concept_id").set_index("concept_id")
+    ids = [concept_id for set_ids in concept_sets.values() for concept_id in set_ids]
+    mapped: dict = {}
+    if any(concept_id not in by_id.index for concept_id in ids):
+        logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
+        relationships = backend_handle.sql(
+            "SELECT concept_id_1, concept_id_2 FROM concept_relationship WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)"
+        ).df()
+        mapped = relationships.drop_duplicates("concept_id_1").set_index("concept_id_1")["concept_id_2"].to_dict()
+
+    def record(concept_id):
+        concept_id = concept_id if concept_id in by_id.index else mapped.get(concept_id)
+        return by_id.loc[concept_id] if concept_id in by_id.index else None
+
+    rows = []
+    for set_ids in concept_sets.values():
+        records = [record(concept_id) for concept_id in set_ids]
+        rows.append(
+            {
+                field: "; ".join("" if r is None or pd.isna(r[field]) else str(r[field]) for r in records)
+                for field in by_id.columns
+            }
+        )
+    return pd.DataFrame(rows, columns=by_id.columns)
 
 
 def _create_enriched_var_with_unit_info(backend_handle, ds, var, unit_report) -> pd.DataFrame:
@@ -376,7 +423,7 @@ def setup_variables(
     time_precision: Literal["date", "datetime"] = "date",
     clip_to_end_date: bool = True,
     num_intervals: int,
-    concept_ids: Literal["all"] | Sequence[int] = "all",
+    concept_ids: Literal["all"] | Sequence[int] | Mapping[str, Sequence[int]] = "all",
     aggregation_strategy: Literal[
         "last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"
     ] = "last",
@@ -389,6 +436,7 @@ def setup_variables(
 
     The distinct `concept_id`s encountered in the selected tables form the variables in the EHRData object.
     The variables are sorted by the `concept_id` for each `data_table` in ascending order, and stacked together in the order that the `data_tables` are specified.
+    With concept sets (see `concept_ids`), the variables are the sets instead.
 
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
@@ -428,8 +476,16 @@ def setup_variables(
         interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
         num_intervals: Number of intervals.
         concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
+            A mapping of names to concept IDs, such as `{"name": [concept_id_1, concept_id_2]}`, defines concept sets:
+            each set is one variable, named by its key and in the order of the mapping, that combines the data points of its concepts.
+            The variables are the sets, also those without data points, and `.var["concept_ids"]` lists the concept IDs of each.
+            Concept sets take one data table, and a concept may belong to one set only.
+            With `enrich_var_with_feature_info`, each field of the `concept` table, such as `concept_name`, lists the values of the concepts of a set, joined by `"; "` in the order of the set.
+            With `enrich_var_with_unit_info`, the columns of the unit's concept are prefixed with `unit_`.
+            The long format table then holds the column `variable` in place of `data_table_concept_id`, and the unit report is keyed by `variable` in place of `concept_id`.
         aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
             For `'last'` and `'first'`, only data points that have a value in the data field of interest (the first field of `data_field_to_keep`) are considered.
+            Data points at the same time, for instance of two concepts of a concept set, are ordered by their value.
             All kept fields are read from that very data point, so that e.g. the units describe the value that is kept.
             Every other strategy combines the values of several data points into one, which requires a single unit per feature.
             A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points carrying a value (a missing unit is a unit of its own here).
@@ -491,7 +547,13 @@ def setup_variables(
     _check_valid_time_precision(time_precision)
     _warn_time_precision_interval_mismatch(interval_length_unit, time_precision)
     _check_valid_num_intervals(num_intervals)
-    _check_valid_concept_ids(concept_ids)
+    concept_sets = None
+    if isinstance(concept_ids, Mapping):
+        concept_sets = _check_valid_concept_sets(concept_ids, data_tables)
+        concept_ids = [concept_id for ids in concept_sets.values() for concept_id in ids]
+    else:
+        _check_valid_concept_ids(concept_ids)
+    key_column = "variable" if concept_sets else "data_table_concept_id"
     _check_valid_aggregation_strategy(aggregation_strategy)
     _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
     _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info)
@@ -532,7 +594,8 @@ def setup_variables(
             .df()["count"]
             .item()
         )
-        if count == 0:
+        # concept sets are variables also without data points
+        if count == 0 and not concept_sets:
             logging.warning(f"No data found in {data_table}. Returning edata without data of {data_table}.")
             empty_table_counter += 1
             continue
@@ -545,6 +608,7 @@ def setup_variables(
             aggregation_strategy,
             unit_fields,
             concept_ids=concept_ids,
+            concept_sets=concept_sets,
         )
 
         _write_long_observed_table(
@@ -559,25 +623,39 @@ def setup_variables(
             aggregation_strategy=aggregation_strategy,
             concept_ids=concept_ids,
             link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
+            concept_sets=concept_sets,
         )
         _write_obs_names(backend_handle, data_table)
 
-        _check_one_unit_per_feature(backend_handle, data_table)
-        unit_report = _create_feature_unit_concept_id_report(backend_handle, data_table=data_table)
+        _check_one_unit_per_feature(backend_handle, data_table, key_column=key_column)
+        unit_report = _create_feature_unit_concept_id_report(
+            backend_handle,
+            data_table=data_table,
+            key_column=key_column,
+            report_key="variable" if concept_sets else "concept_id",
+        )
 
-        var = backend_handle.execute(
-            f"SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AS data_table_concept_id FROM {data_table} WHERE {_concept_ids_condition(data_table, concept_ids)}"
-        ).df()
-
-        var = var.sort_values("data_table_concept_id").reset_index(drop=True)
+        if concept_sets:
+            var = pd.DataFrame(
+                {
+                    "variable": list(concept_sets),
+                    "concept_ids": [",".join(str(concept_id) for concept_id in ids) for ids in concept_sets.values()],
+                }
+            )
+        else:
+            var = backend_handle.execute(
+                f"SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AS data_table_concept_id FROM {data_table} WHERE {_concept_ids_condition(data_table, concept_ids)}"
+            ).df()
+            var = var.sort_values("data_table_concept_id").reset_index(drop=True)
 
         if enrich_var_with_feature_info or enrich_var_with_unit_info:
             concepts = backend_handle.sql("SELECT * FROM concept").df()
             concepts.columns = concepts.columns.str.lower()
 
             if (
-                any(elem not in set(concepts["concept_id"]) for elem in var["data_table_concept_id"])
-                & enrich_var_with_feature_info
+                enrich_var_with_feature_info
+                and not concept_sets
+                and any(elem not in set(concepts["concept_id"]) for elem in var["data_table_concept_id"])
             ):
                 concept_mapping = True
                 logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
@@ -593,7 +671,9 @@ def setup_variables(
                     var["data_table_concept_id"]
                 )
 
-        if enrich_var_with_feature_info:
+        if enrich_var_with_feature_info and concept_sets:
+            var = pd.concat([var, _concept_set_feature_info(backend_handle, concept_sets, concepts)], axis=1)
+        elif enrich_var_with_feature_info:
             if concept_mapping:
                 var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id_mapped", right_on="concept_id")
             else:
@@ -608,29 +688,34 @@ def setup_variables(
                     var,
                     unit_report,
                     how="left",
-                    left_on="data_table_concept_id",
-                    right_on="concept_id",
+                    left_on=key_column,
+                    right_on="variable" if concept_sets else "concept_id",
                     suffixes=("", "_unit"),
                 )
-                var = pd.merge(
-                    var,
-                    concepts,
-                    how="left",
-                    left_on="unit_concept_id",
-                    right_on="concept_id",
-                    suffixes=("", "_unit_concept"),
-                )
+                if concept_sets:
+                    # the columns of the unit's concept, prefixed, so that they do not read as the concept of the variable
+                    var = pd.merge(var, concepts.add_prefix("unit_"), how="left", on="unit_concept_id")
+                else:
+                    var = pd.merge(
+                        var,
+                        concepts,
+                        how="left",
+                        left_on="unit_concept_id",
+                        right_on="concept_id",
+                        suffixes=("", "_unit_concept"),
+                    )
 
         if instantiate_tensor:
             r_collector[data_table] = _instantiate_long_observed_table(
                 backend_handle,
                 data_table,
                 data_field_to_keep[data_table][0],
-                concept_ids=var["data_table_concept_id"].to_numpy(),
+                variables=var[key_column].to_numpy(),
                 n_obs=n_obs,
                 num_intervals=num_intervals,
                 aggregation_strategy=aggregation_strategy,
                 sparse=sparse,
+                key_column=key_column,
             )
 
         var_collector[data_table] = var
@@ -651,7 +736,7 @@ def setup_variables(
 
     tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
-    var.index = var.index.astype(str)
+    var.index = var.pop("variable").to_numpy() if concept_sets else var.index.astype(str)
 
     # AnnData does not allow to set a layer with value None
     if instantiate_tensor:
