@@ -36,6 +36,8 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_observation_table,
     _check_valid_sparse,
     _check_valid_time_precision,
+    _check_valid_value_range,
+    _check_valid_value_range_variables,
     _check_valid_variable_data_tables,
     _warn_time_precision_interval_mismatch,
 )
@@ -43,12 +45,16 @@ from ehrdata.io.omop._queries import (
     DATA_TABLE_CONCEPT_ID_TRUNK,
     SINGLE_ROW_AGGREGATION_STRATEGIES,
     UNITLESS_AGGREGATION_STRATEGIES,
+    VALUE_RANGE_TABLE,
+    _column_type,
     _concept_ids_condition,
     _get_ordered_table,
     _get_table_join,
     _get_unit_fields,
     _instantiate_long_observed_table,
     _links_rows_to_visits,
+    _registered,
+    _value_range_filter,
     _write_long_observed_table,
     _write_long_time_interval_table,
     _write_obs_names,
@@ -165,7 +171,15 @@ def _check_one_unit_per_feature(
 
 
 def _check_one_unit_per_feature_for_aggregation(
-    backend_handle, data_table, value_field, aggregation_strategy, unit_fields, *, concept_ids, concept_sets=None
+    backend_handle,
+    data_table,
+    value_field,
+    aggregation_strategy,
+    unit_fields,
+    *,
+    concept_ids,
+    concept_sets=None,
+    value_ranges=None,
 ) -> None:
     """Verify that the data table allows the chosen aggregation strategy to combine values.
 
@@ -185,12 +199,22 @@ def _check_one_unit_per_feature_for_aggregation(
         return
 
     concept_id_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id"
-    feature_unit_pairs = backend_handle.execute(
-        f"""
-        SELECT DISTINCT {concept_id_key}, unit_concept_id FROM {data_table}
-        WHERE {value_field} IS NOT NULL AND {_concept_ids_condition(data_table, concept_ids)}
-        """
-    ).fetchall()
+    # the rows outside the value range of their concept are left out of the aggregation, and so of the check
+    range_join, range_condition = _value_range_filter(
+        "d",
+        concept_id_key,
+        value_field,
+        value_ranges=value_ranges,
+        value_type=_column_type(backend_handle, data_table, value_field) if value_ranges is not None else "",
+    )
+    with _registered(backend_handle, VALUE_RANGE_TABLE, value_ranges):
+        feature_unit_pairs = backend_handle.execute(
+            f"""
+            SELECT DISTINCT d.{concept_id_key}, d.unit_concept_id FROM {data_table} AS d
+            {range_join}
+            WHERE d.{value_field} IS NOT NULL AND {_concept_ids_condition(data_table, concept_ids)} AND {range_condition}
+            """
+        ).fetchall()
 
     set_of_concept = (
         {concept_id: name for name, ids in concept_sets.items() for concept_id in ids} if concept_sets else None
@@ -449,6 +473,7 @@ def setup_variables(
     interval_length_unit: str,
     time_precision: Literal["date", "datetime"] = "date",
     clip_to_end_date: bool = True,
+    value_range: Mapping[int | str, tuple[float | None, float | None]] | None = None,
     num_intervals: int,
     concept_ids: Literal["all"] | Sequence[int] | Mapping[str, Sequence[int]] = "all",
     aggregation_strategy: Literal["last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"]
@@ -500,6 +525,13 @@ def setup_variables(
         clip_to_end_date: Whether the data points after the end date of an observation, such as the `visit_end_date`, are left out.
             If `False`, the data points are kept in all `num_intervals` intervals, also after the end date.
             Not available for `observation_table="person"`, whose observations have no end date.
+        value_range: The range of plausible values of each variable, as `{variable: (lower, upper)}`, keyed like a mapping of `aggregation_strategy`.
+            A data point is kept if `lower <= value <= upper`, and left out before the aggregation otherwise, so that it neither counts nor tells a unit.
+            A bound of `None` leaves that side open, NaN lies in no range, and data points without a value as well as the variables without a range are not filtered.
+            The values are those of the first field of `data_field_to_keep`, which must be numeric.
+            The range of a concept set applies to each of its concepts, and the range of a concept to it in every data table that has it.
+            As with a mapping of `aggregation_strategy`, rows without a concept ID then belong to no variable,
+            and a key that is no variable raises, unless it is one of `concept_ids` without data points.
         interval_length_number: Numeric value of the length of one interval.
         interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
         num_intervals: Number of intervals.
@@ -587,6 +619,7 @@ def setup_variables(
     else:
         _check_valid_concept_ids(concept_ids)
     key_column = "variable" if concept_sets else "data_table_concept_id"
+    value_range = _check_valid_value_range(value_range, concept_sets=concept_sets is not None)
     strategy_map = None
     if isinstance(aggregation_strategy, Mapping):
         strategy_map = _check_valid_aggregation_strategy_mapping(
@@ -619,9 +652,9 @@ def setup_variables(
     )
     n_obs = edata.n_obs
 
-    table_strategies = None
-    if strategy_map is not None:
-        # the variables are the concepts with a concept id: with strategies per variable, rows without one belong to no variable
+    table_strategies = variables_of_table = value_ranges = None
+    if strategy_map is not None or value_range is not None:
+        # the variables are the concepts with a concept id: with strategies or ranges per variable, rows without one belong to no variable
         variables_of_table = (
             {data_tables[0]: list(concept_sets)}
             if concept_sets
@@ -637,12 +670,30 @@ def setup_variables(
             }
         )
         requested = [] if concept_sets or concept_ids == "all" else [int(concept_id) for concept_id in concept_ids]
-        table_strategies = _check_valid_aggregation_strategies(strategy_map, variables_of_table, requested)
         numeric_fields = {
             data_table: _is_numeric_field(backend_handle, data_table, data_field_to_keep[data_table][0])
             for data_table in data_tables
         }
-        _check_valid_aggregation_fill_values(table_strategies, data_field_to_keep, numeric_fields, sparse=sparse)
+        if strategy_map is not None:
+            table_strategies = _check_valid_aggregation_strategies(strategy_map, variables_of_table, requested)
+            _check_valid_aggregation_fill_values(table_strategies, data_field_to_keep, numeric_fields, sparse=sparse)
+        if value_range is not None:
+            _check_valid_value_range_variables(
+                value_range, variables_of_table, requested, data_field_to_keep, numeric_fields
+            )
+            # the ranges of the variables, resolved to their concepts
+            ranges_of_concepts = [
+                (concept_id, *bounds)
+                for variable, bounds in value_range.items()
+                for concept_id in (concept_sets[variable] if concept_sets else [variable])
+            ]
+            value_ranges = pd.DataFrame(
+                {
+                    "concept_id": pd.array([row[0] for row in ranges_of_concepts], dtype="Int64"),
+                    "lower": pd.array([row[1] for row in ranges_of_concepts], dtype="Float64"),
+                    "upper": pd.array([row[2] for row in ranges_of_concepts], dtype="Float64"),
+                }
+            )
 
     var_collector = {}
     r_collector = {}
@@ -665,6 +716,10 @@ def setup_variables(
             continue
 
         unit_fields = _get_unit_fields(backend_handle, data_table)
+        # with variables per table, the rows of other concepts, and without a concept id, belong to no variable
+        table_concept_ids = (
+            variables_of_table[data_table] if variables_of_table is not None and not concept_sets else concept_ids
+        )
         strategies = table_strategies[data_table] if table_strategies is not None else None
         variables_of_strategy: dict = {}
         for variable, strategy in (strategies or {}).items():
@@ -677,7 +732,7 @@ def setup_variables(
                 else concept_sets
             )
             if variables is None:
-                strategy_concept_ids = concept_ids
+                strategy_concept_ids = table_concept_ids
             elif concept_sets:
                 strategy_concept_ids = [concept_id for name in variables for concept_id in concept_sets[name]]
             else:
@@ -690,6 +745,7 @@ def setup_variables(
                 unit_fields,
                 concept_ids=strategy_concept_ids,
                 concept_sets=strategy_sets,
+                value_ranges=value_ranges,
             )
 
         _write_long_observed_table(
@@ -702,10 +758,11 @@ def setup_variables(
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
             aggregation_strategy="last" if strategies is not None else aggregation_strategy,
-            concept_ids=concept_ids,
+            concept_ids=table_concept_ids,
             link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
             concept_sets=concept_sets,
             strategies=strategies,
+            value_ranges=value_ranges,
         )
         _write_obs_names(backend_handle, data_table)
 
@@ -724,7 +781,7 @@ def setup_variables(
                     "concept_ids": [",".join(str(concept_id) for concept_id in ids) for ids in concept_sets.values()],
                 }
             )
-        elif table_strategies is not None:
+        elif variables_of_table is not None:
             var = pd.DataFrame({"data_table_concept_id": variables_of_table[data_table]})
         else:
             var = backend_handle.execute(
