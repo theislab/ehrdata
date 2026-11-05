@@ -456,7 +456,7 @@ def _write_long_observed_table(
     Each row of the data_table is joined to the observations of its person whose time window holds it, and binned into its interval there.
     keep_date names the time of a row: the column of `DATA_TABLE_DATE_KEYS` under "timepoint", "start" or "end".
     With "interval", a row spans from its start to its end, and belongs to every interval that holds its start or its end, or that it covers.
-    A row without an end then belongs to the interval of its start only. Its start, and the start of the interval, must not be after the end date of the observation.
+    A row without an end then belongs to the interval of its start only, and a row without a start to no interval. Its start, and the start of the interval, must not be after the end date of the observation.
     With link_visits, a row that names a visit of its person is joined to that visit only, see `_visit_condition`.
     Only the cells that receive a row carrying a value are aggregated and stored, so the table grows with the data rather than with observations x concepts x intervals.
     """
@@ -469,14 +469,16 @@ def _write_long_observed_table(
     row_time = f"epoch_us(CAST(d.{datetime_col} AS TIMESTAMP))"
     start_time = "epoch_us(CAST(o.start_date AS TIMESTAMP))"
     if keep_date == "interval":
-        # The candidate intervals of a row run from the interval of the earlier to that of the later of its start and end, within the window;
+        # The candidate intervals of a row run from the interval of the earlier to that of the later of its start and end,
+        # within the window and up to the interval of the end date of the observation;
         # the condition then keeps those that hold its start or its end, or that it covers.
         end_time = f"epoch_us(CAST(d.{_get_datetime_key('end', data_table, time_precision)} AS TIMESTAMP))"
         start_step = f"({row_time} - {start_time}) // {interval_us}"
         end_step = f"coalesce(({end_time} - {start_time}) // {interval_us}, {start_step})"
+        end_date_step = f"(epoch_us(CAST(o.end_date AS TIMESTAMP) + INTERVAL 1 DAY) - {start_time}) // {interval_us}"
         steps_join = (
             f", unnest(range(greatest(0, least({start_step}, {end_step})), "
-            f"least({num_intervals - 1}, greatest({start_step}, {end_step})) + 1)) AS steps(step)"
+            f"least({num_intervals - 1}, greatest({start_step}, {end_step}), {end_date_step}) + 1)) AS steps(step)"
         )
         interval_step = "steps.step"
         interval_start = f"{start_time} + steps.step * {interval_us}"

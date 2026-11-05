@@ -1100,7 +1100,10 @@ def setup_interval_variables(
        enrich_var_with_feature_info: Whether to enrich the var table with feature
            information. If a concept_id is not found in the concept table, their respective alternate `concept_id` included in the concept_relationship table is retrieved to add the available feature information.
            Otherwise the feature information will be NaN.
-       keep_date: Whether to keep the start or end date, or the interval span.
+       keep_date: The time of a data point: its start date, its end date, or the interval from its start to its end.
+           With `"interval"`, a data point belongs to every interval that holds its start or its end, or that it covers;
+           without an end, to the interval of its start only, and without a start, to no interval.
+           A data point that starts after the end date of the observation is left out, also if it ends in the window, unless `clip_to_end_date=False`.
        instantiate_tensor: Whether to instantiate the tensor into the `EHRData` object.
 
     Returns:

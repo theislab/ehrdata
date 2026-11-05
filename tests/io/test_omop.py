@@ -4034,3 +4034,61 @@ def test_setup_variables_unit_conversions_take_the_code_of_a_text_concept_table(
         "SELECT DISTINCT unit_source_value FROM long_person_timestamp_feature_value_measurement"
     ).fetchall()
     assert unit_source_values == [("meq/L",)]
+
+
+def test_setup_interval_variables_interval_bounds_and_missing_dates(omop_connection_vanilla):
+    """With 6 h intervals: an exposure from one interval bound to the next, one without a start, and one without an end."""
+    con = omop_connection_vanilla
+    con.execute("DELETE FROM drug_exposure WHERE person_id = 1")
+    con.execute(
+        """INSERT INTO drug_exposure (drug_exposure_id, person_id, drug_concept_id, drug_exposure_start_date,
+            drug_exposure_start_datetime, drug_exposure_end_date, drug_exposure_end_datetime, days_supply)
+        VALUES (10, 1, 19073183, '2100-01-01', '2100-01-01 06:00:00', '2100-01-01', '2100-01-01 12:00:00', 10),
+               (11, 1, 19073183, NULL, NULL, '2100-01-01', '2100-01-01 03:00:00', 20),
+               (12, 1, 19073183, '2100-01-02', '2100-01-02 01:00:00', NULL, NULL, 30)"""
+    )
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=6,
+        interval_length_unit="h",
+        time_precision="datetime",
+        num_intervals=8,
+        aggregation_strategy="max",
+        keep_date="interval",
+    )
+
+    # 10 starts on the bound of the second interval and ends on that of the third, which it then belongs to as well;
+    # 20 has no start and belongs to no interval; 30 has no end and belongs to the interval of its start, the fifth
+    np.testing.assert_array_equal(edata.X[0, 1], [np.nan, 10, 10, np.nan, 30, np.nan, np.nan, np.nan])
+
+
+@pytest.mark.parametrize("clip_to_end_date", [True, False])
+def test_setup_interval_variables_interval_after_the_end_date(omop_connection_vanilla, clip_to_end_date):
+    """An exposure that starts after the end date of the observation, 2100-01-31, belongs to no interval unless clip_to_end_date=False."""
+    con = omop_connection_vanilla
+    con.execute("DELETE FROM drug_exposure WHERE person_id = 1")
+    con.execute(
+        """INSERT INTO drug_exposure (drug_exposure_id, person_id, drug_concept_id, drug_exposure_start_date,
+            drug_exposure_start_datetime, drug_exposure_end_date, drug_exposure_end_datetime, days_supply)
+        VALUES (10, 1, 19073183, '2100-02-02', '2100-02-02 00:00:00', '2100-02-03', '2100-02-03 00:00:00', 10)"""
+    )
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=7,
+        interval_length_unit="day",
+        num_intervals=6,
+        aggregation_strategy="count",
+        keep_date="interval",
+        clip_to_end_date=clip_to_end_date,
+    )
+
+    # the fifth interval runs from 2100-01-29 to 2100-02-05
+    np.testing.assert_array_equal(edata.X[0, 1], [0, 0, 0, 0, 0 if clip_to_end_date else 1, 0])
