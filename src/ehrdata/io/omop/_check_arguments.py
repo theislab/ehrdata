@@ -138,6 +138,15 @@ def _check_valid_num_intervals(num_intervals) -> None:
         raise TypeError(msg)
 
 
+def _check_valid_num_intervals_before(num_intervals_before) -> None:
+    if not isinstance(num_intervals_before, int) or isinstance(num_intervals_before, bool):
+        msg = "Expected num_intervals_before to be an integer."
+        raise TypeError(msg)
+    if num_intervals_before < 0:
+        msg = "Expected num_intervals_before to be non-negative."
+        raise ValueError(msg)
+
+
 def _check_valid_concept_sets(concept_sets, data_tables) -> dict[str, list[int]]:
     """Check a mapping of names to concept ids, and return it as a dict of lists."""
     if len(data_tables) != 1:

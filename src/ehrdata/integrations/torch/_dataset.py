@@ -87,6 +87,10 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         self.variable_index = {variable: i for i, variable in enumerate(variables)}
         self.n_variables = len(variables)
         self.n_timesteps = len(edata.tem)
+        # the interval of each interval_step of the long format table, which counts from the start of the observation;
+        # the intervals of edata may begin before the start, or be a subset of those set up
+        steps = edata.tem["interval_step"] if "interval_step" in edata.tem.columns else range(self.n_timesteps)
+        self.step_index = {int(step): i for i, step in enumerate(steps)}
 
         # The obs_index of the long format table is the position in the .obs it was set up for; map the rows of edata to it by obs_names.
         setup_obs_names = con.execute(
@@ -118,14 +122,14 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         long_format_data = [
             cell
             for cell in self.con.execute(query, [self.obs_index[index]]).fetchall()
-            if cell[0] in self.variable_index
+            if cell[0] in self.variable_index and cell[1] in self.step_index
         ]
 
         # convert long format to a variables x intervals tensor, with NaN in the cells without data
         result = torch.full((self.n_variables, self.n_timesteps), float("nan"))
         if long_format_data:
             feature_idx = torch.tensor([self.variable_index[cell[0]] for cell in long_format_data])
-            step_idx = torch.tensor([cell[1] for cell in long_format_data])
+            step_idx = torch.tensor([self.step_index[cell[1]] for cell in long_format_data])
             values = torch.tensor([cell[2] for cell in long_format_data], dtype=torch.float32)
             result.index_put_((feature_idx, step_idx), values)
 

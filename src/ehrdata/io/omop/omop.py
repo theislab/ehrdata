@@ -33,6 +33,7 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_interval_variable_data_tables,
     _check_valid_keep_date,
     _check_valid_num_intervals,
+    _check_valid_num_intervals_before,
     _check_valid_observation_table,
     _check_valid_sparse,
     _check_valid_time_precision,
@@ -554,6 +555,7 @@ def setup_variables(
     value_range: Mapping[int | str, tuple[float | None, float | None]] | None = None,
     unit_conversions: pd.DataFrame | None = None,
     num_intervals: int,
+    num_intervals_before: int = 0,
     concept_ids: Literal["all"] | Sequence[int] | Mapping[str, Sequence[int]] = "all",
     aggregation_strategy: Literal["last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"]
     | Mapping[
@@ -602,7 +604,7 @@ def setup_variables(
             'observation': 'value_as_number'}.
         time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`).
         clip_to_end_date: Whether the data points after the end date of an observation, such as the `visit_end_date`, are left out.
-            If `False`, the data points are kept in all `num_intervals` intervals, also after the end date.
+            If `False`, the data points are kept in all intervals, also after the end date.
             Not available for `observation_table="person"`, whose observations have no end date.
         value_range: The range of plausible values of each variable, as `{variable: (lower, upper)}`, keyed like a mapping of `aggregation_strategy`.
             A data point is kept if `lower <= value <= upper`, and left out before the aggregation otherwise, so that it neither counts nor tells a unit.
@@ -624,7 +626,10 @@ def setup_variables(
             In the long format table of a converted data table, the values are of double precision and `unit_concept_id` an integer.
         interval_length_number: Numeric value of the length of one interval.
         interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
-        num_intervals: Number of intervals.
+        num_intervals: Number of intervals from the start of each observation.
+        num_intervals_before: Number of intervals before the start of each observation, such as the hours before a visit for a look-back.
+            The time axis then has `num_intervals_before + num_intervals` intervals, and `.tem["interval_step"]` counts from the start of the observation, the earlier intervals being negative.
+            A data point that names a visit belongs to that visit also in these intervals.
         concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
             A mapping of names to concept IDs, such as `{"name": [concept_id_1, concept_id_2]}`, defines concept sets:
             each set is one variable, named by its key and in the order of the mapping, that combines the data points of its concepts.
@@ -702,6 +707,7 @@ def setup_variables(
     _check_valid_time_precision(time_precision)
     _warn_time_precision_interval_mismatch(interval_length_unit, time_precision)
     _check_valid_num_intervals(num_intervals)
+    _check_valid_num_intervals_before(num_intervals_before)
     concept_sets = None
     if isinstance(concept_ids, Mapping):
         concept_sets = _check_valid_concept_sets(concept_ids, data_tables)
@@ -866,6 +872,7 @@ def setup_variables(
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
+            num_intervals_before=num_intervals_before,
             aggregation_strategy="last" if strategies is not None else aggregation_strategy,
             concept_ids=table_concept_ids,
             link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
@@ -964,6 +971,7 @@ def setup_variables(
                 variables=var[key_column].to_numpy(),
                 n_obs=n_obs,
                 num_intervals=num_intervals,
+                num_intervals_before=num_intervals_before,
                 aggregation_strategy=[strategies[variable] for variable in var[key_column]]
                 if strategies is not None
                 else aggregation_strategy,
@@ -987,7 +995,7 @@ def setup_variables(
     else:
         tem_layer = np.concatenate(list(r_collector.values()), axis=1)
 
-    tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
+    tem = pd.DataFrame({"interval_step": np.arange(-num_intervals_before, num_intervals)})
 
     var.index = var.pop("variable").to_numpy() if concept_sets else var.index.astype(str)
 
@@ -1040,6 +1048,7 @@ def setup_interval_variables(
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
+    num_intervals_before: int = 0,
     concept_ids: Literal["all"] | Sequence[int] = "all",
     aggregation_strategy: Literal[
         "last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"
@@ -1085,11 +1094,12 @@ def setup_interval_variables(
            'observation': 'value_as_number'}.
        time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`).
        clip_to_end_date: Whether the data points after the end date of an observation, such as the `visit_end_date`, are left out.
-           If `False`, the data points are kept in all `num_intervals` intervals, also after the end date.
+           If `False`, the data points are kept in all intervals, also after the end date.
            Not available for `observation_table="person"`, whose observations have no end date.
        interval_length_number: Numeric value of the length of one interval.
        interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
-       num_intervals: Number of intervals.
+       num_intervals: Number of intervals from the start of each observation.
+       num_intervals_before: Number of intervals before the start of each observation, as in :func:`~ehrdata.io.omop.setup_variables`.
        concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
        aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
            For `'last'` and `'first'`, only data points that have a value in the data field of interest (the first field of `data_field_to_keep`) are considered.
@@ -1145,6 +1155,7 @@ def setup_interval_variables(
     _check_valid_time_precision(time_precision)
     _warn_time_precision_interval_mismatch(interval_length_unit, time_precision)
     _check_valid_num_intervals(num_intervals)
+    _check_valid_num_intervals_before(num_intervals_before)
     _check_valid_concept_ids(concept_ids)
     _check_valid_aggregation_strategy(aggregation_strategy)
     _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
@@ -1198,6 +1209,7 @@ def setup_interval_variables(
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
+            num_intervals_before=num_intervals_before,
             aggregation_strategy=aggregation_strategy,
             concept_ids=concept_ids,
             link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
@@ -1243,6 +1255,7 @@ def setup_interval_variables(
                 variables=var["data_table_concept_id"].to_numpy(),
                 n_obs=edata.n_obs,
                 num_intervals=num_intervals,
+                num_intervals_before=num_intervals_before,
                 aggregation_strategy=aggregation_strategy,
                 sparse=False,
             )
@@ -1257,7 +1270,7 @@ def setup_interval_variables(
 
     tem_layer = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
 
-    tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
+    tem = pd.DataFrame({"interval_step": np.arange(-num_intervals_before, num_intervals)})
 
     var.index = var.index.astype(str)
 
