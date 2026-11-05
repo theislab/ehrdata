@@ -3,7 +3,9 @@ from collections.abc import Sequence
 from typing import Literal
 
 import duckdb
+import numpy as np
 import pandas as pd
+from sparse import COO
 
 TIME_DEFINING_TABLE_SUBJECT_KEY = {
     "person": "person_id",
@@ -214,7 +216,11 @@ def _generate_value_query(
             for column in [*data_field_to_keep, *unit_fields]
         )
     else:
-        value_query = ", ".join(f"{aggregation_strategy}({column}) AS {column}" for column in data_field_to_keep)
+        # Of several equally frequent values, MODE keeps the first it reads; ordering by the value makes that the smallest.
+        value_query = ", ".join(
+            f"{aggregation_strategy}({column}{f' ORDER BY {column}' if aggregation_strategy == 'MODE' else ''}) AS {column}"
+            for column in data_field_to_keep
+        )
 
         # These strategies combine several rows into one value, so there is no single row to read the unit from.
         # A unit is carried along if the rows carrying a value agree on it, and is NULL if they do not: no unit describes a value that mixes units.
@@ -266,23 +272,9 @@ def _write_long_time_interval_table(
     # 4. Create long_format_intervals, which is the cross product of long_format_backbone and timedeltas. This table contains most notably the obs_id, the concept_id, the interval start and end dates.
     # 5. Create the final table long_person_timestamp_feature_value_<data_table>, which is the join with the data_table (typically measurement); each measurement is assigned to its obs_id, its concept_id, and the interval it fits into.
 
-    time_defining_id_key = TIME_DEFINING_TABLE_ID_KEY.get(time_defining_table, "person_id")
-
-    # Special handling for person table - no join needed, use far future date as end_date
-    if time_defining_table == "person":
-        person_time_defining_cte = f"""WITH person_time_defining_table AS ( \
-            SELECT person_id, person_id as obs_id, {_get_datetime_key("start", time_defining_table, time_precision)} as start_date, CAST('2999-12-31 23:59:59' AS TIMESTAMP) as end_date \
-            FROM person \
-        ), \
-        """
-    else:
-        # The end date rather than datetime, as OMOP end dates are inclusive and end datetimes are optional.
-        person_time_defining_cte = f"""WITH person_time_defining_table AS ( \
-            SELECT person.person_id as person_id, {time_defining_table}.{time_defining_id_key} as obs_id, {_get_datetime_key("start", time_defining_table, time_precision)} as start_date, {_get_datetime_key("end", time_defining_table, "date")} as end_date \
-            FROM person \
-            JOIN {time_defining_table} ON person.person_id = {time_defining_table}.{TIME_DEFINING_TABLE_SUBJECT_KEY[time_defining_table]} \
-        ), \
-        """
+    person_time_defining_cte = (
+        f"WITH person_time_defining_table AS ({_observations_query(time_defining_table, time_precision)}), "
+    )
 
     prepare_alias_query = (
         person_time_defining_cte
@@ -361,6 +353,140 @@ def _write_long_time_interval_table(
 
     rename_table_query = f"ALTER TABLE long_person_timestamp_feature_value_{data_table} RENAME TO long_person_timestamp_feature_value_{data_table}"
     backend_handle.execute(rename_table_query)
+
+
+def _observations_query(time_defining_table: str, time_precision: Literal["date", "datetime"]) -> str:
+    """The observations of the time_defining_table: person_id, obs_id, start_date, end_date and obs_index.
+
+    obs_index is the position of the observation when sorted by obs_id, which is the order of :func:`~ehrdata.io.omop.setup_obs`.
+    """
+    start_key = _get_datetime_key("start", time_defining_table, time_precision)
+    if time_defining_table == "person":
+        source = f"SELECT person_id, person_id AS obs_id, {start_key} AS start_date, CAST('2999-12-31 23:59:59' AS TIMESTAMP) AS end_date FROM person"
+    else:
+        # The end date rather than datetime, as OMOP end dates are inclusive and end datetimes are optional.
+        source = f"""
+            SELECT person.person_id AS person_id, {time_defining_table}.{TIME_DEFINING_TABLE_ID_KEY[time_defining_table]} AS obs_id,
+                {start_key} AS start_date, {_get_datetime_key("end", time_defining_table, "date")} AS end_date
+            FROM person
+            JOIN {time_defining_table} ON person.person_id = {time_defining_table}.{TIME_DEFINING_TABLE_SUBJECT_KEY[time_defining_table]}
+        """
+    return f"SELECT *, CAST(DENSE_RANK() OVER (ORDER BY obs_id) - 1 AS INTEGER) AS obs_index FROM ({source})"
+
+
+def _write_long_observed_table(
+    backend_handle: duckdb.DuckDBPyConnection,
+    *,
+    time_defining_table: str,
+    data_table: str,
+    time_precision: Literal["date", "datetime"],
+    interval_length_number: int,
+    interval_length_unit: str,
+    num_intervals: int,
+    aggregation_strategy: str,
+    data_field_to_keep: Sequence[str],
+    unit_fields: Sequence[str] = (),
+    concept_ids: Literal["all"] | Sequence[int] = "all",
+) -> None:
+    """Write `long_person_timestamp_feature_value_<data_table>` with one row per observed (observation, concept, interval).
+
+    Each row of the data_table is joined to the observations of its person whose time window holds it, and binned into its interval there.
+    Only the cells that receive a row carrying a value are aggregated and stored, so the table grows with the data rather than with observations x concepts x intervals.
+    """
+    interval_us = int(pd.Timedelta(interval_length_number, interval_length_unit) // pd.Timedelta(microseconds=1))
+    datetime_col = _get_datetime_key("timepoint", data_table, time_precision)
+    finer_datetime_cols = _finer_datetime_keys("timepoint", data_table, time_precision)
+    concept_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id"
+
+    row_time = f"epoch_us(CAST(d.{datetime_col} AS TIMESTAMP))"
+    start_time = "epoch_us(CAST(o.start_date AS TIMESTAMP))"
+    kept_columns = [
+        column
+        for column in dict.fromkeys([*data_field_to_keep, *unit_fields, datetime_col, *finer_datetime_cols])
+        if column != "is_present"
+    ]
+    kept_select = "".join(f", d.{column}" for column in kept_columns)
+
+    value_query = _generate_value_query(
+        "observed_rows",
+        data_field_to_keep,
+        AGGREGATION_STRATEGY_KEY[aggregation_strategy],
+        datetime_col,
+        unit_fields=unit_fields,
+        finer_datetime_columns=finer_datetime_cols,
+    )
+
+    table = f"long_person_timestamp_feature_value_{data_table}"
+    backend_handle.execute(f"DROP TABLE IF EXISTS {table}")
+    backend_handle.execute(
+        f"""
+        CREATE TABLE {table} AS
+        WITH observations AS ({_observations_query(time_defining_table, time_precision)}),
+        observed_rows AS (
+            SELECT o.obs_id, o.obs_index, o.person_id, o.start_date, d.{concept_key} AS data_table_concept_id,
+                CAST(({row_time} - {start_time}) // {interval_us} AS INTEGER) AS interval_step, 1 AS is_present{kept_select}
+            FROM {data_table} AS d
+            JOIN observations AS o ON d.person_id = o.person_id
+            WHERE {_concept_ids_condition(data_table, concept_ids)}
+                AND {row_time} >= {start_time}
+                AND {row_time} - {start_time} < {interval_us * num_intervals}
+                AND CAST(d.{datetime_col} AS DATE) <= o.end_date
+        ),
+        observed_cells AS (
+            SELECT obs_id, person_id, data_table_concept_id, interval_step,
+                start_date + to_microseconds(interval_step * {interval_us}) AS interval_start,
+                start_date + to_microseconds((interval_step + 1) * {interval_us}) AS interval_end,
+                {value_query}, obs_index
+            FROM observed_rows
+            GROUP BY obs_id, obs_index, person_id, start_date, data_table_concept_id, interval_step
+        )
+        SELECT * FROM observed_cells WHERE is_present IS NOT NULL
+        """
+    )
+
+
+def _instantiate_long_observed_table(
+    backend_handle: duckdb.DuckDBPyConnection,
+    data_table: str,
+    value_field: str,
+    *,
+    concept_ids: Sequence[int],
+    n_obs: int,
+    num_intervals: int,
+    aggregation_strategy: str,
+    sparse: bool,
+):
+    """The (n_obs, len(concept_ids), num_intervals) array of `long_person_timestamp_feature_value_<data_table>`.
+
+    Cells without a row hold 0 for `aggregation_strategy="count"`, and a missing value otherwise.
+    The value field 'is_present' is 1 or missing whatever the aggregation_strategy, as its column holds the presence rather than the aggregate.
+    """
+    cells = backend_handle.execute(
+        f"SELECT obs_index, data_table_concept_id, interval_step, {value_field} AS value FROM long_person_timestamp_feature_value_{data_table}"
+    ).df()
+    var_index = pd.Index(concept_ids).get_indexer(cells["data_table_concept_id"])
+    coords = (cells["obs_index"].to_numpy(), var_index, cells["interval_step"].to_numpy())
+    shape = (n_obs, len(concept_ids), num_intervals)
+    values = cells["value"]
+
+    if aggregation_strategy == "count" and value_field != "is_present":
+        dtype, fill_value = np.int64, 0
+    elif pd.api.types.is_numeric_dtype(values) or pd.api.types.is_bool_dtype(values):
+        dtype, fill_value = np.float64, np.nan
+    elif sparse:
+        msg = f"sparse=True requires a numeric data field, but '{value_field}' of '{data_table}' is of type {values.dtype}."
+        raise TypeError(msg)
+    elif isinstance(values.dtype, np.dtype) and values.dtype.kind == "M":
+        dtype, fill_value = values.dtype, np.datetime64("NaT")
+    else:
+        dtype, fill_value = object, np.nan
+
+    values = values.to_numpy(dtype=dtype, na_value=fill_value)
+    if sparse:
+        return COO(np.stack(coords), values, shape=shape, fill_value=fill_value, has_duplicates=False)
+    array = np.full(shape, fill_value, dtype=dtype)
+    array[coords] = values
+    return array
 
 
 def _get_ordered_table(duckdb_instance, table_name: str) -> pd.DataFrame:

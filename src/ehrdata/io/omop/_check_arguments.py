@@ -163,6 +163,15 @@ def _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info) -> None:
         raise TypeError(msg)
 
 
+def _check_valid_sparse(sparse, instantiate_tensor) -> None:
+    if not isinstance(sparse, bool):
+        msg = "Expected sparse to be a boolean."
+        raise TypeError(msg)
+    if sparse and not instantiate_tensor:
+        msg = "sparse=True sets the type of the tensor, which instantiate_tensor=False does not create."
+        raise ValueError(msg)
+
+
 def _check_valid_keep_date(keep_date: str) -> None:
     if not isinstance(keep_date, str):
         msg = "Expected keep_date to be a string."
