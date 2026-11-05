@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning][].
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` read the time window of each observation from `edata.obs`, and set up the variables for its rows in their order, improving the handling of edgecases in function execution order. With `observation_table="person"`, the rows of `.obs` rather than of the `person` table need a `birth_datetime`. ([#342](https://github.com/theislab/ehrdata/pull/342)) @eroell
 - {class}`~ehrdata.integrations.torch.OMOPEHRDataset` maps the rows of its {class}`~ehrdata.EHRData` to the rows the variables were set up for by their `obs_names`, so each item equals the row of the tensor also for repeated cohort subjects, and computes the target from the window of the row. With `observation_table="person_cohort"` it failed before on the target. ([#342](https://github.com/theislab/ehrdata/pull/342)) @eroell
 - The unit checks of {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` read only the data points in the intervals of the observations in `.obs`, rather than the whole data table. ([#351](https://github.com/theislab/ehrdata/pull/351)) @eroell
+- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with `time_precision="datetime"` take the date where a datetime is missing, instead of leaving the data point out. ([#352](https://github.com/theislab/ehrdata/pull/352)) @eroell
 
 ## [0.5.0]
 
