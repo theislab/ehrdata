@@ -12,12 +12,12 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
-- {func}`~ehrdata.io.omop.setup_variables` takes `sparse=True` to store the tensor as a `sparse.COO` array. Its query now aggregates only the intervals that hold data points, rather than every combination of observation, variable and interval, so memory and time follow the number of data points. ([#PR](https://github.com/theislab/ehrdata/pull/PR)) @eroell
+- {func}`~ehrdata.io.omop.setup_variables` takes `sparse=True` to store the tensor as a `sparse.COO` array. Its query now aggregates only the intervals that hold data points, rather than every combination of observation, variable and interval, so memory and time follow the number of data points. ([#341](https://github.com/theislab/ehrdata/pull/341)) @eroell
 
 ### Changed
 
-- The long format table `long_person_timestamp_feature_value_<data_table>` of {func}`~ehrdata.io.omop.setup_variables` holds only the intervals with data points. {class}`~ehrdata.integrations.torch.OMOPEHRDataset` therefore needs the {class}`~ehrdata.EHRData` returned by {func}`~ehrdata.io.omop.setup_variables`: its items are the rows of `.obs`, also after subsetting or reordering, with the variables of the data table in `.var` and the intervals in `.tem`. `idxs` are positions in `.obs`. ([#PR](https://github.com/theislab/ehrdata/pull/PR)) @eroell
-- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with `aggregation_strategy="mode"` keep the smallest of several equally frequent values, instead of an arbitrary one. ([#PR](https://github.com/theislab/ehrdata/pull/PR)) @eroell
+- The long format table `long_person_timestamp_feature_value_<data_table>` of {func}`~ehrdata.io.omop.setup_variables` holds only the intervals with data points. {class}`~ehrdata.integrations.torch.OMOPEHRDataset` therefore needs the {class}`~ehrdata.EHRData` returned by {func}`~ehrdata.io.omop.setup_variables`: its items are the rows of `.obs`, also after subsetting or reordering, with the variables of the data table in `.var` and the intervals in `.tem`. `idxs` are positions in `.obs`. ([#341](https://github.com/theislab/ehrdata/pull/341)) @eroell
+- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with `aggregation_strategy="mode"` keep the smallest of several equally frequent values, instead of an arbitrary one. ([#341](https://github.com/theislab/ehrdata/pull/341)) @eroell
 
 ### Fixed
 
