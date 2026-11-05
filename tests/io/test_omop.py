@@ -2712,3 +2712,107 @@ def test_setup_variables_with_a_database_table_named_like_the_windows(omop_conne
     )
 
     assert not np.isnan(edata.X).all()
+
+
+@pytest.mark.parametrize("setup_function", SETUP_FUNCTIONS)
+@pytest.mark.parametrize("clip_to_end_date", [True, False])
+def test_setup_functions_clip_to_end_date(omop_connection_vanilla, setup_function, clip_to_end_date):
+    """Data points after the end date of the cohort entry are left out, unless clip_to_end_date=False."""
+    function, kwargs = SETUP_FUNCTIONS[setup_function]
+    con = omop_connection_vanilla
+    # the cohort entries end 2100-01-31; add data points of person 1 a few days later
+    con.execute(
+        """INSERT INTO measurement (measurement_id, person_id, measurement_concept_id, measurement_date,
+            measurement_datetime, value_as_number, unit_concept_id, unit_source_value)
+        VALUES (10, 1, 3031147, '2100-02-05', '2100-02-05 12:00:00', 99, 9557, 'mEq/L')"""
+    )
+    con.execute(
+        """INSERT INTO drug_exposure (drug_exposure_id, person_id, drug_concept_id, drug_exposure_start_date,
+            drug_exposure_start_datetime, drug_exposure_end_date, drug_exposure_end_datetime, days_supply)
+        VALUES (10, 1, 19073183, '2100-02-05', '2100-02-05 12:00:00', '2100-02-06', '2100-02-06 00:00:00', 99)"""
+    )
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_cohort")
+    edata = function(
+        edata,
+        backend_handle=con,
+        interval_length_number=30,
+        interval_length_unit="day",
+        num_intervals=3,
+        clip_to_end_date=clip_to_end_date,
+        **kwargs,
+    )
+
+    # obs 0 is person 1, var 1 the concept of the added data point, interval 1 starts 2100-01-31
+    if clip_to_end_date:
+        # nothing after the end date of any cohort entry
+        assert np.isnan(edata.X[:, :, 1:]).all()
+    else:
+        assert edata.X[0, 1, 1] == 99
+
+
+def test_setup_variables_clip_to_end_date_false_needs_no_end_date_in_obs(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_cohort")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement"],
+        "data_field_to_keep": ["value_as_number"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 4,
+        "clip_to_end_date": False,
+    }
+    expected = ed.io.omop.setup_variables(edata, **kwargs).X
+    edata.obs = edata.obs.drop(columns=["cohort_end_date"])
+
+    np.testing.assert_array_equal(ed.io.omop.setup_variables(edata, **kwargs).X, expected)
+
+
+@pytest.mark.parametrize("setup_function", SETUP_FUNCTIONS)
+@pytest.mark.parametrize(
+    ("observation_table", "clip_to_end_date", "error", "match"),
+    [
+        ("person_cohort", "no", TypeError, "Expected clip_to_end_date to be a boolean"),
+        ("person", False, ValueError, "not available for observation_table='person'"),
+    ],
+)
+def test_setup_functions_illegal_clip_to_end_date(
+    omop_connection_vanilla, setup_function, observation_table, clip_to_end_date, error, match
+):
+    function, kwargs = SETUP_FUNCTIONS[setup_function]
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table)
+    with pytest.raises(error, match=match):
+        function(
+            edata,
+            backend_handle=con,
+            interval_length_number=1,
+            interval_length_unit="day",
+            num_intervals=4,
+            clip_to_end_date=clip_to_end_date,
+            **kwargs,
+        )
+
+
+@pytest.mark.parametrize(
+    ("clip_to_end_date", "expected"),
+    [(True, [31, 31, 31, 31, 31, np.nan, np.nan, np.nan]), (False, [31, 31, 31, 31, 28, 28, 28, 28])],
+)
+def test_setup_interval_variables_clip_to_end_date_with_intervals(omop_connection_vanilla, clip_to_end_date, expected):
+    """With keep_date="interval", the intervals after the end date get the exposures of these intervals, unless clipped."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=7,
+        interval_length_unit="day",
+        num_intervals=8,
+        keep_date="interval",
+        clip_to_end_date=clip_to_end_date,
+    )
+
+    # obs 0 is the visit of person 1, ending 2100-01-31; var 1 is concept 19073183, exposed from 2100-01-01 and 2100-02-01
+    np.testing.assert_array_equal(edata.X[0, 1], expected)

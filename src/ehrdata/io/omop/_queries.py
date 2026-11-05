@@ -341,11 +341,14 @@ def _write_obs_windows(
     obs: pd.DataFrame,
     time_defining_table: str,
     time_precision: Literal["date", "datetime"],
+    *,
+    clip_to_end_date: bool = True,
 ) -> None:
     """Write the time window of every row of `obs` to OBS_WINDOWS_TABLE: obs_index, obs_name, obs_id, person_id, start_date and end_date.
 
     obs_index is the position of the row in `obs`, so that the variables follow the rows of `.obs`, also after they were filtered or reordered since :func:`~ehrdata.io.omop.setup_obs`.
-    The start and end dates are those of the columns written by :func:`~ehrdata.io.omop.setup_obs`; a row without a start or end date gets no data.
+    The start and end dates are those of the columns written by :func:`~ehrdata.io.omop.setup_obs`; a row without a start date, or without an end date if clip_to_end_date, gets no data.
+    Without clip_to_end_date, and for the person table, the windows have no end date, which an end far in the future stands for.
     The long format tables are written from OBS_WINDOWS_TABLE, so this runs first.
     """
     from ehrdata.io.omop._check_arguments import _check_valid_birthdates_for_person_table
@@ -354,7 +357,11 @@ def _write_obs_windows(
     id_key = TIME_DEFINING_TABLE_ID_KEY[time_defining_table]
     start_key = _get_datetime_key("start", time_defining_table, time_precision)
     # The end date rather than datetime, as OMOP end dates are inclusive and end datetimes are optional.
-    end_key = None if time_defining_table == "person" else _get_datetime_key("end", time_defining_table, "date")
+    end_key = (
+        None
+        if time_defining_table == "person" or not clip_to_end_date
+        else _get_datetime_key("end", time_defining_table, "date")
+    )
     missing = [key for key in dict.fromkeys([id_key, "person_id", start_key, end_key]) if key and key not in columns]
     if missing:
         msg = f"The time window of each observation is read from .obs, which lacks the column(s) {missing} that setup_obs writes."

@@ -15,6 +15,8 @@ from ehrdata.io.omop._check_arguments import (
     VALID_OBSERVATION_TABLES_SINGLE,
     _check_valid_aggregation_strategy,
     _check_valid_backend_handle,
+    _check_valid_clip_to_end_date,
+    _check_valid_clip_to_end_date_for_observation_table,
     _check_valid_concept_ids,
     _check_valid_data_field_to_keep,
     _check_valid_death_table,
@@ -306,7 +308,7 @@ def setup_obs(
     - If `"person_observation_period"`, the `observation_period_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
     - If `"person_visit_occurrence"`, the `visit_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
 
-    For the tables other than `"person"`, the respective end date (e.g. `observation_period_end_date`) ends the time series: data points after this day are not considered.
+    For the tables other than `"person"`, the respective end date (e.g. `observation_period_end_date`) ends the time series: data points after this day are not considered, unless `clip_to_end_date=False`.
 
     For `"person_cohort"`, the `subject_id` of the cohort is considered to be the `person_id` for a join.
 
@@ -371,6 +373,7 @@ def setup_variables(
     interval_length_number: int,
     interval_length_unit: str,
     time_precision: Literal["date", "datetime"] = "date",
+    clip_to_end_date: bool = True,
     num_intervals: int,
     concept_ids: Literal["all"] | Sequence[int] = "all",
     aggregation_strategy: Literal[
@@ -390,7 +393,7 @@ def setup_variables(
 
     The variables are set up for the rows of `edata.obs`, in their order: the time window of each row is read from the columns that :func:`~ehrdata.io.omop.setup_obs` writes to `.obs`.
     Hence `edata` can be filtered or reordered between :func:`~ehrdata.io.omop.setup_obs` and this function.
-    A row without a start or end date in `.obs` gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
+    A row without a start date in `.obs`, or without an end date unless `clip_to_end_date=False`, gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
 
     Writes a unit report of the features to `edata.uns['unit_report_<data_tables>']`.
     Writes the setup arguments into `edata.uns['omop_io_variable_setup']`.
@@ -414,6 +417,9 @@ def setup_variables(
             'observation'], data_field_to_keep={'measurement': 'value_as_number',
             'observation': 'value_as_number'}.
         time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`).
+        clip_to_end_date: Whether the data points after the end date of an observation, such as the `visit_end_date`, are left out.
+            If `False`, the data points are kept in all `num_intervals` intervals, also after the end date.
+            Not available for `observation_table="person"`, whose observations have no end date.
         interval_length_number: Numeric value of the length of one interval.
         interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
         num_intervals: Number of intervals.
@@ -486,6 +492,7 @@ def setup_variables(
     _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
     _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info)
     _check_valid_sparse(sparse, instantiate_tensor)
+    _check_valid_clip_to_end_date(clip_to_end_date)
     if sparse and aggregation_strategy == "count":
         is_present_fields = {fields[0] == "is_present" for fields in data_field_to_keep.values()}
         if len(is_present_fields) > 1:
@@ -501,7 +508,10 @@ def setup_variables(
         msg = "The observation table must be set up first, use the `setup_obs` function."
         raise ValueError(msg)
 
-    _write_obs_windows(backend_handle, edata.obs, time_defining_table, time_precision)
+    _check_valid_clip_to_end_date_for_observation_table(clip_to_end_date, time_defining_table)
+    _write_obs_windows(
+        backend_handle, edata.obs, time_defining_table, time_precision, clip_to_end_date=clip_to_end_date
+    )
     n_obs = edata.n_obs
 
     var_collector = {}
@@ -683,6 +693,7 @@ def setup_interval_variables(
     ],
     data_field_to_keep: str | Sequence[str] | dict[str, str | Sequence[str]],
     time_precision: Literal["date", "datetime"] = "date",
+    clip_to_end_date: bool = True,
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
@@ -702,7 +713,7 @@ def setup_interval_variables(
 
     The variables are set up for the rows of `edata.obs`, in their order: the time window of each row is read from the columns that :func:`~ehrdata.io.omop.setup_obs` writes to `.obs`.
     Hence `edata` can be filtered or reordered between :func:`~ehrdata.io.omop.setup_obs` and this function.
-    A row without a start or end date in `.obs` gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
+    A row without a start date in `.obs`, or without an end date unless `clip_to_end_date=False`, gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
 
     In contrast to `setup_variables`, tables without unit information can be present here.
     Those tell no unit to verify or to carry along; the tables that do have a `unit_concept_id` are treated as in `setup_variables`.
@@ -726,6 +737,9 @@ def setup_interval_variables(
            'observation'], data_field_to_keep={'measurement': 'value_as_number',
            'observation': 'value_as_number'}.
        time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`).
+       clip_to_end_date: Whether the data points after the end date of an observation, such as the `visit_end_date`, are left out.
+           If `False`, the data points are kept in all `num_intervals` intervals, also after the end date.
+           Not available for `observation_table="person"`, whose observations have no end date.
        interval_length_number: Numeric value of the length of one interval.
        interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
        num_intervals: Number of intervals.
@@ -784,6 +798,7 @@ def setup_interval_variables(
     _check_valid_concept_ids(concept_ids)
     _check_valid_aggregation_strategy(aggregation_strategy)
     _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
+    _check_valid_clip_to_end_date(clip_to_end_date)
     _check_valid_keep_date(keep_date)
 
     time_defining_table = edata.uns.get("omop_io_observation_table", None)
@@ -791,7 +806,10 @@ def setup_interval_variables(
         msg = "The observation table must be set up first, use the `setup_obs` function."
         raise ValueError(msg)
 
-    _write_obs_windows(backend_handle, edata.obs, time_defining_table, time_precision)
+    _check_valid_clip_to_end_date_for_observation_table(clip_to_end_date, time_defining_table)
+    _write_obs_windows(
+        backend_handle, edata.obs, time_defining_table, time_precision, clip_to_end_date=clip_to_end_date
+    )
 
     var_collector = {}
     r_collector = {}

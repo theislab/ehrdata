@@ -235,6 +235,18 @@ def _warn_time_precision_interval_mismatch(interval_length_unit: str, time_preci
         )
 
 
+def _check_valid_clip_to_end_date(clip_to_end_date) -> None:
+    if not isinstance(clip_to_end_date, bool):
+        msg = "Expected clip_to_end_date to be a boolean."
+        raise TypeError(msg)
+
+
+def _check_valid_clip_to_end_date_for_observation_table(clip_to_end_date, time_defining_table: str) -> None:
+    if not clip_to_end_date and time_defining_table == "person":
+        msg = "clip_to_end_date=False is not available for observation_table='person', whose observations have no end date."
+        raise ValueError(msg)
+
+
 def _check_valid_birthdates_for_person_table(start_dates, time_defining_table: str) -> None:
     """Check that all persons in .obs have valid birthdates when using person as observation table.
 
