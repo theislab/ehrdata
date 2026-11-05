@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
 
-- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` no longer modify a `data_field_to_keep` dict passed to them. They wrapped its string values in lists in place, so a dict reused for a later call carried lists instead of the strings it was given. ([#PR](https://github.com/theislab/ehrdata/pull/PR)) @eroell
+- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` no longer modify a `data_field_to_keep` dict passed to them. They wrapped its string values in lists in place, so a dict reused for a later call carried lists instead of the strings it was given. ([#340](https://github.com/theislab/ehrdata/pull/340)) @eroell
 
 ## [0.5.0]
 
