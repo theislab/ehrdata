@@ -273,6 +273,96 @@ def _check_valid_value_range(value_range, *, concept_sets: bool) -> dict | None:
     return checked
 
 
+UNIT_CONVERSION_COLUMNS = ("unit_concept_id", "to_unit_concept_id", "multiplier")
+
+
+def _is_nan(value) -> bool:
+    return isinstance(value, float | np.floating) and np.isnan(value)
+
+
+def _integer_column(frame: pd.DataFrame, column: str, *, nullable: bool) -> pd.Series:
+    values = pd.to_numeric(frame[column], errors="coerce")
+    is_bool = frame[column].map(lambda value: isinstance(value, bool | np.bool_)).astype(bool)
+    invalid = (values.isna() & frame[column].notna()) | (values.notna() & (values % 1 != 0)) | is_bool
+    if invalid.any() or (not nullable and values.isna().any()):
+        msg = f"The column '{column}' of unit_conversions must hold integer concept ids{', or missing values' if nullable else ''}."
+        raise TypeError(msg)
+    return values.astype("Int64")
+
+
+def _check_valid_unit_conversions(unit_conversions, concept_sets) -> pd.DataFrame | None:
+    """Check unit_conversions and resolve it to concepts.
+
+    Returns one row per (concept_id, unit_concept_id): to_unit_concept_id, to_unit_source_value, multiplier and addend, the offset.
+    """
+    if unit_conversions is None:
+        return None
+    if not isinstance(unit_conversions, pd.DataFrame):
+        msg = "unit_conversions must be a pandas DataFrame."
+        raise TypeError(msg)
+    keys = [column for column in ("concept_id", "variable") if column in unit_conversions.columns]
+    if len(keys) != 1:
+        msg = "unit_conversions needs exactly one of the columns 'concept_id' and 'variable'."
+        raise ValueError(msg)
+    missing = [column for column in UNIT_CONVERSION_COLUMNS if column not in unit_conversions.columns]
+    if missing:
+        msg = f"unit_conversions lacks the column(s) {missing}."
+        raise ValueError(msg)
+    frame = unit_conversions.reset_index(drop=True)
+
+    if keys[0] == "variable":
+        if not concept_sets:
+            msg = "unit_conversions keyed by 'variable' needs concept sets; key it by 'concept_id' otherwise."
+            raise ValueError(msg)
+        unknown = sorted(set(frame["variable"]) - set(concept_sets), key=str)
+        if unknown:
+            msg = f"unit_conversions has conversions for {unknown[:5]}, which are no concept sets."
+            raise ValueError(msg)
+        frame = frame.assign(concept_id=frame["variable"].map(concept_sets)).explode("concept_id")
+    concept_id = _integer_column(frame, "concept_id", nullable=False)
+
+    multiplier = pd.to_numeric(frame["multiplier"], errors="coerce")
+    # a missing offset is 0, but a given one must be a number
+    if "offset" in frame.columns:
+        addend = pd.to_numeric(frame["offset"], errors="coerce")
+        if (addend.isna() & frame["offset"].notna() & ~frame["offset"].map(_is_nan)).any():
+            msg = "The column 'offset' of unit_conversions must hold finite numbers, or missing values for 0."
+            raise TypeError(msg)
+        addend = addend.fillna(0.0)
+    else:
+        addend = pd.Series(0.0, index=frame.index)
+    for name, values in (("multiplier", multiplier), ("offset", addend)):
+        if not np.isfinite(values.astype("float64")).all():
+            msg = f"The column '{name}' of unit_conversions must hold finite numbers."
+            raise TypeError(msg)
+    resolved = pd.DataFrame(
+        {
+            "concept_id": concept_id.to_numpy(),
+            "unit_concept_id": _integer_column(frame, "unit_concept_id", nullable=True).to_numpy(),
+            "to_unit_concept_id": _integer_column(frame, "to_unit_concept_id", nullable=False).to_numpy(),
+            "to_unit_source_value": (
+                frame["to_unit_source_value"].astype("string").to_numpy()
+                if "to_unit_source_value" in frame.columns
+                else pd.array([pd.NA] * len(frame), dtype="string")
+            ),
+            "multiplier": pd.array(multiplier.astype("float64").to_numpy(), dtype="Float64"),
+            "addend": pd.array(addend.astype("float64").to_numpy(), dtype="Float64"),
+        }
+    ).astype({"concept_id": "Int64", "unit_concept_id": "Int64", "to_unit_concept_id": "Int64"})
+    duplicated = resolved.duplicated(["concept_id", "unit_concept_id"], keep=False)
+    if duplicated.any():
+        pairs = resolved.loc[duplicated, ["concept_id", "unit_concept_id"]].drop_duplicates().to_numpy().tolist()
+        msg = f"unit_conversions converts the (concept_id, unit_concept_id) pair(s) {pairs[:5]} more than once."
+        raise ValueError(msg)
+    targets = resolved.groupby("concept_id")["to_unit_concept_id"].nunique()
+    if (targets > 1).any():
+        msg = (
+            f"unit_conversions converts the concept(s) {targets[targets > 1].index.tolist()[:5]} to more than one unit."
+        )
+        raise ValueError(msg)
+    return resolved
+
+
 def _check_valid_value_range_variables(
     value_range, variables_of_table, requested_concept_ids, data_field_to_keep, numeric_fields
 ):

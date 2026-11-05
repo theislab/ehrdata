@@ -3630,3 +3630,293 @@ def test_setup_variables_value_range_infinite_bounds(omop_connection_vanilla):
     for upper in [np.inf, 10**400]:
         edata = _setup_measurement(con, [3031147], value_range={3031147: (19, upper)})
         np.testing.assert_array_equal(edata.X, expected.X)
+
+
+def _second_unit_for_person_2(con):
+    """Record the values of concept 3031147 of person 2 in umol/L (unit concept 8842), 1000-fold."""
+    con.execute(
+        """UPDATE measurement SET value_as_number = value_as_number * 1000, unit_concept_id = 8842, unit_source_value = 'umol/L'
+        WHERE person_id = 2 AND measurement_concept_id = 3031147"""
+    )
+
+
+BICARBONATE_CONVERSIONS = pd.DataFrame(
+    {
+        "concept_id": [3031147, 3031147],
+        "unit_concept_id": [9557, 8842],
+        "to_unit_concept_id": [9557, 9557],
+        "multiplier": [1, 0.001],
+        "to_unit_source_value": ["mEq/L", "mEq/L"],
+    }
+)
+
+
+@pytest.mark.parametrize("aggregation_strategy", ["mean", "last", "sum", "max"])
+def test_setup_variables_unit_conversions_equal_converting_the_rows(omop_connection_vanilla, aggregation_strategy):
+    con = omop_connection_vanilla
+    expected = _setup_measurement(con, [3031147], aggregation_strategy=aggregation_strategy)
+    expected_long = con.execute(
+        "SELECT * FROM long_person_timestamp_feature_value_measurement ORDER BY obs_index, interval_step"
+    ).df()
+    _second_unit_for_person_2(con)
+
+    converted = _setup_measurement(
+        con, [3031147], aggregation_strategy=aggregation_strategy, unit_conversions=BICARBONATE_CONVERSIONS
+    )
+    converted_long = con.execute(
+        "SELECT * FROM long_person_timestamp_feature_value_measurement ORDER BY obs_index, interval_step"
+    ).df()
+
+    np.testing.assert_allclose(converted.X, expected.X)
+    pd.testing.assert_frame_equal(
+        converted.uns["unit_report_measurement"], expected.uns["unit_report_measurement"], check_dtype=False
+    )
+    # the converted rows carry the target unit in both unit fields
+    assert converted_long["unit_concept_id"].tolist() == expected_long["unit_concept_id"].tolist()
+    assert converted_long["unit_source_value"].tolist() == expected_long["unit_source_value"].tolist()
+
+
+def test_setup_variables_unit_conversions_need_every_unit(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    with pytest.raises(NotImplementedError, match="more than one unit_concept_id"):
+        _setup_measurement(con, [3031147], aggregation_strategy="mean")
+    with pytest.raises(ValueError, match=r"concept 3031147 in unit 8842 \(2 data points\)"):
+        _setup_measurement(con, [3031147], unit_conversions=BICARBONATE_CONVERSIONS.iloc[:1])
+
+
+def test_setup_variables_unit_conversions_with_offset_and_without_unit(omop_connection_vanilla):
+    """An offset, as from degrees Fahrenheit, and a conversion of the data points without a unit."""
+    con = omop_connection_vanilla
+    con.execute("UPDATE measurement SET unit_concept_id = NULL, unit_source_value = NULL WHERE person_id = 3")
+    conversions = pd.DataFrame(
+        {
+            "concept_id": [3031147, 3031147],
+            "unit_concept_id": [9557, None],
+            "to_unit_concept_id": [9557, 9557],
+            "multiplier": [2.0, 0.5],
+            "offset": [-32.0, 1.0],
+        }
+    )
+    edata = _setup_measurement(con, [3031147], aggregation_strategy="max", unit_conversions=conversions)
+
+    # persons 1 and 2: 2 * 19 - 32, 2 * 21 - 32; person 3: 0.5 * 23 + 1
+    np.testing.assert_allclose(edata.X[:, 0, 0], [6, 10, 12.5])
+    assert edata.uns["unit_report_measurement"]["unit_concept_id"].tolist() == [9557]
+
+
+def test_setup_variables_unit_conversions_before_the_value_range(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    edata = _setup_measurement(
+        con,
+        [3031147],
+        aggregation_strategy="count",
+        unit_conversions=BICARBONATE_CONVERSIONS,
+        value_range={3031147: (19, 21)},
+    )
+
+    # 19 of person 1, and 20 and 21 of person 2 after their conversion from 20000 and 21000
+    np.testing.assert_array_equal(edata.X[:, 0, 0], [1, 2, 0])
+
+
+def test_setup_variables_unit_conversions_of_a_concept_set(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    conversions = BICARBONATE_CONVERSIONS.drop(columns="concept_id").assign(variable="bicarbonate")
+    edata = _setup_measurement(
+        con, {"bicarbonate": [3031147]}, aggregation_strategy="mean", unit_conversions=conversions
+    )
+
+    np.testing.assert_allclose(edata.X[:, 0, 0], [18.5, 20.5, 22.5])
+
+
+def test_setup_variables_unit_conversions_take_the_code_of_the_target_unit(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    conversions = BICARBONATE_CONVERSIONS.drop(columns="to_unit_source_value")
+    con.execute(
+        "CREATE OR REPLACE TABLE concept AS SELECT * REPLACE (CAST(concept_code AS VARCHAR) AS concept_code) FROM concept"
+    )
+    con.execute(
+        "INSERT INTO concept (concept_id, concept_name, domain_id, vocabulary_id, concept_class_id, concept_code) "
+        "VALUES (9557, 'milliequivalent per liter', 'Unit', 'UCUM', 'Unit', 'meq/L')"
+    )
+    _setup_measurement(con, [3031147], unit_conversions=conversions)
+
+    unit_source_values = con.execute(
+        "SELECT DISTINCT unit_source_value FROM long_person_timestamp_feature_value_measurement"
+    ).fetchall()
+    assert unit_source_values == [("meq/L",)]
+
+
+@pytest.mark.parametrize(
+    ("concept_ids", "unit_conversions", "kwargs", "error", "match"),
+    [
+        ([3031147], BICARBONATE_CONVERSIONS.to_dict(), {}, TypeError, "must be a pandas DataFrame"),
+        ([3031147], BICARBONATE_CONVERSIONS.assign(variable="a"), {}, ValueError, "exactly one of the columns"),
+        ([3031147], BICARBONATE_CONVERSIONS.drop(columns="concept_id"), {}, ValueError, "exactly one of the columns"),
+        (
+            [3031147],
+            BICARBONATE_CONVERSIONS.drop(columns="concept_id").assign(variable="a"),
+            {},
+            ValueError,
+            "needs concept sets",
+        ),
+        (
+            {"a": [3031147]},
+            BICARBONATE_CONVERSIONS.drop(columns="concept_id").assign(variable="b"),
+            {},
+            ValueError,
+            "which are no concept sets",
+        ),
+        (
+            [3031147],
+            BICARBONATE_CONVERSIONS.drop(columns="multiplier"),
+            {},
+            ValueError,
+            r"lacks the column\(s\) \['multiplier'\]",
+        ),
+        (
+            [3031147],
+            BICARBONATE_CONVERSIONS.assign(unit_concept_id=[9557.5, 8842]),
+            {},
+            TypeError,
+            "integer concept ids",
+        ),
+        ([3031147], BICARBONATE_CONVERSIONS.assign(multiplier=[1, np.inf]), {}, TypeError, "finite numbers"),
+        ([3031147], BICARBONATE_CONVERSIONS.assign(unit_concept_id=[9557, 9557]), {}, ValueError, "more than once"),
+        (
+            [3031147],
+            BICARBONATE_CONVERSIONS.assign(to_unit_concept_id=[9557, 8842]),
+            {},
+            ValueError,
+            "to more than one unit",
+        ),
+        (
+            [3031147],
+            BICARBONATE_CONVERSIONS.assign(to_unit_concept_id=[True, True]),
+            {},
+            TypeError,
+            "integer concept ids",
+        ),
+        ([3031147], BICARBONATE_CONVERSIONS.assign(offset=["a", 0]), {}, TypeError, "finite numbers"),
+        ([3031147], BICARBONATE_CONVERSIONS, {"data_field_to_keep": ["is_present"]}, TypeError, "numeric data field"),
+        (
+            [3031147],
+            BICARBONATE_CONVERSIONS,
+            {"data_field_to_keep": ["unit_source_value"]},
+            TypeError,
+            "numeric data field",
+        ),
+    ],
+)
+def test_setup_variables_illegal_unit_conversions(
+    omop_connection_vanilla, concept_ids, unit_conversions, kwargs, error, match
+):
+    with pytest.raises(error, match=match):
+        _setup_measurement(omop_connection_vanilla, concept_ids, unit_conversions=unit_conversions, **kwargs)
+
+
+def test_setup_variables_unit_conversions_of_other_concepts_are_not_used(omop_connection_vanilla):
+    """One conversion table can serve several calls: rows of concepts that are no variables of a call are left aside."""
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    con.execute("UPDATE measurement SET unit_concept_id = 8842 WHERE measurement_concept_id = 3022318")
+    other = pd.DataFrame({"concept_id": [999], "unit_concept_id": [1], "to_unit_concept_id": [1], "multiplier": [1]})
+    conversions = pd.concat([BICARBONATE_CONVERSIONS, other])
+    edata = _setup_measurement(con, [3031147], aggregation_strategy="mean", unit_conversions=conversions)
+
+    np.testing.assert_allclose(edata.X[:, 0, 0], [18.5, 20.5, 22.5])
+
+
+def test_setup_variables_unit_conversions_leave_other_data_tables_as_they_are(omop_connection_vanilla):
+    """A data table without converted concepts keeps its fields, also a text field or is_present."""
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    for observation_field in ["value_as_string", "is_present"]:
+        kwargs = {
+            "backend_handle": con,
+            "data_tables": ["measurement", "observation"],
+            "data_field_to_keep": {"measurement": "value_as_number", "observation": observation_field},
+            "interval_length_number": 1,
+            "interval_length_unit": "day",
+            "num_intervals": 4,
+            "concept_ids": [3031147, 3001062],
+        }
+        converted = ed.io.omop.setup_variables(edata, unit_conversions=BICARBONATE_CONVERSIONS, **kwargs)
+        plain = ed.io.omop.setup_variables(edata, **kwargs)
+        converted_values, plain_values = converted.X[:, 1:], plain.X[:, 1:]
+        np.testing.assert_array_equal(pd.isna(converted_values), pd.isna(plain_values))
+        assert converted_values[~pd.isna(converted_values)].tolist() == plain_values[~pd.isna(plain_values)].tolist()
+
+
+def test_setup_variables_unit_conversions_of_a_concept_set_with_an_absent_concept(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    conversions = BICARBONATE_CONVERSIONS.drop(columns="concept_id").assign(variable="bicarbonate")
+    edata = _setup_measurement(
+        con, {"bicarbonate": [3031147, 123456789]}, aggregation_strategy="mean", unit_conversions=conversions
+    )
+
+    np.testing.assert_allclose(edata.X[:, 0, 0], [18.5, 20.5, 22.5])
+
+
+def test_setup_variables_unit_conversions_and_value_range_on_single_precision(omop_connection_vanilla):
+    """A converted value at a bound of the range is kept, also if the value field is of single precision."""
+    con = omop_connection_vanilla
+    _second_unit_for_person_2(con)
+    con.execute(
+        "CREATE OR REPLACE TABLE measurement AS "
+        "SELECT * REPLACE (CAST(value_as_number AS REAL) AS value_as_number) FROM measurement"
+    )
+    edata = _setup_measurement(
+        con,
+        [3031147],
+        aggregation_strategy="count",
+        unit_conversions=BICARBONATE_CONVERSIONS,
+        value_range={3031147: (19, 20)},
+    )
+
+    # 19 of person 1, and 20 of person 2, converted from 20000
+    np.testing.assert_array_equal(edata.X[:, 0, 0], [1, 1, 0])
+
+
+def test_setup_variables_unit_conversions_unit_zero_and_missing_offsets(omop_connection_vanilla):
+    """unit_concept_id 0 is a unit of its own, and a missing offset is 0."""
+    con = omop_connection_vanilla
+    con.execute("UPDATE measurement SET unit_concept_id = 0 WHERE person_id = 3")
+    conversions = pd.DataFrame(
+        {
+            "concept_id": [3031147, 3031147],
+            "unit_concept_id": [9557, 0],
+            "to_unit_concept_id": [9557, 9557],
+            "multiplier": [1, 2],
+            "offset": [np.nan, 1],
+        }
+    )
+    edata = _setup_measurement(con, [3031147], aggregation_strategy="max", unit_conversions=conversions)
+
+    np.testing.assert_allclose(edata.X[:, 0, 0], [19, 21, 47])
+    with pytest.raises(ValueError, match="in unit 0"):
+        _setup_measurement(con, [3031147], unit_conversions=conversions.iloc[:1])
+
+
+def test_setup_variables_unit_conversions_take_the_code_of_a_text_concept_table(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    con.execute(
+        "CREATE OR REPLACE TABLE concept AS SELECT * REPLACE (CAST(concept_id AS VARCHAR) AS concept_id, "
+        "CAST(concept_code AS VARCHAR) AS concept_code) FROM concept"
+    )
+    con.execute(
+        "INSERT INTO concept (concept_id, concept_name, domain_id, vocabulary_id, concept_class_id, concept_code) "
+        "VALUES ('9557', 'milliequivalent per liter', 'Unit', 'UCUM', 'Unit', 'meq/L')"
+    )
+    conversions = BICARBONATE_CONVERSIONS.drop(columns="to_unit_source_value").iloc[:1]
+    _setup_measurement(con, [3031147], unit_conversions=conversions)
+
+    unit_source_values = con.execute(
+        "SELECT DISTINCT unit_source_value FROM long_person_timestamp_feature_value_measurement"
+    ).fetchall()
+    assert unit_source_values == [("meq/L",)]
