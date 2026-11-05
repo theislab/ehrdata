@@ -186,6 +186,8 @@ def _concept_ids_condition(data_table: str, concept_ids: Literal["all"] | Sequen
     """Get the SQL condition that restricts the rows of data_table to concept_ids."""
     if concept_ids == "all":
         return "TRUE"
+    if len(concept_ids) == 0:
+        return "FALSE"
     return f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id IN ({', '.join(str(int(concept_id)) for concept_id in concept_ids)})"
 
 
@@ -408,20 +410,31 @@ def _registered(backend_handle: duckdb.DuckDBPyConnection, name: str, frame: pd.
         backend_handle.unregister(name)
 
 
-def _value_range_filter(data_alias: str, concept_key: str, value_field: str, *, value_ranges) -> tuple[str, str]:
-    """The SQL join and condition that keep the rows whose value lies in the range of their concept.
+def _value_range_filter(
+    data_alias: str, concept_key: str, value_field: str, *, value_ranges, value_type: str = "DOUBLE"
+) -> tuple[str, str]:
+    """The SQL join and condition that keep the rows whose value lies in the range of their concept, bounds included.
 
-    Rows of concepts without a range, and rows without a value, are kept.
+    Rows of concepts without a range, and rows without a value, are kept; NaN lies in no range.
+    The bounds are compared in the type of the value field, so that a bound equal to a stored single-precision value includes it.
     """
     if value_ranges is None:
         return "", "TRUE"
     value = f"{data_alias}.{value_field}"
+    bound_type = "FLOAT" if value_type.upper() in {"FLOAT", "FLOAT4", "REAL"} else "DOUBLE"
+    lower, upper = f"CAST(vr.lower AS {bound_type})", f"CAST(vr.upper AS {bound_type})"
     join = f"LEFT JOIN {VALUE_RANGE_TABLE} AS vr ON TRY_CAST({data_alias}.{concept_key} AS BIGINT) = vr.concept_id"
     condition = (
         f"(vr.concept_id IS NULL OR {value} IS NULL OR "
-        f"(({value} >= vr.lower OR vr.lower IS NULL) AND ({value} <= vr.upper OR vr.upper IS NULL)))"
+        f"(NOT isnan(CAST({value} AS DOUBLE)) AND ({value} >= {lower} OR vr.lower IS NULL) AND ({value} <= {upper} OR vr.upper IS NULL)))"
     )
     return join, condition
+
+
+def _column_type(backend_handle: duckdb.DuckDBPyConnection, table: str, column: str) -> str:
+    """The type of column of table, or an empty string."""
+    types = {row[0].lower(): row[1] for row in backend_handle.execute(f"DESCRIBE {table}").fetchall()}
+    return types.get(column.lower(), "")
 
 
 def _write_obs_windows(
@@ -588,7 +601,11 @@ def _write_long_observed_table(
     observed_cells = " UNION ALL ".join(groups)
 
     range_join, range_condition = _value_range_filter(
-        "d", concept_key, data_field_to_keep[0], value_ranges=value_ranges
+        "d",
+        concept_key,
+        data_field_to_keep[0],
+        value_ranges=value_ranges,
+        value_type=_column_type(backend_handle, data_table, data_field_to_keep[0]) if value_ranges is not None else "",
     )
 
     table = f"long_person_timestamp_feature_value_{data_table}"

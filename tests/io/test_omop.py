@@ -3536,3 +3536,97 @@ def test_setup_variables_value_range_for_a_requested_concept_without_data(omop_c
 def test_setup_variables_illegal_value_range(omop_connection_vanilla, concept_ids, value_range, kwargs, error, match):
     with pytest.raises(error, match=match):
         _setup_measurement(omop_connection_vanilla, concept_ids, value_range=value_range, **kwargs)
+
+
+@pytest.mark.parametrize("bounds", [(0, None), (None, 100), (0, np.inf)])
+def test_setup_variables_value_range_leaves_out_nan(omop_connection_vanilla, bounds):
+    """NaN lies in no range, whichever side is open."""
+    con = omop_connection_vanilla
+    con.execute(
+        "CREATE OR REPLACE TABLE measurement AS SELECT * REPLACE (CAST(value_as_number AS DOUBLE) AS value_as_number) FROM measurement"
+    )
+    con.execute("UPDATE measurement SET value_as_number = 'NaN' WHERE measurement_id = 1")
+    edata = _setup_measurement(con, [3031147], value_range={3031147: bounds}, aggregation_strategy="count")
+
+    np.testing.assert_array_equal(edata.X[:, 0, 0], [1, 2, 2])
+
+
+@pytest.mark.parametrize("value_type", ["REAL", "DOUBLE", "DECIMAL(18, 3)"])
+def test_setup_variables_value_range_includes_its_bounds(omop_connection_vanilla, value_type):
+    con = omop_connection_vanilla
+    con.execute(
+        f"CREATE OR REPLACE TABLE measurement AS SELECT * REPLACE (CAST(value_as_number + 0.1 AS {value_type}) AS value_as_number) FROM measurement"
+    )
+    edata = _setup_measurement(con, [3031147], value_range={3031147: (18.1, 23.1)}, aggregation_strategy="count")
+
+    np.testing.assert_array_equal(edata.X[:, 0, 0], [2, 2, 2])
+
+
+def test_setup_variables_empty_value_range_changes_nothing(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    con.execute("UPDATE measurement SET measurement_concept_id = NULL WHERE measurement_id = 1")
+    expected = _setup_measurement(con, "all")
+    edata = _setup_measurement(con, "all", value_range={})
+
+    pd.testing.assert_frame_equal(edata.var, expected.var)
+    np.testing.assert_array_equal(edata.X, expected.X)
+
+
+def test_setup_variables_value_range_rows_without_concept_id_are_no_variable(omop_connection_vanilla):
+    """Rows without a concept id, in two units, do not block 'mean', as they belong to no variable."""
+    con = omop_connection_vanilla
+    con.execute(
+        """INSERT INTO measurement (measurement_id, person_id, measurement_concept_id, measurement_date,
+            measurement_datetime, value_as_number, unit_concept_id, unit_source_value)
+        VALUES (10, 1, NULL, '2100-01-01', '2100-01-01 15:00:00', 1, 1, 'a'),
+               (11, 1, NULL, '2100-01-01', '2100-01-01 16:00:00', 2, 2, 'b')"""
+    )
+    edata = _setup_measurement(con, "all", aggregation_strategy="mean", value_range={3031147: (0, 100)})
+
+    assert edata.var["data_table_concept_id"].tolist() == [3022318, 3031147]
+    assert edata.uns["unit_report_measurement"]["concept_id"].notna().all()
+
+
+def test_setup_variables_value_range_in_every_data_table_of_a_concept(omop_connection_vanilla):
+    """The range of a concept filters it in every data table that has it."""
+    con = omop_connection_vanilla
+    con.execute(
+        """INSERT INTO observation (observation_id, person_id, observation_concept_id, observation_date,
+            observation_datetime, value_as_number)
+        VALUES (10, 1, 3031147, '2100-01-01', '2100-01-01 12:00:00', 1000),
+               (11, 1, 3031147, '2100-01-01', '2100-01-01 13:00:00', 20)"""
+    )
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement", "observation"],
+        data_field_to_keep={"measurement": "value_as_number", "observation": "value_as_number"},
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=4,
+        aggregation_strategy="max",
+        value_range={3031147: (0, 100)},
+    )
+    # the measurement concepts come first, then those of observation
+    observation_concept = edata.var["data_table_concept_id"].tolist().index(3031147, 2)
+
+    assert edata.X[0, observation_concept, 0] == 20
+
+
+def test_setup_variables_value_range_sparse(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    kwargs = {"value_range": {3031147: (19, 22)}, "aggregation_strategy": "mean"}
+    dense = _setup_measurement(con, [3031147], **kwargs)
+
+    np.testing.assert_array_equal(_setup_measurement(con, [3031147], sparse=True, **kwargs).X.todense(), dense.X)
+
+
+def test_setup_variables_value_range_infinite_bounds(omop_connection_vanilla):
+    """Infinite bounds, also as integers too large for a float, leave their side open."""
+    con = omop_connection_vanilla
+    expected = _setup_measurement(con, [3031147], value_range={3031147: (19, None)})
+
+    for upper in [np.inf, 10**400]:
+        edata = _setup_measurement(con, [3031147], value_range={3031147: (19, upper)})
+        np.testing.assert_array_equal(edata.X, expected.X)

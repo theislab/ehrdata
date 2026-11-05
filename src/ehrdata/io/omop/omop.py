@@ -46,6 +46,7 @@ from ehrdata.io.omop._queries import (
     SINGLE_ROW_AGGREGATION_STRATEGIES,
     UNITLESS_AGGREGATION_STRATEGIES,
     VALUE_RANGE_TABLE,
+    _column_type,
     _concept_ids_condition,
     _get_ordered_table,
     _get_table_join,
@@ -199,7 +200,13 @@ def _check_one_unit_per_feature_for_aggregation(
 
     concept_id_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id"
     # the rows outside the value range of their concept are left out of the aggregation, and so of the check
-    range_join, range_condition = _value_range_filter("d", concept_id_key, value_field, value_ranges=value_ranges)
+    range_join, range_condition = _value_range_filter(
+        "d",
+        concept_id_key,
+        value_field,
+        value_ranges=value_ranges,
+        value_type=_column_type(backend_handle, data_table, value_field) if value_ranges is not None else "",
+    )
     with _registered(backend_handle, VALUE_RANGE_TABLE, value_ranges):
         feature_unit_pairs = backend_handle.execute(
             f"""
@@ -519,9 +526,12 @@ def setup_variables(
             If `False`, the data points are kept in all `num_intervals` intervals, also after the end date.
             Not available for `observation_table="person"`, whose observations have no end date.
         value_range: The range of plausible values of each variable, as `{variable: (lower, upper)}`, keyed like a mapping of `aggregation_strategy`.
-            The data points outside the range, bounds included, are left out before the aggregation, so that they neither count nor tell a unit.
-            A bound of `None` leaves that side open, and the variables without a range are not filtered.
+            A data point is kept if `lower <= value <= upper`, and left out before the aggregation otherwise, so that it neither counts nor tells a unit.
+            A bound of `None` leaves that side open, NaN lies in no range, and data points without a value as well as the variables without a range are not filtered.
             The values are those of the first field of `data_field_to_keep`, which must be numeric.
+            The range of a concept set applies to each of its concepts, and the range of a concept to it in every data table that has it.
+            As with a mapping of `aggregation_strategy`, rows without a concept ID then belong to no variable,
+            and a key that is no variable raises, unless it is one of `concept_ids` without data points.
         interval_length_number: Numeric value of the length of one interval.
         interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
         num_intervals: Number of intervals.
@@ -706,6 +716,10 @@ def setup_variables(
             continue
 
         unit_fields = _get_unit_fields(backend_handle, data_table)
+        # with variables per table, the rows of other concepts, and without a concept id, belong to no variable
+        table_concept_ids = (
+            variables_of_table[data_table] if variables_of_table is not None and not concept_sets else concept_ids
+        )
         strategies = table_strategies[data_table] if table_strategies is not None else None
         variables_of_strategy: dict = {}
         for variable, strategy in (strategies or {}).items():
@@ -718,7 +732,7 @@ def setup_variables(
                 else concept_sets
             )
             if variables is None:
-                strategy_concept_ids = concept_ids
+                strategy_concept_ids = table_concept_ids
             elif concept_sets:
                 strategy_concept_ids = [concept_id for name in variables for concept_id in concept_sets[name]]
             else:
@@ -744,7 +758,7 @@ def setup_variables(
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
             aggregation_strategy="last" if strategies is not None else aggregation_strategy,
-            concept_ids=concept_ids,
+            concept_ids=table_concept_ids,
             link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
             concept_sets=concept_sets,
             strategies=strategies,

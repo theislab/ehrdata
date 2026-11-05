@@ -227,13 +227,22 @@ def _check_valid_aggregation_fill_values(table_strategies, data_field_to_keep, n
         raise ValueError(msg)
 
 
+def _as_float(number) -> float:
+    """Number as a float, infinite if too large."""
+    try:
+        return float(number)
+    except OverflowError:
+        return float("inf") if number > 0 else float("-inf")
+
+
 def _check_valid_value_range(value_range, *, concept_sets: bool) -> dict | None:
     """Check a value_range mapping of variables to (lower, upper), and return it with integer concept ids as keys."""
-    if value_range is None:
-        return None
-    if not isinstance(value_range, Mapping):
+    if not isinstance(value_range, Mapping | None):
         msg = "value_range must be a mapping of variables to (lower, upper)."
         raise TypeError(msg)
+    if not value_range:
+        # no range filters nothing, as no value_range does
+        return None
     checked = {}
     for key, bounds in value_range.items():
         if concept_sets:
@@ -251,14 +260,16 @@ def _check_valid_value_range(value_range, *, concept_sets: bool) -> dict | None:
             if bound is not None and (
                 not isinstance(bound, int | float | np.integer | np.floating)
                 or isinstance(bound, bool)
-                or np.isnan(bound)
+                or np.isnan(_as_float(bound))
             ):
                 msg = f"The bounds of the value_range of {key!r} must be numbers or None, but are {bounds!r}."
                 raise TypeError(msg)
         if lower is not None and upper is not None and lower > upper:
             msg = f"The value_range of {key!r} has a lower bound above its upper bound: {bounds!r}."
             raise ValueError(msg)
-        checked[key if concept_sets else int(key)] = (lower, upper)
+        checked[key if concept_sets else int(key)] = tuple(
+            None if bound is None else _as_float(bound) for bound in (lower, upper)
+        )
     return checked
 
 
