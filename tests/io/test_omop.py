@@ -3,6 +3,7 @@ import re
 import numpy as np
 import pandas as pd
 import pytest
+import sparse
 
 import ehrdata as ed
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
@@ -2331,14 +2332,15 @@ def test_setup_variables_intervals_have_the_exact_length(
         num_intervals=3,
     )
 
-    # the observation_period of person 1 starts 2100-01-01
+    # the observation_period of person 1 starts 2100-01-01; the long format table holds its observed intervals
     intervals = con.execute(
-        """SELECT interval_start, interval_end FROM long_person_timestamp_feature_value_measurement
+        """SELECT interval_step, interval_start, interval_end FROM long_person_timestamp_feature_value_measurement
         WHERE obs_id = 1 AND data_table_concept_id = 3031147 ORDER BY interval_step"""
     ).df()
     boundaries = pd.date_range("2100-01-01", periods=4, freq=pd.Timedelta(interval_length_number, interval_length_unit))
-    assert intervals["interval_start"].tolist() == boundaries[:-1].tolist()
-    assert intervals["interval_end"].tolist() == boundaries[1:].tolist()
+    assert len(intervals) > 0
+    assert intervals["interval_start"].tolist() == boundaries[intervals["interval_step"]].tolist()
+    assert intervals["interval_end"].tolist() == boundaries[intervals["interval_step"] + 1].tolist()
 
 
 @pytest.mark.parametrize("observation_table", VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY)
@@ -2404,3 +2406,155 @@ def test_setup_functions_leave_data_field_to_keep_unchanged(
     )
 
     assert data_field_to_keep == dict.fromkeys(data_tables, "is_present")
+
+
+@pytest.mark.parametrize("observation_table", VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY)
+@pytest.mark.parametrize("aggregation_strategy", ["last", "mean", "count"])
+@pytest.mark.parametrize(
+    ("data_tables", "data_field_to_keep"),
+    [
+        (["measurement"], {"measurement": "value_as_number"}),
+        (
+            ["measurement", "observation", "specimen"],
+            dict.fromkeys(["measurement", "observation", "specimen"], "is_present"),
+        ),
+        (["measurement", "specimen"], {"measurement": "value_as_number", "specimen": "quantity"}),
+    ],
+)
+def test_setup_variables_sparse_matches_dense(
+    omop_connection_vanilla, observation_table, aggregation_strategy, data_tables, data_field_to_keep
+):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table)
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": data_tables,
+        "data_field_to_keep": data_field_to_keep,
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 4,
+        "aggregation_strategy": aggregation_strategy,
+    }
+    edata_dense = ed.io.omop.setup_variables(edata, **kwargs)
+    edata_sparse = ed.io.omop.setup_variables(edata, sparse=True, **kwargs)
+
+    assert isinstance(edata_dense.X, np.ndarray)
+    assert isinstance(edata_sparse.X, sparse.COO)
+    # is_present is 1 or missing whatever the aggregation_strategy
+    is_present = "is_present" in data_field_to_keep.values()
+    expected_fill_value = 0 if aggregation_strategy == "count" and not is_present else np.nan
+    np.testing.assert_equal(edata_sparse.X.fill_value, expected_fill_value)
+    np.testing.assert_array_equal(edata_sparse.X.todense(), edata_dense.X)
+    pd.testing.assert_frame_equal(edata_sparse.var, edata_dense.var)
+
+
+def test_setup_variables_long_table_holds_observed_cells_only(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=100,
+    )
+
+    num_rows = con.execute("SELECT COUNT(*) FROM long_person_timestamp_feature_value_measurement").fetchone()[0]
+    assert num_rows == np.count_nonzero(~np.isnan(edata.X))
+    assert num_rows < edata.X.size
+
+
+def test_setup_variables_sparse_requires_numeric_field(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    with pytest.raises(TypeError, match="sparse=True requires a numeric data field"):
+        ed.io.omop.setup_variables(
+            edata,
+            backend_handle=con,
+            data_tables=["measurement"],
+            data_field_to_keep=["unit_source_value"],
+            interval_length_number=1,
+            interval_length_unit="day",
+            num_intervals=4,
+            sparse=True,
+        )
+
+
+@pytest.mark.parametrize(
+    ("sparse_argument", "instantiate_tensor", "data_field_to_keep", "error", "match"),
+    [
+        ("yes", True, ["value_as_number"] * 2, TypeError, "Expected sparse to be a boolean"),
+        (True, False, ["value_as_number"] * 2, ValueError, "instantiate_tensor=False"),
+        (True, True, ["value_as_number", "is_present"], ValueError, "one fill value for all data tables"),
+    ],
+)
+def test_setup_variables_illegal_sparse(
+    omop_connection_vanilla, sparse_argument, instantiate_tensor, data_field_to_keep, error, match
+):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    with pytest.raises(error, match=match):
+        ed.io.omop.setup_variables(
+            edata,
+            backend_handle=con,
+            data_tables=["measurement", "observation"],
+            data_field_to_keep=dict(zip(["measurement", "observation"], data_field_to_keep, strict=True)),
+            interval_length_number=1,
+            interval_length_unit="day",
+            num_intervals=4,
+            aggregation_strategy="count",
+            instantiate_tensor=instantiate_tensor,
+            sparse=sparse_argument,
+        )
+
+
+def test_setup_variables_mode_breaks_ties_by_smallest_value(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    con.execute("SET threads = 4")
+
+    # person 1 has value_as_number 18 and 19 of concept 3031147 on 2100-01-01; add a second 19 and two 7s
+    con.execute(
+        """INSERT INTO measurement
+            (measurement_id, person_id, measurement_concept_id, measurement_date, measurement_datetime,
+             value_as_number, unit_concept_id, unit_source_value)
+        VALUES
+            (10, 1, 3031147, '2100-01-01', '2100-01-01 14:00:00', 19, 9557, 'mEq/L'),
+            (11, 1, 3031147, '2100-01-01', '2100-01-01 15:00:00', 7, 9557, 'mEq/L'),
+            (12, 1, 3031147, '2100-01-01', '2100-01-01 16:00:00', 7, 9557, 'mEq/L')"""
+    )
+
+    for _ in range(5):
+        edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+        edata = ed.io.omop.setup_variables(
+            edata,
+            backend_handle=con,
+            data_tables=["measurement"],
+            data_field_to_keep=["value_as_number"],
+            interval_length_number=1,
+            interval_length_unit="day",
+            time_precision="datetime",
+            num_intervals=2,
+            aggregation_strategy="mode",
+        )
+        # obs 0 is visit_occurrence 1 of person 1, var 1 is concept 3031147
+        assert edata.X[0, 1, 0] == 7
+
+
+def test_setup_variables_datetime_field_keeps_its_dtype(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["measurement_datetime"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=4,
+    )
+
+    assert edata.X.dtype.kind == "M"
+    assert np.isnat(edata.X).any()
+    assert not np.isnat(edata.X).all()

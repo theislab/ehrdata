@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
+import sparse as sp
 
 from ehrdata.io._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._check_arguments import (
@@ -27,6 +28,7 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_keep_date,
     _check_valid_num_intervals,
     _check_valid_observation_table,
+    _check_valid_sparse,
     _check_valid_time_precision,
     _check_valid_variable_data_tables,
     _warn_time_precision_interval_mismatch,
@@ -39,6 +41,9 @@ from ehrdata.io.omop._queries import (
     _get_ordered_table,
     _get_table_join,
     _get_unit_fields,
+    _instantiate_long_observed_table,
+    _observations_query,
+    _write_long_observed_table,
     _write_long_time_interval_table,
 )
 
@@ -374,6 +379,7 @@ def setup_variables(
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
     instantiate_tensor: bool = True,
+    sparse: bool = False,
 ):
     """Extracts selected tables of a data-point character from the OMOP CDM.
 
@@ -386,6 +392,7 @@ def setup_variables(
     Writes the setup arguments into `edata.uns['omop_io_variable_setup']`.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
+    It holds one row per observation, variable and interval that has data, so its size follows the number of data points.
     This table is instantiated into `.X`/`.layers` if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
 
@@ -412,6 +419,8 @@ def setup_variables(
             Every other strategy combines the values of several data points into one, which requires a single unit per feature.
             A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points carrying a value (a missing unit is a unit of its own here).
             Exempt are `'count'` and `data_field_to_keep='is_present'`, whose values are numbers of data points and hence carry no unit.
+            For `'mode'`, of several equally frequent values the smallest is kept.
+            Intervals without data points hold 0 for `'count'`, and a missing value for every other strategy and for `data_field_to_keep='is_present'`.
         enrich_var_with_feature_info: Whether to enrich the var table with feature
            information. If a concept_id is not found in the concept table, their respective alternate `concept_id` included in the concept_relationship table is retrieved to add the available feature information.
            Otherwise the feature information will be NaN.
@@ -423,6 +432,9 @@ def setup_variables(
             'unit_concept_id' or 'unit_source_value'), the value NULL/NaN is considered
             a single unit.
         instantiate_tensor: Whether to instantiate the tensor within the `EHRData` object.
+        sparse: Whether to store the tensor as a `sparse.COO` array instead of a :class:`numpy.ndarray`.
+            Its fill value is that of the dense tensor: `NaN`, or 0 for `aggregation_strategy="count"` unless `data_field_to_keep='is_present'`.
+            Requires numeric fields in `data_field_to_keep`, and `instantiate_tensor=True`.
 
     Returns:
         An :class:`~ehrdata.EHRData` object with populated `.X`/`.layers` and `.var` field.
@@ -468,6 +480,16 @@ def setup_variables(
     _check_valid_aggregation_strategy(aggregation_strategy)
     _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
     _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info)
+    _check_valid_sparse(sparse, instantiate_tensor)
+    if sparse and aggregation_strategy == "count":
+        is_present_fields = {fields[0] == "is_present" for fields in data_field_to_keep.values()}
+        if len(is_present_fields) > 1:
+            msg = (
+                "sparse=True needs one fill value for all data tables, but with aggregation_strategy='count' "
+                "the empty cells are 0, and NaN for data_field_to_keep='is_present'. "
+                "Set up these data tables in separate calls."
+            )
+            raise ValueError(msg)
 
     time_defining_table = edata.uns.get("omop_io_observation_table", None)
     if time_defining_table is None:
@@ -475,6 +497,10 @@ def setup_variables(
         raise ValueError(msg)
 
     _check_valid_birthdates_for_person_table(backend_handle, time_defining_table)
+
+    n_obs = backend_handle.execute(
+        f"SELECT COUNT(DISTINCT obs_id) FROM ({_observations_query(time_defining_table, time_precision)})"
+    ).fetchone()[0]
 
     var_collector = {}
     r_collector = {}
@@ -505,7 +531,7 @@ def setup_variables(
             concept_ids=concept_ids,
         )
 
-        _write_long_time_interval_table(
+        _write_long_observed_table(
             backend_handle=backend_handle,
             time_defining_table=time_defining_table,
             data_table=data_table,
@@ -523,7 +549,7 @@ def setup_variables(
         unit_report = _create_feature_unit_concept_id_report(backend_handle, data_table=data_table)
 
         var = backend_handle.execute(
-            f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_table}"
+            f"SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AS data_table_concept_id FROM {data_table} WHERE {_concept_ids_condition(data_table, concept_ids)}"
         ).df()
 
         var = var.sort_values("data_table_concept_id").reset_index(drop=True)
@@ -579,17 +605,16 @@ def setup_variables(
                 )
 
         if instantiate_tensor:
-            ds = (
-                (backend_handle.execute(f"SELECT * FROM long_person_timestamp_feature_value_{data_table}").df())
-                .set_index(["obs_id", "data_table_concept_id", "interval_step"])
-                .to_xarray()
+            r_collector[data_table] = _instantiate_long_observed_table(
+                backend_handle,
+                data_table,
+                data_field_to_keep[data_table][0],
+                concept_ids=var["data_table_concept_id"].to_numpy(),
+                n_obs=n_obs,
+                num_intervals=num_intervals,
+                aggregation_strategy=aggregation_strategy,
+                sparse=sparse,
             )
-            # order the values in ds according to the order in var
-            ds = ds.sel(data_table_concept_id=var["data_table_concept_id"].values)
-            r_collector[data_table] = ds[data_field_to_keep[data_table][0]].values
-
-        else:
-            ds = None
 
         var_collector[data_table] = var
         unit_report_collector[data_table] = unit_report
@@ -600,7 +625,12 @@ def setup_variables(
 
     var = pd.concat(var_collector.values(), axis=0).reset_index(drop=True)
 
-    tem_layer = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
+    if not instantiate_tensor:
+        tem_layer = None
+    elif sparse:
+        tem_layer = sp.concatenate(list(r_collector.values()), axis=1)
+    else:
+        tem_layer = np.concatenate(list(r_collector.values()), axis=1)
 
     tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
 
