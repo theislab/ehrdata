@@ -138,13 +138,10 @@ def _check_valid_num_intervals(num_intervals) -> None:
         raise TypeError(msg)
 
 
-def _check_valid_concept_sets(concept_sets, data_tables, enrich_var_with_feature_info) -> dict[str, list[int]]:
+def _check_valid_concept_sets(concept_sets, data_tables) -> dict[str, list[int]]:
     """Check a mapping of names to concept ids, and return it as a dict of lists."""
     if len(data_tables) != 1:
         msg = f"Concept sets take one data table, but data_tables is {list(data_tables)}."
-        raise ValueError(msg)
-    if enrich_var_with_feature_info:
-        msg = "enrich_var_with_feature_info describes single concepts, and is not available for concept sets."
         raise ValueError(msg)
     if len(concept_sets) == 0:
         msg = "concept_ids must not be empty."

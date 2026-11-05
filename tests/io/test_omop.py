@@ -3125,7 +3125,6 @@ def test_setup_variables_concept_sets_sparse_and_dataset(omop_connection_vanilla
             ValueError,
             "Concept sets take one data table",
         ),
-        ({"enrich_var_with_feature_info": True}, ValueError, "not available for concept sets"),
     ],
 )
 def test_setup_variables_concept_sets_reject_other_arguments(omop_connection_vanilla, kwargs, error, match):
@@ -3232,3 +3231,22 @@ def test_ehrdataset_rejects_a_long_table_of_another_setup(omop_connection_vanill
 
     with pytest.raises(ValueError, match="was set up by another call of setup_variables"):
         ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+
+
+def test_setup_variables_concept_sets_enrich_var_with_feature_info(omop_connection_vanilla):
+    """Each field of the concept table lists the values of the concepts of a set, in the order of the set.
+
+    The concept table of the toy CDM holds the source concepts, which the measurement concepts are mapped from.
+    """
+    con = omop_connection_vanilla
+    edata = _setup_measurement(
+        con, {"combined": [3022318, 3031147], "absent": [123456789]}, enrich_var_with_feature_info=True
+    )
+
+    assert edata.var["concept_name"].tolist() == ["Heart Rhythm; Calculated Total CO2|Blood|Blood Gas", ""]
+    assert edata.var.loc["combined", "concept_code"] == "220048; 50804"
+    assert edata.var.loc["combined", "vocabulary_id"] == "mimiciv_meas_chart; mimiciv_meas_lab_loinc"
+    assert edata.var["concept_ids"].tolist() == ["3022318,3031147", "123456789"]
+
+    reversed_order = _setup_measurement(con, {"combined": [3031147, 3022318]}, enrich_var_with_feature_info=True)
+    assert reversed_order.var.loc["combined", "concept_name"] == "Calculated Total CO2|Blood|Blood Gas; Heart Rhythm"

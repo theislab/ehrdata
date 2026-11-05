@@ -253,6 +253,37 @@ def _create_feature_unit_concept_id_report(
     return df
 
 
+def _concept_set_feature_info(backend_handle, concept_sets, concepts) -> pd.DataFrame:
+    """One row per concept set: each field of the concept table for the concepts of the set, joined by '; ' in the order of the set.
+
+    As for single concepts, a concept id that the concept table lacks is looked up by its 'Mapped from' relationship; a concept found in neither gives an empty value.
+    """
+    by_id = concepts.drop_duplicates("concept_id").set_index("concept_id")
+    ids = [concept_id for set_ids in concept_sets.values() for concept_id in set_ids]
+    mapped: dict = {}
+    if any(concept_id not in by_id.index for concept_id in ids):
+        logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
+        relationships = backend_handle.sql(
+            "SELECT concept_id_1, concept_id_2 FROM concept_relationship WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)"
+        ).df()
+        mapped = relationships.drop_duplicates("concept_id_1").set_index("concept_id_1")["concept_id_2"].to_dict()
+
+    def record(concept_id):
+        concept_id = concept_id if concept_id in by_id.index else mapped.get(concept_id)
+        return by_id.loc[concept_id] if concept_id in by_id.index else None
+
+    rows = []
+    for set_ids in concept_sets.values():
+        records = [record(concept_id) for concept_id in set_ids]
+        rows.append(
+            {
+                field: "; ".join("" if r is None or pd.isna(r[field]) else str(r[field]) for r in records)
+                for field in by_id.columns
+            }
+        )
+    return pd.DataFrame(rows, columns=by_id.columns)
+
+
 def _create_enriched_var_with_unit_info(backend_handle, ds, var, unit_report) -> pd.DataFrame:
     feature_concept_id_table = var  # ds["data_table_concept_id"].to_pandas()
 
@@ -448,7 +479,8 @@ def setup_variables(
             A mapping of names to concept IDs, such as `{"name": [concept_id_1, concept_id_2]}`, defines concept sets:
             each set is one variable, named by its key and in the order of the mapping, that combines the data points of its concepts.
             The variables are the sets, also those without data points, and `.var["concept_ids"]` lists the concept IDs of each.
-            Concept sets take one data table, a concept may belong to one set only, and `enrich_var_with_feature_info` is not available for them.
+            Concept sets take one data table, and a concept may belong to one set only.
+            With `enrich_var_with_feature_info`, each field of the `concept` table, such as `concept_name`, lists the values of the concepts of a set, joined by `"; "` in the order of the set.
             With `enrich_var_with_unit_info`, the columns of the unit's concept are prefixed with `unit_`.
             The long format table then holds the column `variable` in place of `data_table_concept_id`, and the unit report is keyed by `variable` in place of `concept_id`.
         aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
@@ -517,7 +549,7 @@ def setup_variables(
     _check_valid_num_intervals(num_intervals)
     concept_sets = None
     if isinstance(concept_ids, Mapping):
-        concept_sets = _check_valid_concept_sets(concept_ids, data_tables, enrich_var_with_feature_info)
+        concept_sets = _check_valid_concept_sets(concept_ids, data_tables)
         concept_ids = [concept_id for ids in concept_sets.values() for concept_id in ids]
     else:
         _check_valid_concept_ids(concept_ids)
@@ -620,8 +652,10 @@ def setup_variables(
             concepts = backend_handle.sql("SELECT * FROM concept").df()
             concepts.columns = concepts.columns.str.lower()
 
-            if enrich_var_with_feature_info and any(
-                elem not in set(concepts["concept_id"]) for elem in var["data_table_concept_id"]
+            if (
+                enrich_var_with_feature_info
+                and not concept_sets
+                and any(elem not in set(concepts["concept_id"]) for elem in var["data_table_concept_id"])
             ):
                 concept_mapping = True
                 logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
@@ -637,7 +671,9 @@ def setup_variables(
                     var["data_table_concept_id"]
                 )
 
-        if enrich_var_with_feature_info:
+        if enrich_var_with_feature_info and concept_sets:
+            var = pd.concat([var, _concept_set_feature_info(backend_handle, concept_sets, concepts)], axis=1)
+        elif enrich_var_with_feature_info:
             if concept_mapping:
                 var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id_mapped", right_on="concept_id")
             else:
