@@ -179,9 +179,74 @@ def _check_valid_concept_ids(concept_ids) -> None:
 
 
 def _check_valid_aggregation_strategy(aggregation_strategy) -> None:
-    if aggregation_strategy not in AGGREGATION_STRATEGY_KEY:
+    if not isinstance(aggregation_strategy, str) or aggregation_strategy not in AGGREGATION_STRATEGY_KEY:
         msg = f"aggregation_strategy must be one of {AGGREGATION_STRATEGY_KEY.keys()}."
         raise TypeError(msg)
+
+
+def _check_valid_aggregation_strategy_mapping(aggregation_strategy, *, concept_sets: bool) -> dict:
+    """Check the keys and strategies of an aggregation_strategy mapping, and return it with integer concept ids as keys."""
+    checked = {}
+    for key, strategy in aggregation_strategy.items():
+        _check_valid_aggregation_strategy(strategy)
+        if concept_sets:
+            if not isinstance(key, str):
+                msg = f"With concept sets, aggregation_strategy is keyed by the names of the sets, but has the key {key!r}."
+                raise TypeError(msg)
+        elif not isinstance(key, int | np.integer) or isinstance(key, bool):
+            msg = f"aggregation_strategy is keyed by integer concept ids, but has the key {key!r}."
+            raise TypeError(msg)
+        checked[key if concept_sets else int(key)] = strategy
+    return checked
+
+
+def _check_valid_aggregation_fill_values(table_strategies, data_field_to_keep, numeric_fields, *, sparse: bool) -> None:
+    """Check that the strategies of each data table can be instantiated together.
+
+    'count' fills the empty cells of its variables with 0, every other strategy with NaN, and data_field_to_keep='is_present' always with NaN.
+    A table that mixes 'count' with other strategies is a float tensor, which a non-numeric data field cannot be, and sparse=True needs one fill value for all tables.
+    """
+    fill_values = set()
+    for table, strategies in table_strategies.items():
+        if not strategies or data_field_to_keep[table][0] == "is_present":
+            fill_values.add("nan")
+            continue
+        counted = {strategy == "count" for strategy in strategies.values()}
+        if counted == {True, False} and not numeric_fields[table]:
+            msg = (
+                f"aggregation_strategy mixes 'count' with other strategies, which needs a numeric data field, "
+                f"but '{data_field_to_keep[table][0]}' of '{table}' is not."
+            )
+            raise TypeError(msg)
+        fill_values.add("mixed" if counted == {True, False} else ("zero" if counted == {True} else "nan"))
+    if sparse and (len(fill_values) > 1 or "mixed" in fill_values):
+        msg = (
+            "sparse=True needs one fill value, but aggregation_strategy 'count' fills empty cells with 0 and the "
+            "other strategies, as well as data_field_to_keep='is_present', with NaN. Set up these variables in separate calls."
+        )
+        raise ValueError(msg)
+
+
+def _check_valid_aggregation_strategies(aggregation_strategy, variables_of_table, requested_concept_ids) -> dict:
+    """Check a mapping of variables to aggregation strategies against the variables of the data tables.
+
+    Every variable needs a strategy. A key that is no variable raises, unless it is one of requested_concept_ids, which can be without data.
+    Returns the strategies of the variables of each data table.
+    """
+    variables = [variable for table_variables in variables_of_table.values() for variable in table_variables]
+    missing = [variable for variable in variables if variable not in aggregation_strategy]
+    if missing:
+        msg = f"aggregation_strategy has no strategy for the variable(s) {missing[:5]}{' ...' if len(missing) > 5 else ''}."
+        raise ValueError(msg)
+    known = set(variables) | set(requested_concept_ids)
+    unknown = [key for key in aggregation_strategy if key not in known]
+    if unknown:
+        msg = f"aggregation_strategy has strategies for {unknown[:5]}, which are no variables of the data tables."
+        raise ValueError(msg)
+    return {
+        table: {variable: aggregation_strategy[variable] for variable in table_variables}
+        for table, table_variables in variables_of_table.items()
+    }
 
 
 def _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info) -> None:
