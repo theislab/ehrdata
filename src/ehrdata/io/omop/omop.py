@@ -14,7 +14,10 @@ from ehrdata.io._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._check_arguments import (
     VALID_OBSERVATION_TABLES_JOIN,
     VALID_OBSERVATION_TABLES_SINGLE,
+    _check_valid_aggregation_fill_values,
+    _check_valid_aggregation_strategies,
     _check_valid_aggregation_strategy,
+    _check_valid_aggregation_strategy_mapping,
     _check_valid_backend_handle,
     _check_valid_clip_to_end_date,
     _check_valid_clip_to_end_date_for_observation_table,
@@ -304,6 +307,30 @@ def _create_enriched_var_with_unit_info(backend_handle, ds, var, unit_report) ->
     return feature_concept_id_unit_info_table
 
 
+def _is_numeric_field(backend_handle, data_table: str, field: str) -> bool:
+    """Whether field of data_table is of a numeric type; 'is_present' is."""
+    if field == "is_present":
+        return True
+    column_types = {row[0].lower(): row[1] for row in backend_handle.execute(f"DESCRIBE {data_table}").fetchall()}
+    return column_types.get(field.lower(), "").startswith(
+        (
+            "TINYINT",
+            "SMALLINT",
+            "INTEGER",
+            "BIGINT",
+            "HUGEINT",
+            "UTINYINT",
+            "USMALLINT",
+            "UINTEGER",
+            "UBIGINT",
+            "UHUGEINT",
+            "FLOAT",
+            "DOUBLE",
+            "DECIMAL",
+        )
+    )
+
+
 def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
     """Setup a connection to the OMOP CDM database.
 
@@ -424,8 +451,9 @@ def setup_variables(
     clip_to_end_date: bool = True,
     num_intervals: int,
     concept_ids: Literal["all"] | Sequence[int] | Mapping[str, Sequence[int]] = "all",
-    aggregation_strategy: Literal[
-        "last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"
+    aggregation_strategy: Literal["last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"]
+    | Mapping[
+        int | str, Literal["last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"]
     ] = "last",
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
@@ -492,6 +520,11 @@ def setup_variables(
             Exempt are `'count'` and `data_field_to_keep='is_present'`, whose values are numbers of data points and hence carry no unit.
             For `'mode'`, of several equally frequent values the smallest is kept.
             Intervals without data points hold 0 for `'count'`, and a missing value for every other strategy and for `data_field_to_keep='is_present'`.
+            A mapping sets a strategy per variable, keyed by its integer concept ID, or by its name for concept sets, such as `{"heart_rate": "median", "urine_output": "sum"}`.
+            Every variable needs a strategy, and a key that is no variable raises, unless it is one of `concept_ids` without data points.
+            Rows without a concept ID then belong to no variable, and a concept in several data tables has one strategy in all of them.
+            A data table whose variables mix `'count'` with other strategies is a float tensor with 0 in the empty intervals of the counted variables, and needs a numeric data field;
+            `sparse=True` raises for it, as a sparse array has one fill value.
         enrich_var_with_feature_info: Whether to enrich the var table with feature
            information. If a concept_id is not found in the concept table, their respective alternate `concept_id` included in the concept_relationship table is retrieved to add the available feature information.
            Otherwise the feature information will be NaN.
@@ -554,7 +587,13 @@ def setup_variables(
     else:
         _check_valid_concept_ids(concept_ids)
     key_column = "variable" if concept_sets else "data_table_concept_id"
-    _check_valid_aggregation_strategy(aggregation_strategy)
+    strategy_map = None
+    if isinstance(aggregation_strategy, Mapping):
+        strategy_map = _check_valid_aggregation_strategy_mapping(
+            aggregation_strategy, concept_sets=concept_sets is not None
+        )
+    else:
+        _check_valid_aggregation_strategy(aggregation_strategy)
     _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
     _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info)
     _check_valid_sparse(sparse, instantiate_tensor)
@@ -580,6 +619,31 @@ def setup_variables(
     )
     n_obs = edata.n_obs
 
+    table_strategies = None
+    if strategy_map is not None:
+        # the variables are the concepts with a concept id: with strategies per variable, rows without one belong to no variable
+        variables_of_table = (
+            {data_tables[0]: list(concept_sets)}
+            if concept_sets
+            else {
+                data_table: sorted(
+                    int(row[0])
+                    for row in backend_handle.execute(
+                        f"SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id FROM {data_table} "
+                        f"WHERE {_concept_ids_condition(data_table, concept_ids)} AND {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id IS NOT NULL"
+                    ).fetchall()
+                )
+                for data_table in data_tables
+            }
+        )
+        requested = [] if concept_sets or concept_ids == "all" else [int(concept_id) for concept_id in concept_ids]
+        table_strategies = _check_valid_aggregation_strategies(strategy_map, variables_of_table, requested)
+        numeric_fields = {
+            data_table: _is_numeric_field(backend_handle, data_table, data_field_to_keep[data_table][0])
+            for data_table in data_tables
+        }
+        _check_valid_aggregation_fill_values(table_strategies, data_field_to_keep, numeric_fields, sparse=sparse)
+
     var_collector = {}
     r_collector = {}
     unit_report_collector = {}
@@ -601,15 +665,32 @@ def setup_variables(
             continue
 
         unit_fields = _get_unit_fields(backend_handle, data_table)
-        _check_one_unit_per_feature_for_aggregation(
-            backend_handle,
-            data_table,
-            data_field_to_keep[data_table][0],
-            aggregation_strategy,
-            unit_fields,
-            concept_ids=concept_ids,
-            concept_sets=concept_sets,
-        )
+        strategies = table_strategies[data_table] if table_strategies is not None else None
+        variables_of_strategy: dict = {}
+        for variable, strategy in (strategies or {}).items():
+            variables_of_strategy.setdefault(strategy, []).append(variable)
+        for strategy, variables in (variables_of_strategy or {aggregation_strategy: None}).items():
+            # each variable is checked with its own strategy
+            strategy_sets = (
+                {name: concept_sets[name] for name in variables}
+                if concept_sets and variables is not None
+                else concept_sets
+            )
+            if variables is None:
+                strategy_concept_ids = concept_ids
+            elif concept_sets:
+                strategy_concept_ids = [concept_id for name in variables for concept_id in concept_sets[name]]
+            else:
+                strategy_concept_ids = variables
+            _check_one_unit_per_feature_for_aggregation(
+                backend_handle,
+                data_table,
+                data_field_to_keep[data_table][0],
+                strategy,
+                unit_fields,
+                concept_ids=strategy_concept_ids,
+                concept_sets=strategy_sets,
+            )
 
         _write_long_observed_table(
             backend_handle=backend_handle,
@@ -620,10 +701,11 @@ def setup_variables(
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
-            aggregation_strategy=aggregation_strategy,
+            aggregation_strategy="last" if strategies is not None else aggregation_strategy,
             concept_ids=concept_ids,
             link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
             concept_sets=concept_sets,
+            strategies=strategies,
         )
         _write_obs_names(backend_handle, data_table)
 
@@ -642,6 +724,8 @@ def setup_variables(
                     "concept_ids": [",".join(str(concept_id) for concept_id in ids) for ids in concept_sets.values()],
                 }
             )
+        elif table_strategies is not None:
+            var = pd.DataFrame({"data_table_concept_id": variables_of_table[data_table]})
         else:
             var = backend_handle.execute(
                 f"SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AS data_table_concept_id FROM {data_table} WHERE {_concept_ids_condition(data_table, concept_ids)}"
@@ -713,7 +797,9 @@ def setup_variables(
                 variables=var[key_column].to_numpy(),
                 n_obs=n_obs,
                 num_intervals=num_intervals,
-                aggregation_strategy=aggregation_strategy,
+                aggregation_strategy=[strategies[variable] for variable in var[key_column]]
+                if strategies is not None
+                else aggregation_strategy,
                 sparse=sparse,
                 key_column=key_column,
             )

@@ -3250,3 +3250,194 @@ def test_setup_variables_concept_sets_enrich_var_with_feature_info(omop_connecti
 
     reversed_order = _setup_measurement(con, {"combined": [3031147, 3022318]}, enrich_var_with_feature_info=True)
     assert reversed_order.var.loc["combined", "concept_name"] == "Calculated Total CO2|Blood|Blood Gas; Heart Rhythm"
+
+
+@pytest.mark.parametrize(
+    "strategies",
+    [
+        {3031147: "sum", 3022318: "last"},
+        {3031147: "median", 3022318: "count"},
+        {3031147: "count", 3022318: "max"},
+        {3031147: "mode", 3022318: "std"},
+    ],
+)
+def test_setup_variables_aggregation_strategy_per_variable(omop_connection_vanilla, strategies):
+    """A strategy per variable gives each variable what its strategy gives it alone."""
+    con = omop_connection_vanilla
+    _add_second_concept_values(con)
+    edata = _setup_measurement(con, [3031147, 3022318], aggregation_strategy=strategies)
+
+    concepts = edata.var["data_table_concept_id"].tolist()
+    for concept_id, strategy in strategies.items():
+        alone = _setup_measurement(con, [3031147, 3022318], aggregation_strategy=strategy)
+        index = concepts.index(concept_id)
+        np.testing.assert_array_equal(edata.X[:, index], alone.X[:, index])
+
+
+def test_setup_variables_aggregation_strategy_per_concept_set(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    _add_second_concept_values(con)
+    concept_sets = {"first": [3031147], "second": [3022318], "absent": [123456789]}
+    strategies = {"first": "sum", "second": "max", "absent": "count"}
+    edata = _setup_measurement(con, concept_sets, aggregation_strategy=strategies)
+
+    for index, (name, ids) in enumerate(concept_sets.items()):
+        alone = _setup_measurement(con, {name: ids}, aggregation_strategy=strategies[name])
+        np.testing.assert_array_equal(edata.X[:, index], alone.X[:, 0])
+    np.testing.assert_array_equal(edata.X[:, 2], np.zeros_like(edata.X[:, 2]))
+
+
+def test_setup_variables_aggregation_strategy_checks_the_units_per_variable(omop_connection_vanilla):
+    """Concept 3022318 has two units, which 'mean' cannot combine but 'last' can, whatever the other variable takes."""
+    con = omop_connection_vanilla
+    _add_second_concept_values(con)
+    _add_second_concept_values(con, unit_concept_id=8753, unit_source_value="mmol/L")
+    con.execute("UPDATE measurement SET measurement_id = measurement_id + 1000 WHERE unit_concept_id = 8753")
+
+    with pytest.raises(NotImplementedError, match="3022318"):
+        _setup_measurement(con, [3031147, 3022318], aggregation_strategy={3031147: "last", 3022318: "mean"})
+    _setup_measurement(con, [3031147, 3022318], aggregation_strategy={3031147: "mean", 3022318: "last"})
+
+
+def test_setup_variables_aggregation_strategy_sparse(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    strategies = {3031147: "sum", 3022318: "max"}
+    dense = _setup_measurement(con, [3031147, 3022318], aggregation_strategy=strategies)
+    sparse_edata = _setup_measurement(con, [3031147, 3022318], aggregation_strategy=strategies, sparse=True)
+    np.testing.assert_array_equal(sparse_edata.X.todense(), dense.X)
+
+    with pytest.raises(ValueError, match="sparse=True needs one fill value"):
+        _setup_measurement(
+            con, [3031147, 3022318], aggregation_strategy={3031147: "sum", 3022318: "count"}, sparse=True
+        )
+
+
+def test_setup_variables_aggregation_strategy_for_a_requested_concept_without_data(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = _setup_measurement(con, [3031147, 123456789], aggregation_strategy={3031147: "sum", 123456789: "max"})
+
+    assert edata.var["data_table_concept_id"].tolist() == [3031147]
+
+
+@pytest.mark.parametrize(
+    ("concept_ids", "aggregation_strategy", "error", "match"),
+    [
+        ("all", {3031147: "sum"}, ValueError, r"no strategy for the variable\(s\) \[3022318\]"),
+        ([3031147], {3031147: "sum", 3022318: "max"}, ValueError, "which are no variables"),
+        ({"a": [3031147]}, {"a": "sum", "b": "max"}, ValueError, "which are no variables"),
+        ({"a": [3031147]}, {"a": "average"}, TypeError, "aggregation_strategy must be one of"),
+    ],
+)
+def test_setup_variables_illegal_aggregation_strategy_per_variable(
+    omop_connection_vanilla, concept_ids, aggregation_strategy, error, match
+):
+    with pytest.raises(error, match=match):
+        _setup_measurement(omop_connection_vanilla, concept_ids, aggregation_strategy=aggregation_strategy)
+
+
+def test_setup_interval_variables_rejects_aggregation_strategy_per_variable(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    with pytest.raises(TypeError, match="aggregation_strategy must be one of"):
+        ed.io.omop.setup_interval_variables(
+            edata,
+            backend_handle=con,
+            data_tables=["drug_exposure"],
+            data_field_to_keep=["days_supply"],
+            interval_length_number=1,
+            interval_length_unit="day",
+            num_intervals=4,
+            aggregation_strategy={19073183: "sum"},
+        )
+
+
+def test_setup_variables_aggregation_strategy_mapping_of_one_strategy_equals_the_strategy(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    for strategy in ["count", "mean"]:
+        alone = _setup_measurement(con, "all", aggregation_strategy=strategy)
+        mapping = _setup_measurement(con, "all", aggregation_strategy={3031147: strategy, np.int64(3022318): strategy})
+        assert mapping.X.dtype == alone.X.dtype
+        np.testing.assert_array_equal(mapping.X, alone.X)
+
+
+def test_setup_variables_aggregation_strategy_over_several_data_tables(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["measurement", "observation"],
+        "data_field_to_keep": {"measurement": "value_as_number", "observation": "value_as_number"},
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 4,
+    }
+    concepts = ed.io.omop.setup_variables(edata, **kwargs).var["data_table_concept_id"].tolist()
+    # all of measurement count, observation is aggregated otherwise: int and float tables are concatenated
+    strategies = dict.fromkeys(concepts[:2], "count") | dict.fromkeys(concepts[2:], "max")
+    mixed = ed.io.omop.setup_variables(edata, aggregation_strategy=strategies, **kwargs)
+
+    counted = ed.io.omop.setup_variables(edata, aggregation_strategy="count", **kwargs)
+    largest = ed.io.omop.setup_variables(edata, aggregation_strategy="max", **kwargs)
+    np.testing.assert_array_equal(mixed.X[:, :2], counted.X[:, :2])
+    np.testing.assert_array_equal(mixed.X[:, 2:], largest.X[:, 2:])
+
+
+def test_setup_variables_aggregation_strategy_without_concept_id(omop_connection_vanilla):
+    """With a strategy per variable, rows without a concept id belong to no variable."""
+    con = omop_connection_vanilla
+    con.execute("UPDATE measurement SET measurement_concept_id = NULL WHERE measurement_id = 1")
+    edata = _setup_measurement(con, "all", aggregation_strategy={3031147: "sum", 3022318: "count"})
+
+    assert edata.var["data_table_concept_id"].tolist() == [3022318, 3031147]
+
+
+def test_setup_variables_aggregation_strategy_is_present_sparse(omop_connection_vanilla):
+    """data_field_to_keep='is_present' fills NaN whatever the strategy, so count next to others can be sparse."""
+    con = omop_connection_vanilla
+    kwargs = {"data_field_to_keep": ["is_present"], "aggregation_strategy": {3031147: "count", 3022318: "mean"}}
+    dense = _setup_measurement(con, [3031147, 3022318], **kwargs)
+    np.testing.assert_array_equal(
+        _setup_measurement(con, [3031147, 3022318], sparse=True, **kwargs).X.todense(), dense.X
+    )
+
+
+def test_setup_variables_aggregation_strategy_quoted_set_name(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = _setup_measurement(
+        con, {"it's": [3031147], "other": [3022318]}, aggregation_strategy={"it's": "sum", "other": "count"}
+    )
+
+    np.testing.assert_array_equal(edata.X[:, 0], _setup_measurement(con, [3031147], aggregation_strategy="sum").X[:, 0])
+
+
+@pytest.mark.parametrize(
+    ("concept_ids", "aggregation_strategy", "data_field_to_keep", "error", "match"),
+    [
+        (
+            [3031147, 3022318],
+            {"3031147": "sum", "3022318": "max"},
+            ["value_as_number"],
+            TypeError,
+            "integer concept ids",
+        ),
+        ([3031147, 3022318], {True: "sum", 3022318: "max"}, ["value_as_number"], TypeError, "integer concept ids"),
+        ({"a": [3031147]}, {3031147: "sum"}, ["value_as_number"], TypeError, "names of the sets"),
+        (
+            [3031147, 3022318],
+            {3031147: "last", 3022318: "count"},
+            ["unit_source_value"],
+            TypeError,
+            "needs a numeric data field",
+        ),
+    ],
+)
+def test_setup_variables_illegal_aggregation_strategy_keys_and_fields(
+    omop_connection_vanilla, concept_ids, aggregation_strategy, data_field_to_keep, error, match
+):
+    with pytest.raises(error, match=match):
+        _setup_measurement(
+            omop_connection_vanilla,
+            concept_ids,
+            aggregation_strategy=aggregation_strategy,
+            data_field_to_keep=data_field_to_keep,
+        )

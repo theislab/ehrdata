@@ -460,6 +460,13 @@ def _write_obs_names(backend_handle: duckdb.DuckDBPyConnection, data_table: str)
     )
 
 
+def _sql_literal(value: int | str) -> str:
+    """The SQL literal of value: an integer, or a string in single quotes."""
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    return str(int(value))
+
+
 def _write_long_observed_table(
     backend_handle: duckdb.DuckDBPyConnection,
     *,
@@ -474,9 +481,12 @@ def _write_long_observed_table(
     concept_ids: Literal["all"] | Sequence[int] = "all",
     link_visits: bool = False,
     concept_sets: Mapping[str, Sequence[int]] | None = None,
+    strategies: Mapping[int | str, str] | None = None,
 ) -> None:
     """Write `long_person_timestamp_feature_value_<data_table>` with one row per observed (observation, concept, interval).
 
+    With strategies, the aggregation_strategy of each variable, keyed like the variables: by concept id, or by the name of the concept set.
+    All strategies aggregate the same observed rows, which are read from the data table once.
     With concept_sets, a row per observed (observation, variable, interval) instead: the rows of the concepts of a set are aggregated together, and the column `variable` holds the name of the set in place of `data_table_concept_id`.
 
     Each row of the data_table is joined to the observations of its person whose time window holds it, and binned into its interval there.
@@ -497,14 +507,11 @@ def _write_long_observed_table(
     ]
     kept_select = "".join(f", d.{column}" for column in kept_columns)
 
-    value_query = _generate_value_query(
-        "observed_rows",
-        data_field_to_keep,
-        AGGREGATION_STRATEGY_KEY[aggregation_strategy],
-        datetime_col,
-        unit_fields=unit_fields,
-        finer_datetime_columns=finer_datetime_cols,
-    )
+    variables_of_strategy: dict[str, list] = {}
+    for variable, strategy in (strategies or {}).items():
+        variables_of_strategy.setdefault(strategy, []).append(variable)
+    if not variables_of_strategy:
+        variables_of_strategy = {aggregation_strategy: []}
 
     if concept_sets is None:
         key_column, key_select, variable_join = "data_table_concept_id", f"d.{concept_key}", ""
@@ -518,6 +525,33 @@ def _write_long_observed_table(
             columns=["variable", "concept_id"],
         )
 
+    groups = []
+    for strategy, variables in variables_of_strategy.items():
+        value_query = _generate_value_query(
+            "observed_rows",
+            data_field_to_keep,
+            AGGREGATION_STRATEGY_KEY[strategy],
+            datetime_col,
+            unit_fields=unit_fields,
+            finer_datetime_columns=finer_datetime_cols,
+        )
+        condition = (
+            f"WHERE {key_column} IN ({', '.join(_sql_literal(variable) for variable in variables)})"
+            if len(variables_of_strategy) > 1
+            else ""
+        )
+        groups.append(
+            f"""
+            SELECT obs_id, person_id, {key_column}, interval_step,
+                start_date + to_microseconds(interval_step * {interval_us}) AS interval_start,
+                start_date + to_microseconds((interval_step + 1) * {interval_us}) AS interval_end,
+                {value_query}, obs_index
+            FROM observed_rows
+            {condition}
+            GROUP BY obs_id, obs_index, person_id, start_date, {key_column}, interval_step"""
+        )
+    observed_cells = " UNION ALL ".join(groups)
+
     table = f"long_person_timestamp_feature_value_{data_table}"
     try:
         if concept_sets is not None:
@@ -527,7 +561,7 @@ def _write_long_observed_table(
             f"""
         CREATE TABLE {table} AS
         WITH observations AS (SELECT obs_index, obs_id, person_id, start_date, end_date FROM {OBS_WINDOWS_TABLE}),
-        observed_rows AS (
+        observed_rows AS MATERIALIZED (
             SELECT o.obs_id, o.obs_index, o.person_id, o.start_date, {key_select} AS {key_column},
                 CAST(({row_time} - {start_time}) // {interval_us} AS INTEGER) AS interval_step, 1 AS is_present{kept_select}
             FROM ({_data_rows_query(data_table, link_visits=link_visits)}) AS d
@@ -538,14 +572,7 @@ def _write_long_observed_table(
                 AND {row_time} - {start_time} < {interval_us * num_intervals}
                 AND CAST(d.{datetime_col} AS DATE) <= o.end_date
         ),
-        observed_cells AS (
-            SELECT obs_id, person_id, {key_column}, interval_step,
-                start_date + to_microseconds(interval_step * {interval_us}) AS interval_start,
-                start_date + to_microseconds((interval_step + 1) * {interval_us}) AS interval_end,
-                {value_query}, obs_index
-            FROM observed_rows
-            GROUP BY obs_id, obs_index, person_id, start_date, {key_column}, interval_step
-        )
+        observed_cells AS ({observed_cells})
         SELECT * FROM observed_cells WHERE is_present IS NOT NULL
         """,
         )
@@ -562,13 +589,14 @@ def _instantiate_long_observed_table(
     variables: Sequence,
     n_obs: int,
     num_intervals: int,
-    aggregation_strategy: str,
+    aggregation_strategy: str | Sequence[str],
     sparse: bool,
     key_column: str = "data_table_concept_id",
 ):
     """The (n_obs, len(variables), num_intervals) array of `long_person_timestamp_feature_value_<data_table>`.
 
     variables are the values of key_column in the order of the variables: the concept ids, or the names of the concept sets.
+    aggregation_strategy is one strategy for all variables, or one per variable.
 
     Cells without a row hold 0 for `aggregation_strategy="count"`, and a missing value otherwise.
     The value field 'is_present' is 1 or missing whatever the aggregation_strategy, as its column holds the presence rather than the aggregate.
@@ -581,7 +609,20 @@ def _instantiate_long_observed_table(
     shape = (n_obs, len(variables), num_intervals)
     values = cells["value"]
 
-    if aggregation_strategy == "count" and value_field != "is_present":
+    strategies = (
+        [aggregation_strategy] * len(variables) if isinstance(aggregation_strategy, str) else list(aggregation_strategy)
+    )
+    counted = np.array([strategy == "count" for strategy in strategies]) & (value_field != "is_present")
+    if counted.any() and not counted.all():
+        # the variables that count data points hold 0 in their empty cells, the others a missing value
+        if sparse:
+            msg = "sparse=True needs one fill value, but aggregation_strategy 'count' fills empty cells with 0 and the other strategies with NaN."
+            raise ValueError(msg)
+        array = np.full(shape, np.nan)
+        array[:, counted] = 0
+        array[coords] = values.to_numpy(dtype=np.float64, na_value=np.nan)
+        return array
+    if counted.all() and len(strategies) > 0:
         dtype, fill_value = np.int64, 0
     elif pd.api.types.is_numeric_dtype(values) or pd.api.types.is_bool_dtype(values):
         dtype, fill_value = np.float64, np.nan
