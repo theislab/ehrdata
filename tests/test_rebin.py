@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 import dask.array as da
@@ -127,26 +126,17 @@ def test_rebin_tem_interval_step():
     rebinned = ed.rebin(edata, 2)
 
     pd.testing.assert_frame_equal(
-        rebinned.tem, pd.DataFrame({"interval_step": np.arange(3)}, index=pd.Index(["0", "1", "2"]))
+        rebinned.tem, pd.DataFrame({"interval_step": [0, 2, 4]}, index=pd.Index(["0", "1", "2"]))
     )
 
 
-def test_rebin_tem_interval_step_before_the_start():
+@pytest.mark.parametrize(("bin_size", "expected"), [(2, [-2, 0, 2]), (3, [-2, 1])])
+def test_rebin_tem_interval_step_before_the_start(bin_size, expected):
     edata = EHRData(X, tem=pd.DataFrame({"interval_step": np.arange(-2, 3)}))
 
-    rebinned = ed.rebin(edata, 2)
+    rebinned = ed.rebin(edata, bin_size)
 
-    np.testing.assert_array_equal(rebinned.tem["interval_step"], [-1, 0, 1])
-
-
-def test_rebin_tem_interval_step_not_aligned_with_the_start(caplog):
-    edata = EHRData(X, tem=pd.DataFrame({"interval_step": np.arange(-3, 2)}))
-
-    with caplog.at_level(logging.WARNING):
-        rebinned = ed.rebin(edata, 2)
-
-    assert "interval_step" not in rebinned.tem.columns
-    assert "no multiple of bin_size=2" in caplog.text
+    np.testing.assert_array_equal(rebinned.tem["interval_step"], expected)
 
 
 def test_rebin_keeps_annotations():

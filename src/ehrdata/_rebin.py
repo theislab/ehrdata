@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from functools import singledispatch
 from typing import TYPE_CHECKING, Literal
 
@@ -31,9 +30,7 @@ def rebin(
     Missing values (`NaN`) are ignored, and an interval without any observed value is missing.
     `"last"` and `"first"` keep the latest and the earliest observed value, and `"count"` is the number of observed values.
 
-    In `.tem`, the `interval_start_offset` and `time_value` of a new interval are the ones of its first timepoint, and the `interval_end_offset` the one of its last timepoint.
-    An integer `interval_step` column, which counts the timepoints from the start of an observation, then counts the new intervals: the new interval of steps `0` to `bin_size - 1` is step 0.
-    This needs the first step to be a multiple of `bin_size`, for instance `num_intervals_before` of :func:`~ehrdata.io.omop.setup_variables`; otherwise a new interval would hold timepoints on both sides of the start, and the column is dropped with a warning.
+    In `.tem`, the `interval_step`, `interval_start_offset` and `time_value` of a new interval are the ones of its first timepoint, and the `interval_end_offset` the one of its last timepoint.
     Other columns of `.tem` are dropped.
 
     Args:
@@ -91,18 +88,12 @@ def _rebin_tem(tem: pd.DataFrame, bin_size: int) -> pd.DataFrame:
     starts = np.arange(0, n_t, bin_size)
     ends = np.minimum(starts + bin_size, n_t) - 1
     rebinned = pd.DataFrame(index=pd.Index(np.arange(len(starts)).astype(str), name=tem.index.name))
-    if "interval_step" in tem.columns:
-        steps = tem["interval_step"].to_numpy()
-        if not np.issubdtype(steps.dtype, np.integer):
-            rebinned["interval_step"] = np.arange(len(starts))
-        elif n_t and steps[0] % bin_size == 0:
-            rebinned["interval_step"] = steps[starts] // bin_size
-        else:
-            logging.warning(
-                f"The first interval_step {steps[0]} is no multiple of bin_size={bin_size}, so the new intervals do not begin at "
-                "the start of the observation; .tem['interval_step'] is dropped."
-            )
-    for column, positions in (("interval_start_offset", starts), ("interval_end_offset", ends), ("time_value", starts)):
+    for column, positions in (
+        ("interval_step", starts),
+        ("interval_start_offset", starts),
+        ("interval_end_offset", ends),
+        ("time_value", starts),
+    ):
         if column in tem.columns:
             rebinned[column] = tem[column].to_numpy()[positions]
     return rebinned
