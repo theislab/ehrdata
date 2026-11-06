@@ -148,3 +148,60 @@ def test_ehrdataset_rejects_rows_the_variables_were_not_set_up_for(omop_connecti
     edata.obs_names = [f"other_{name}" for name in edata.obs_names]
     with pytest.raises(ValueError, match="were not set up for the rows"):
         ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"])
+
+
+def test_ehrdataset_items_match_the_tensor_with_intervals_before_the_start(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    con.execute(
+        """INSERT INTO measurement (measurement_id, person_id, measurement_concept_id, measurement_date,
+            measurement_datetime, value_as_number, unit_concept_id, unit_source_value)
+        SELECT 30 + person_id, person_id, 3022318, DATE '2099-12-30', TIMESTAMP '2099-12-30 12:00:00',
+            person_id, 9557, 'mEq/L' FROM person"""
+    )
+    edata = ed.io.omop.setup_obs(con, observation_table="person_observation_period", death_table=True)
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": "measurement",
+        "data_field_to_keep": "value_as_number",
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "num_intervals": 3,
+        "num_intervals_before": 4,
+    }
+    edata_tensor = ed.io.omop.setup_variables(edata, **kwargs)
+    edata = ed.io.omop.setup_variables(edata, instantiate_tensor=False, **kwargs)
+
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"], datetime=False)
+    assert ehr_dataset[0][0].shape == (edata.n_vars, 7)
+    assert torch.isfinite(torch.stack([ehr_dataset[i][0][:, :4] for i in range(edata.n_obs)])).any()
+    for obs_index in range(edata.n_obs):
+        expected = torch.tensor(edata_tensor.X[obs_index], dtype=torch.float32)
+        torch.testing.assert_close(ehr_dataset[obs_index][0], expected, equal_nan=True)
+
+
+def test_ehrdataset_items_match_the_tensor_of_a_subset_of_the_intervals(omop_connection_vanilla):
+    """An edata whose time axis is a subset of the intervals set up holds only these intervals."""
+    con = omop_connection_vanilla
+    con.execute(
+        """INSERT INTO measurement (measurement_id, person_id, measurement_concept_id, measurement_date,
+            measurement_datetime, value_as_number, unit_concept_id, unit_source_value)
+        SELECT 30 + person_id, person_id, 3022318, DATE '2099-12-30', TIMESTAMP '2099-12-30 12:00:00',
+            person_id, 9557, 'mEq/L' FROM person"""
+    )
+    edata = ed.io.omop.setup_obs(con, observation_table="person_observation_period", death_table=True)
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables="measurement",
+        data_field_to_keep="value_as_number",
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+        num_intervals_before=4,
+    )
+    subset = edata[:, :, 4:]
+
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, subset, data_tables=["measurement"], datetime=False)
+    for obs_index in range(subset.n_obs):
+        expected = torch.tensor(subset.X[obs_index], dtype=torch.float32)
+        torch.testing.assert_close(ehr_dataset[obs_index][0], expected, equal_nan=True)

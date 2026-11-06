@@ -4092,3 +4092,161 @@ def test_setup_interval_variables_interval_after_the_end_date(omop_connection_va
 
     # the fifth interval runs from 2100-01-29 to 2100-02-05
     np.testing.assert_array_equal(edata.X[0, 1], [0, 0, 0, 0, 0 if clip_to_end_date else 1, 0])
+
+
+LOOK_BACK_ROWS = {
+    # person 1, whose visit 1 starts on 2100-01-01 00:00: (time, value); the first lies before the two hours of the look-back
+    "measurement": """INSERT INTO measurement (measurement_id, person_id, measurement_concept_id, measurement_date,
+            measurement_datetime, value_as_number, unit_concept_id, unit_source_value, visit_occurrence_id)
+        VALUES (20, 1, 3022318, '2099-12-31', '2099-12-31 21:30:00', 1, 9557, 'mEq/L', 1),
+               (21, 1, 3022318, '2099-12-31', '2099-12-31 22:00:00', 2, 9557, 'mEq/L', 1),
+               (22, 1, 3022318, '2099-12-31', '2099-12-31 23:59:59', 3, 9557, 'mEq/L', 1),
+               (23, 1, 3022318, '2100-01-01', '2100-01-01 00:30:00', 4, 9557, 'mEq/L', 1)""",
+}
+
+
+@pytest.mark.parametrize("sparse", [False, True])
+def test_setup_variables_num_intervals_before(omop_connection_vanilla, sparse):
+    """The intervals before the start of an observation hold its data points there, at negative interval steps."""
+    con = omop_connection_vanilla
+    con.execute("DELETE FROM measurement WHERE person_id = 1")
+    con.execute(LOOK_BACK_ROWS["measurement"])
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="h",
+        time_precision="datetime",
+        num_intervals=2,
+        num_intervals_before=2,
+        concept_ids=[3022318],
+        aggregation_strategy="last",
+        sparse=sparse,
+    )
+    row = list(edata.obs["visit_occurrence_id"]).index(1)
+    x = edata.X.todense() if sparse else edata.X
+    assert list(edata.tem["interval_step"]) == [-2, -1, 0, 1]
+    np.testing.assert_array_equal(x[row, 0], [2, 3, 4, np.nan])
+    steps = con.execute(
+        "SELECT interval_step, interval_start FROM long_person_timestamp_feature_value_measurement "
+        f"WHERE obs_index = {row} ORDER BY interval_step"
+    ).fetchall()
+    assert [step for step, _ in steps] == [-2, -1, 0]
+    assert str(steps[0][1]) == "2099-12-31 22:00:00"
+
+
+def test_setup_variables_num_intervals_before_attributes_rows_to_the_visit_they_name(omop_connection_vanilla):
+    """In the intervals before a visit, a data point naming another visit of the person belongs to that one only."""
+    con = omop_connection_vanilla
+    con.execute("DELETE FROM measurement WHERE person_id = 1")
+    con.execute(
+        """INSERT INTO visit_occurrence (visit_occurrence_id, person_id, visit_concept_id, visit_start_date,
+            visit_start_datetime, visit_end_date, visit_end_datetime)
+        VALUES (10, 1, 9201, '2099-12-31', '2099-12-31 20:00:00', '2099-12-31', '2099-12-31 23:00:00')"""
+    )
+    con.execute(
+        """INSERT INTO measurement (measurement_id, person_id, measurement_concept_id, measurement_date,
+            measurement_datetime, value_as_number, unit_concept_id, unit_source_value, visit_occurrence_id)
+        VALUES (20, 1, 3022318, '2099-12-31', '2099-12-31 22:30:00', 1, 9557, 'mEq/L', 10),
+               (21, 1, 3022318, '2099-12-31', '2099-12-31 23:30:00', 2, 9557, 'mEq/L', NULL)"""
+    )
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="h",
+        time_precision="datetime",
+        num_intervals=1,
+        num_intervals_before=2,
+        concept_ids=[3022318],
+        aggregation_strategy="last",
+    )
+    visits = list(edata.obs["visit_occurrence_id"])
+    # visit 1 starts on 2100-01-01 00:00: the data point naming visit 10 is not in its look-back, the one naming no visit is
+    np.testing.assert_array_equal(edata.X[visits.index(1), 0], [np.nan, 2, np.nan])
+    np.testing.assert_array_equal(edata.X[visits.index(10), 0], [np.nan, np.nan, np.nan])
+
+
+def test_setup_variables_num_intervals_before_at_date_precision(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    con.execute("DELETE FROM measurement WHERE person_id = 1")
+    con.execute(LOOK_BACK_ROWS["measurement"])
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=1,
+        num_intervals_before=2,
+        concept_ids=[3022318],
+        aggregation_strategy="count",
+    )
+    row = list(edata.obs["person_id"]).index(1)
+    np.testing.assert_array_equal(edata.X[row, 0], [0, 3, 1])
+
+
+@pytest.mark.parametrize("setup_function", [ed.io.omop.setup_variables, ed.io.omop.setup_interval_variables])
+def test_setup_functions_num_intervals_before_leave_the_later_intervals_unchanged(
+    omop_connection_vanilla, setup_function
+):
+    """The intervals from the start of the observation on are those without a look-back."""
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    data_table = "measurement" if setup_function is ed.io.omop.setup_variables else "drug_exposure"
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": [data_table],
+        "data_field_to_keep": ["value_as_number" if data_table == "measurement" else "days_supply"],
+        "interval_length_number": 3,
+        "interval_length_unit": "day",
+        "num_intervals": 12,
+        "aggregation_strategy": "max",
+    }
+    plain = setup_function(edata, **kwargs)
+    look_back = setup_function(edata, num_intervals_before=5, **kwargs)
+    assert look_back.X.shape[2] == 17
+    np.testing.assert_array_equal(look_back.X[:, :, 5:], plain.X)
+
+
+def test_setup_interval_variables_num_intervals_before_with_intervals(omop_connection_vanilla):
+    """An exposure that starts before the observation belongs to the intervals before it that it covers."""
+    con = omop_connection_vanilla
+    con.execute("DELETE FROM drug_exposure WHERE person_id = 1")
+    con.execute(
+        """INSERT INTO drug_exposure (drug_exposure_id, person_id, drug_concept_id, drug_exposure_start_date,
+            drug_exposure_start_datetime, drug_exposure_end_date, drug_exposure_end_datetime, days_supply)
+        VALUES (10, 1, 19073183, '2099-12-25', '2099-12-25 12:00:00', '2100-01-02', '2100-01-02 00:00:00', 10)"""
+    )
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=7,
+        interval_length_unit="day",
+        num_intervals=2,
+        num_intervals_before=2,
+        aggregation_strategy="count",
+        keep_date="interval",
+    )
+
+    # the intervals start on 2099-12-18, 2099-12-25, 2100-01-01 and 2100-01-08
+    np.testing.assert_array_equal(edata.X[0, 1], [0, 1, 1, 0])
+
+
+@pytest.mark.parametrize(
+    ("num_intervals_before", "error"), [(-1, ValueError), (1.0, TypeError), (True, TypeError), ("1", TypeError)]
+)
+def test_setup_variables_illegal_num_intervals_before(omop_connection_vanilla, num_intervals_before, error):
+    with pytest.raises(error, match="num_intervals_before"):
+        _setup_measurement(omop_connection_vanilla, "all", num_intervals_before=num_intervals_before)

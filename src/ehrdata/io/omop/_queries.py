@@ -419,6 +419,11 @@ def _write_obs_names(backend_handle: duckdb.DuckDBPyConnection, data_table: str)
     )
 
 
+def _floor_division(numerator: str, denominator: int) -> str:
+    """SQL of the integer numerator divided by the positive integer denominator, rounded down, as `//` rounds towards zero."""
+    return f"((({numerator}) - ((({numerator}) % {denominator}) + {denominator}) % {denominator}) // {denominator})"
+
+
 def _sql_literal(value: int | str) -> str:
     """The SQL literal of value: an integer, or a string in single quotes."""
     if isinstance(value, str):
@@ -436,6 +441,7 @@ def _write_long_observed_table(
     num_intervals: int,
     aggregation_strategy: str,
     data_field_to_keep: Sequence[str],
+    num_intervals_before: int = 0,
     unit_fields: Sequence[str] = (),
     concept_ids: Literal["all"] | Sequence[int] = "all",
     link_visits: bool = False,
@@ -459,6 +465,7 @@ def _write_long_observed_table(
     A row without an end then belongs to the interval of its start only, and a row without a start to no interval. Its start, and the start of the interval, must not be after the end date of the observation.
     With link_visits, a row that names a visit of its person is joined to that visit only, see `_visit_condition`.
     Only the cells that receive a row carrying a value are aggregated and stored, so the table grows with the data rather than with observations x concepts x intervals.
+    The intervals run from num_intervals_before intervals before the start of the observation; interval_step counts from its start, so the earlier ones are negative.
     """
     interval_us = int(pd.Timedelta(interval_length_number, interval_length_unit) // pd.Timedelta(microseconds=1))
     time_key = "start" if keep_date == "interval" else keep_date
@@ -473,11 +480,13 @@ def _write_long_observed_table(
         # within the window and up to the interval of the end date of the observation;
         # the condition then keeps those that hold its start or its end, or that it covers.
         end_time = f"epoch_us(CAST(d.{_get_datetime_key('end', data_table, time_precision)} AS TIMESTAMP))"
-        start_step = f"({row_time} - {start_time}) // {interval_us}"
-        end_step = f"coalesce(({end_time} - {start_time}) // {interval_us}, {start_step})"
-        end_date_step = f"(epoch_us(CAST(o.end_date AS TIMESTAMP) + INTERVAL 1 DAY) - {start_time}) // {interval_us}"
+        start_step = _floor_division(f"{row_time} - {start_time}", interval_us)
+        end_step = f"coalesce({_floor_division(f'{end_time} - {start_time}', interval_us)}, {start_step})"
+        end_date_step = _floor_division(
+            f"epoch_us(CAST(o.end_date AS TIMESTAMP) + INTERVAL 1 DAY) - {start_time}", interval_us
+        )
         steps_join = (
-            f", unnest(range(greatest(0, least({start_step}, {end_step})), "
+            f", unnest(range(greatest({-num_intervals_before}, least({start_step}, {end_step})), "
             f"least({num_intervals - 1}, greatest({start_step}, {end_step}), {end_date_step}) + 1)) AS steps(step)"
         )
         interval_step = "steps.step"
@@ -490,8 +499,8 @@ def _write_long_observed_table(
                 AND CAST(o.start_date + to_microseconds(steps.step * {interval_us}) AS DATE) <= o.end_date"""
     else:
         steps_join = ""
-        interval_step = f"({row_time} - {start_time}) // {interval_us}"
-        time_condition = f"""{row_time} >= {start_time}
+        interval_step = _floor_division(f"{row_time} - {start_time}", interval_us)
+        time_condition = f"""{row_time} >= {start_time} - {interval_us * num_intervals_before}
                 AND {row_time} - {start_time} < {interval_us * num_intervals}
                 AND CAST(d.{datetime_col} AS DATE) <= o.end_date"""
     kept_columns = [
@@ -596,8 +605,9 @@ def _instantiate_long_observed_table(
     aggregation_strategy: str | Sequence[str],
     sparse: bool,
     key_column: str = "data_table_concept_id",
+    num_intervals_before: int = 0,
 ):
-    """The (n_obs, len(variables), num_intervals) array of `long_person_timestamp_feature_value_<data_table>`.
+    """The (n_obs, len(variables), num_intervals_before + num_intervals) array of `long_person_timestamp_feature_value_<data_table>`.
 
     variables are the values of key_column in the order of the variables: the concept ids, or the names of the concept sets.
     aggregation_strategy is one strategy for all variables, or one per variable.
@@ -609,8 +619,8 @@ def _instantiate_long_observed_table(
         f"SELECT obs_index, {key_column} AS key, interval_step, {value_field} AS value FROM long_person_timestamp_feature_value_{data_table}"
     ).df()
     var_index = pd.Index(variables).get_indexer(cells["key"])
-    coords = (cells["obs_index"].to_numpy(), var_index, cells["interval_step"].to_numpy())
-    shape = (n_obs, len(variables), num_intervals)
+    coords = (cells["obs_index"].to_numpy(), var_index, cells["interval_step"].to_numpy() + num_intervals_before)
+    shape = (n_obs, len(variables), num_intervals_before + num_intervals)
     values = cells["value"]
 
     strategies = (
