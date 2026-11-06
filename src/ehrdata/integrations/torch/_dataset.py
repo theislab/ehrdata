@@ -51,13 +51,7 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
             its field of `data_field_to_keep`, and in the cells without data 0 for the variables aggregated with `"count"` and NaN otherwise, as in its tensor.
             If a later call has replaced the long format table of the data table in the database, creating the dataset or reading an item raises a `ValueError`.
         target: The target variable to be used.
-            `"mortality"` is 1 if the `death` table has a death of the person in the window of the observation, else 0.
-            The date of a death is its `death_date`, or the date of its `death_datetime` if that is missing.
-            A death is in the window if its date is not after the end date of the observation, as OMOP end dates are inclusive, and it is not before the start:
-            with `datetime=True` its `death_datetime` is compared with the start datetime of the observation, and otherwise, or without `death_datetime`, its date with the start date.
-            With `observation_table="person"`, whose observations have no end, there is no upper bound; an observation of another table without an end date has no death in its window.
-        datetime: If True, compare `death_datetime` with the start datetime of the observation, if False, compare the dates.
-            By default, True if the variables were set up with `time_precision="datetime"`.
+        datetime: If True, use datetime, if False, use date.
         idxs: The positions in `edata.obs` of the observation units to be used, can be used to include only a
             subset of the data, for e.g. train-test splits.
     """
@@ -72,7 +66,7 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         *,
         data_tables: Sequence[Literal["measurement", "observation", "specimen"]],
         target: Literal["mortality"] = "mortality",
-        datetime: bool | None = None,
+        datetime: bool = True,
         idxs: Sequence[int] | None = None,
     ) -> None:
         super().__init__()
@@ -88,8 +82,6 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
                 "or the table was removed. Run setup_variables again for this edata."
             )
             raise ValueError(msg)
-        if datetime is None:
-            datetime = setup.get("time_precision") == "datetime"
         self.con = con
         self.edata = edata
         self.data_tables = data_tables
@@ -189,33 +181,6 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         self.rows = list(range(edata.n_obs)) if idxs is None else [int(row) for row in idxs]
         self.obs_names = [str(edata.obs_names[row]) for row in self.rows]
 
-        if target != "mortality":
-            msg = f"Target {target} is not implemented"
-            raise NotImplementedError(msg)
-        if "death" not in tables:
-            msg = "The target 'mortality' needs a 'death' table in the database."
-            raise ValueError(msg)
-        self.death_has_datetime = "death_datetime" in {
-            row[0].lower() for row in con.execute("DESCRIBE death").fetchall()
-        }
-        # the columns of .obs that hold the window of an observation
-        observation_table = edata.uns["omop_io_observation_table"]
-        columns = {column.lower(): column for column in edata.obs.columns}
-        keys = {
-            "start": DATA_TABLE_DATE_KEYS["start"][observation_table].get(
-                "datetime" if datetime else "date", DATA_TABLE_DATE_KEYS["start"][observation_table]["date"]
-            ),
-            "start_date": DATA_TABLE_DATE_KEYS["start"][observation_table]["date"],
-            "end_date": DATA_TABLE_DATE_KEYS["end"].get(observation_table, {}).get("date"),
-            "person_id": "person_id",
-        }
-        self.window_columns = {key: columns.get(column) if column else None for key, column in keys.items()}
-        # observations of the person table have no end; those of other tables without an end date have no death in their window
-        self.has_end = keys["end_date"] is not None
-        if self.window_columns["start"] is None or self.window_columns["person_id"] is None:
-            msg = f"The target 'mortality' needs the columns person_id and {keys['start']} in edata.obs, which setup_obs writes."
-            raise ValueError(msg)
-
     def __len__(self):
         return len(self.rows)
 
@@ -255,37 +220,33 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
             values = torch.tensor([cell[2] for cell in long_format_data], dtype=torch.float32)
             result.index_put_((feature_idx, step_idx), values)
 
-        # 1 if the death table has a death of the person in the window of the row of edata.obs, see the docstring;
-        # the window is that of the row, so that rows of the same person, such as repeated cohort entries, keep their own
+        if self.target != "mortality":
+            msg = f"Target {self.target} is not implemented"
+            raise NotImplementedError(msg)
+
+        # If the person has an entry in the death table within the observation's window, report 1, else 0.
+        # The window is that of the row of edata.obs, so that rows of the same person, such as repeated cohort entries, keep their own.
+        omop_io_observation_table = self.edata.uns["omop_io_observation_table"]
+
+        # Get the appropriate date/datetime column names based on precision
+        time_precision = "datetime" if self.datetime else "date"
+        start_date_col = DATA_TABLE_DATE_KEYS["start"][omop_io_observation_table].get(
+            time_precision, DATA_TABLE_DATE_KEYS["start"][omop_io_observation_table]["date"]
+        )
+        end_date_col = DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table].get(
+            time_precision, DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table]["date"]
+        )
+
         obs = self.edata.obs.iloc[row]
-        start, start_date, end_date = (
-            pd.to_datetime(obs[self.window_columns[key]]) if self.window_columns[key] is not None else pd.NaT
-            for key in ("start", "start_date", "end_date")
-        )
-        if pd.isna(start_date):
-            start_date = start.normalize() if not pd.isna(start) else pd.NaT
-        if pd.isna(start):
-            start = start_date
-        death_time = "death_datetime" if self.datetime and self.death_has_datetime else "NULL"
-        death_day = (
-            "coalesce(CAST(death_date AS DATE), CAST(death_datetime AS DATE))"
-            if self.death_has_datetime
-            else "CAST(death_date AS DATE)"
-        )
-        target_query = f"""
-        SELECT COUNT(*) > 0 FROM death
+        columns = {column.lower(): column for column in self.edata.obs.columns}
+        start, end = (pd.to_datetime(obs[columns[column]]) for column in (start_date_col, end_date_col))
+        target_query = """
+        SELECT COALESCE(MAX(CASE WHEN death_datetime BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) AS mortality
+        FROM death
         WHERE person_id = ?
-            AND CASE WHEN {death_time} IS NOT NULL THEN CAST({death_time} AS TIMESTAMP) >= ?
-                ELSE {death_day} >= CAST(? AS DATE) END
-            AND (NOT ? OR {death_day} <= CAST(? AS DATE))
         """
-        start, start_date, end_date = (
-            None if pd.isna(time) else time.to_pydatetime() for time in (start, start_date, end_date)
-        )
-        person_id = int(obs[self.window_columns["person_id"]])
-        targets = torch.tensor(
-            self.con.execute(target_query, [person_id, start, start_date, self.has_end, end_date]).fetchall(),
-            dtype=torch.float32,
-        )
+        window = [None if pd.isna(date) else date.to_pydatetime() for date in (start, end)]
+        person_id = int(obs[columns["person_id"]])
+        targets = torch.tensor(self.con.execute(target_query, [*window, person_id]).fetchall(), dtype=torch.float32)
 
         return result, targets
