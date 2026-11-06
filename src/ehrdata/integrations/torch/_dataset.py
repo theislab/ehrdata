@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Literal
 
 import pandas as pd
@@ -7,6 +7,23 @@ from duckdb import DuckDBPyConnection
 from ehrdata._compat import lazy_import_torch
 from ehrdata.core import EHRData
 from ehrdata.io.omop._queries import DATA_TABLE_CONCEPT_ID_TRUNK, DATA_TABLE_DATE_KEYS
+
+NUMERIC_TYPES = (
+    "TINYINT",
+    "SMALLINT",
+    "INTEGER",
+    "BIGINT",
+    "HUGEINT",
+    "UTINYINT",
+    "USMALLINT",
+    "UINTEGER",
+    "UBIGINT",
+    "UHUGEINT",
+    "FLOAT",
+    "DOUBLE",
+    "DECIMAL",
+    "BOOLEAN",
+)
 
 if TYPE_CHECKING:
     import torch
@@ -30,6 +47,9 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
             Its `.obs` defines the items: item `i` is the row `i` of the tensor that :func:`~ehrdata.io.omop.setup_variables` sets up for this `.obs`.
             Its `.var` and `.tem` define the variables and intervals of each item.
         data_tables: The OMOP data tables to extract.
+            The values are those of the last call of :func:`~ehrdata.io.omop.setup_variables` that returned `edata`, as recorded in `edata.uns['omop_io_variable_setup']`:
+            its field of `data_field_to_keep`, and in the cells without data 0 for the variables aggregated with `"count"` and NaN otherwise, as in its tensor.
+            If a later call has replaced the long format table of the data table in the database, creating the dataset or reading an item raises a `ValueError`.
         target: The target variable to be used.
         datetime: If True, use datetime, if False, use date.
         idxs: The positions in `edata.obs` of the observation units to be used, can be used to include only a
@@ -50,6 +70,18 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         idxs: Sequence[int] | None = None,
     ) -> None:
         super().__init__()
+        setup = edata.uns.get("omop_io_variable_setup")
+        if not isinstance(setup, Mapping) or data_tables[0] not in setup.get("data_tables", []):
+            msg = f"OMOPEHRDataset needs the EHRData returned by setup_variables for '{data_tables[0]}', which records its setup in .uns['omop_io_variable_setup']."
+            raise ValueError(msg)
+        tables = {row[0].lower() for row in con.execute("SELECT table_name FROM information_schema.tables").fetchall()}
+        long_table = f"long_person_timestamp_feature_value_{data_tables[0]}"
+        if long_table not in tables or f"{long_table}_obs" not in tables:
+            msg = (
+                f"The database has no long format table of '{data_tables[0]}' for edata: setup_variables found no data in it, "
+                "or the table was removed. Run setup_variables again for this edata."
+            )
+            raise ValueError(msg)
         self.con = con
         self.edata = edata
         self.data_tables = data_tables
@@ -84,12 +116,54 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
                 f"{'without' if self.key_column == 'variable' else 'with'} concept sets."
             )
             raise ValueError(msg)
+        obs_columns = {
+            row[0]
+            for row in con.execute(f"DESCRIBE long_person_timestamp_feature_value_{data_tables[0]}_obs").fetchall()
+        }
+        setup_ids = (
+            con.execute(
+                f"SELECT DISTINCT setup_id FROM long_person_timestamp_feature_value_{data_tables[0]}_obs"
+            ).fetchall()
+            if "setup_id" in obs_columns
+            else []
+        )
+        self.setup_id = setup["setup_id"]
+        if setup_ids != [(self.setup_id,)]:
+            msg = (
+                f"The long format table of '{data_tables[0]}' in the database was written by another call of setup_variables "
+                "or setup_interval_variables than the one that returned edata. Run setup_variables again for this edata."
+            )
+            raise ValueError(msg)
+        self.value_field = setup["data_field_to_keep"][data_tables[0]][0]
+        value_type = {
+            row[0]: row[1]
+            for row in con.execute(f"DESCRIBE long_person_timestamp_feature_value_{data_tables[0]}").fetchall()
+        }.get(self.value_field, "")
+        if self.value_field != "is_present" and not value_type.startswith(NUMERIC_TYPES):
+            msg = f"OMOPEHRDataset needs a numeric data field, but '{self.value_field}' of '{data_tables[0]}' is of type {value_type}."
+            raise TypeError(msg)
         self.variable_index = {variable: i for i, variable in enumerate(variables)}
+        # as in the tensor of setup_variables, the cells without data of counted variables hold 0
+        strategy = setup["aggregation_strategy"]
+        strategy_of = (
+            {} if isinstance(strategy, str) else dict(zip(strategy["variables"], strategy["strategies"], strict=True))
+        )
+        self.counted = [
+            i
+            for variable, i in self.variable_index.items()
+            if (strategy if isinstance(strategy, str) else strategy_of.get(str(variable))) == "count"
+            and self.value_field != "is_present"
+        ]
         self.n_variables = len(variables)
         self.n_timesteps = len(edata.tem)
         # the interval of each interval_step of the long format table, which counts from the start of the observation;
         # the intervals of edata may begin before the start, or be a subset of those set up
-        steps = edata.tem["interval_step"] if "interval_step" in edata.tem.columns else range(self.n_timesteps)
+        before = setup.get("num_intervals_before", 0)
+        steps = (
+            edata.tem["interval_step"]
+            if "interval_step" in edata.tem.columns
+            else range(-before, self.n_timesteps - before)
+        )
         self.step_index = {int(step): i for i, step in enumerate(steps)}
 
         # The obs_index of the long format table is the position in the .obs it was set up for; map the rows of edata to it by obs_names.
@@ -105,8 +179,7 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
             msg = f"The variables in '{data_tables[0]}' were not set up for the rows {missing[:5]} of edata.obs; run setup_variables on this edata."
             raise ValueError(msg)
         self.rows = list(range(edata.n_obs)) if idxs is None else [int(row) for row in idxs]
-        obs_index = [obs_index_of[name] for name in edata.obs_names]
-        self.obs_index = [obs_index[row] for row in self.rows]
+        self.obs_names = [str(edata.obs_names[row]) for row in self.rows]
 
     def __len__(self):
         return len(self.rows)
@@ -114,19 +187,33 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         row = self.rows[index]
 
+        # the position of the row in the .obs the variables were set up for, checked against the setup of edata at every item,
+        # as a later call can replace the long format table after the dataset was created
+        long_table = f"long_person_timestamp_feature_value_{self.data_tables[0]}"
+        obs_index = self.con.execute(
+            f"SELECT obs_index FROM {long_table}_obs WHERE obs_name = ? AND setup_id = ?",
+            [self.obs_names[index], self.setup_id],
+        ).fetchall()
+        if not obs_index:
+            msg = (
+                f"The long format table of '{self.data_tables[0]}' in the database was replaced by a later call of setup_variables "
+                "or setup_interval_variables. Run setup_variables again for this edata."
+            )
+            raise ValueError(msg)
         query = f"""
-            SELECT {self.key_column}, interval_step, COALESCE(CAST(value_as_number AS DOUBLE), 'NaN') AS value_as_number
-            FROM long_person_timestamp_feature_value_{self.data_tables[0]}
+            SELECT {self.key_column}, interval_step, COALESCE(CAST({self.value_field} AS DOUBLE), 'NaN') AS value
+            FROM {long_table}
             WHERE obs_index = ?
         """
         long_format_data = [
             cell
-            for cell in self.con.execute(query, [self.obs_index[index]]).fetchall()
+            for cell in self.con.execute(query, [obs_index[0][0]]).fetchall()
             if cell[0] in self.variable_index and cell[1] in self.step_index
         ]
 
         # convert long format to a variables x intervals tensor, with NaN in the cells without data
         result = torch.full((self.n_variables, self.n_timesteps), float("nan"))
+        result[self.counted] = 0
         if long_format_data:
             feature_idx = torch.tensor([self.variable_index[cell[0]] for cell in long_format_data])
             step_idx = torch.tensor([self.step_index[cell[1]] for cell in long_format_data])

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
@@ -524,6 +525,27 @@ def setup_obs(
     return EHRData(obs=obs, uns={"omop_io_observation_table": observation_table.split("person_")[-1]})
 
 
+def _variable_setup(setup_id: str, *, data_tables, data_field_to_keep, aggregation_strategy, **arguments) -> dict:
+    """The record of a call of the setup functions for `.uns['omop_io_variable_setup']`.
+
+    setup_id also marks the long format tables of the call in the database, see `_write_obs_names`.
+    The values are strings, numbers, booleans and dicts and lists of these, so that the EHRData can be written to disk;
+    a mapping of `aggregation_strategy` is stored as the lists `variables` and `strategies`, as variable names may contain "/", which a key on disk may not.
+    """
+    return {
+        "setup_id": setup_id,
+        "data_tables": list(data_tables),
+        "data_field_to_keep": {table: list(fields) for table, fields in data_field_to_keep.items()},
+        "aggregation_strategy": aggregation_strategy
+        if isinstance(aggregation_strategy, str)
+        else {
+            "variables": [str(variable) for variable in aggregation_strategy],
+            "strategies": list(aggregation_strategy.values()),
+        },
+        **arguments,
+    }
+
+
 def setup_variables(
     edata,
     *,
@@ -566,7 +588,8 @@ def setup_variables(
     A row without a start date in `.obs`, or without an end date unless `clip_to_end_date=False`, gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
 
     Writes a unit report of the features to `edata.uns['unit_report_<data_tables>']`.
-    Writes the setup arguments into `edata.uns['omop_io_variable_setup']`.
+    Writes the data tables, `data_field_to_keep`, the time axis, `aggregation_strategy` and `clip_to_end_date` into `edata.uns['omop_io_variable_setup']`, with a `setup_id` that also marks the long format tables of the call,
+    so that :class:`~ehrdata.integrations.torch.OMOPEHRDataset` reads the values of this call, and notices when a later call has replaced its tables.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
     Its `obs_index` is the position of the row in `edata.obs`; the table `long_person_timestamp_feature_value_<data_table>_obs` holds the `obs_names` of these rows.
@@ -736,6 +759,7 @@ def setup_variables(
         backend_handle, edata.obs, time_defining_table, time_precision, clip_to_end_date=clip_to_end_date
     )
     n_obs = edata.n_obs
+    setup_id = uuid.uuid4().hex
 
     table_strategies = variables_of_table = value_ranges = conversions_of_table = None
     if strategy_map is not None or value_range is not None or unit_conversions is not None:
@@ -861,7 +885,7 @@ def setup_variables(
             unit_conversions=table_unit_conversions,
             row_checks=row_checks,
         )
-        _write_obs_names(backend_handle, data_table)
+        _write_obs_names(backend_handle, data_table, setup_id)
 
         _check_one_unit_per_feature(backend_handle, data_table, key_column=key_column)
         unit_report = _create_feature_unit_concept_id_report(
@@ -979,15 +1003,30 @@ def setup_variables(
 
     var.index = var.pop("variable").to_numpy() if concept_sets else var.index.astype(str)
 
+    uns = {
+        **edata.uns,
+        "omop_io_variable_setup": _variable_setup(
+            setup_id,
+            data_tables=data_tables,
+            data_field_to_keep=data_field_to_keep,
+            time_precision=time_precision,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            num_intervals_before=num_intervals_before,
+            aggregation_strategy=strategy_map if strategy_map is not None else aggregation_strategy,
+            clip_to_end_date=clip_to_end_date,
+        ),
+    }
     # AnnData does not allow to set a layer with value None
     if instantiate_tensor:
         edata = (
-            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=uns, tem=tem)
             if layer is not None
-            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=uns, tem=tem)
         )
     else:
-        edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+        edata = EHRData(obs=edata.obs, var=var, uns=uns, tem=tem)
 
     for data_table, unit_report in unit_report_collector.items():
         edata.uns[f"unit_report_{data_table}"] = unit_report
@@ -1053,6 +1092,8 @@ def setup_interval_variables(
     In contrast to `setup_variables`, tables without unit information can be present here.
     Those tell no unit to verify or to carry along; the tables that do have a `unit_concept_id` are treated as in `setup_variables`.
     This function will not write a unit report. Should this be relevant for your work, please do open an issue on https://github.com/theislab/ehrdata.
+
+    Writes the setup arguments into `edata.uns['omop_io_variable_setup']`, as :func:`~ehrdata.io.omop.setup_variables` does.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
     Its `obs_index` is the position of the row in `edata.obs`; the table `long_person_timestamp_feature_value_<data_table>_obs` holds the `obs_names` of these rows.
@@ -1152,6 +1193,7 @@ def setup_interval_variables(
     _write_obs_windows(
         backend_handle, edata.obs, time_defining_table, time_precision, clip_to_end_date=clip_to_end_date
     )
+    setup_id = uuid.uuid4().hex
 
     var_collector = {}
     r_collector = {}
@@ -1197,7 +1239,7 @@ def setup_interval_variables(
                 )
             ],
         )
-        _write_obs_names(backend_handle, data_table)
+        _write_obs_names(backend_handle, data_table, setup_id)
 
         var = backend_handle.execute(
             f"SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AS data_table_concept_id FROM {data_table} WHERE {_concept_ids_condition(data_table, concept_ids)}"
@@ -1256,14 +1298,30 @@ def setup_interval_variables(
 
     var.index = var.index.astype(str)
 
+    uns = {
+        **edata.uns,
+        "omop_io_variable_setup": _variable_setup(
+            setup_id,
+            data_tables=data_tables,
+            data_field_to_keep=data_field_to_keep,
+            time_precision=time_precision,
+            interval_length_number=interval_length_number,
+            interval_length_unit=interval_length_unit,
+            num_intervals=num_intervals,
+            num_intervals_before=num_intervals_before,
+            aggregation_strategy=aggregation_strategy,
+            clip_to_end_date=clip_to_end_date,
+            keep_date=keep_date,
+        ),
+    }
     # AnnData does not allow to set a layer with value None
     if instantiate_tensor:
         edata = (
-            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=uns, tem=tem)
             if layer is not None
-            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=uns, tem=tem)
         )
     else:
-        edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+        edata = EHRData(obs=edata.obs, var=var, uns=uns, tem=tem)
 
     return edata

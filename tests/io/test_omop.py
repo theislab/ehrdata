@@ -2375,6 +2375,7 @@ def test_write_read_of_omop_setup(omop_connection_vanilla, observation_table, wr
     assert list(edata_read.obs.columns) == list(edata.obs.columns)
     assert list(edata_read.var.columns) == list(edata.var.columns)
     assert np.allclose(edata_read.layers[DEFAULT_TEM_LAYER_NAME], edata.layers[DEFAULT_TEM_LAYER_NAME], equal_nan=True)
+    assert edata_read.uns["omop_io_variable_setup"]["setup_id"] == edata.uns["omop_io_variable_setup"]["setup_id"]
     # datetimes read back as ISO 8601 strings of the same times
     for df, df_read in [(edata.obs, edata_read.obs), (edata.var, edata_read.var)]:
         datetime_columns = [column for column in df.columns if pd.api.types.is_datetime64_any_dtype(df[column])]
@@ -4509,3 +4510,64 @@ def test_setup_interval_variables_datetime_precision_ends_a_date_only_end_at_the
     )
     row = list(edata.obs["person_id"]).index(1)
     assert list(np.flatnonzero(edata.X[row, 0])) == list(expected_hours)
+
+
+@pytest.mark.parametrize("setup_function", [ed.io.omop.setup_variables, ed.io.omop.setup_interval_variables])
+def test_setup_functions_record_their_setup(omop_connection_vanilla, setup_function, tmp_path):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    is_measurement = setup_function is ed.io.omop.setup_variables
+    data_table = "measurement" if is_measurement else "drug_exposure"
+    result = setup_function(
+        edata,
+        backend_handle=con,
+        data_tables=[data_table],
+        data_field_to_keep=["value_as_number" if is_measurement else "days_supply"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+        num_intervals_before=2,
+        aggregation_strategy={3031147: "max", 3022318: "count"} if is_measurement else "max",
+    )
+
+    setup = result.uns["omop_io_variable_setup"]
+    assert "omop_io_variable_setup" not in edata.uns
+    assert setup["data_tables"] == [data_table]
+    assert setup["num_intervals"] == 3
+    assert setup["num_intervals_before"] == 2
+    assert setup["aggregation_strategy"] == (
+        {"variables": ["3031147", "3022318"], "strategies": ["max", "count"]} if is_measurement else "max"
+    )
+    setup_ids = con.execute(
+        f"SELECT DISTINCT setup_id FROM long_person_timestamp_feature_value_{data_table}_obs"
+    ).fetchall()
+    assert setup_ids == [(setup["setup_id"],)]
+    ed.io.write_zarr(result, tmp_path / "setup.zarr")
+    read_back = ed.io.read_zarr(tmp_path / "setup.zarr").uns["omop_io_variable_setup"]["aggregation_strategy"]
+    if is_measurement:
+        assert [list(read_back[key]) for key in ("variables", "strategies")] == [
+            ["3031147", "3022318"],
+            ["max", "count"],
+        ]
+    else:
+        assert read_back == "max"
+
+
+def test_setup_variables_record_is_writable_with_slashes_in_set_names(omop_connection_vanilla, tmp_path):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+        concept_ids={"co2/blood": [3031147], "rhythm": [3022318]},
+        aggregation_strategy={"co2/blood": "max", "rhythm": "count"},
+    )
+    ed.io.write_h5ed(edata, tmp_path / "sets.h5ed")
+    ed.io.write_zarr(edata, tmp_path / "sets.zarr")
+    read_back = ed.io.read_zarr(tmp_path / "sets.zarr").uns["omop_io_variable_setup"]["aggregation_strategy"]
+    assert list(read_back["variables"]) == ["co2/blood", "rhythm"]
