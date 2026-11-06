@@ -146,6 +146,33 @@ def _links_rows_to_visits(backend_handle: duckdb.DuckDBPyConnection, time_defini
 LINKED_VISIT = "ehrdata_linked_visit_occurrence_id"
 
 
+def _row_time(
+    backend_handle: duckdb.DuckDBPyConnection,
+    data_table: str,
+    key: Literal["timepoint", "start", "end"],
+    time_precision: Literal["date", "datetime"],
+    alias: str = "d",
+) -> str:
+    """The SQL TIMESTAMP of the time `key` of a row of data_table, at time_precision.
+
+    OMOP requires the dates of a row but not its datetimes. At datetime precision, a row without the datetime takes its date:
+    a start or timepoint at midnight, and an end, as OMOP end dates are inclusive, at the end of that day.
+    Only the time is filled in; the datetime column itself, which may be a kept field, stays as it is.
+    """
+    column = _get_datetime_key(key, data_table, time_precision)
+    time = f"CAST({alias}.{column} AS TIMESTAMP)"
+    date_key = DATA_TABLE_DATE_KEYS[key][data_table].get("date")
+    if time_precision != "datetime" or not date_key or date_key == column:
+        return time
+    columns = {row[0].lower() for row in backend_handle.execute(f"DESCRIBE {data_table}").fetchall()}
+    if date_key not in columns:
+        return time
+    date = f"CAST(CAST({alias}.{date_key} AS DATE) AS TIMESTAMP)"
+    if key == "end":
+        date = f"({date} + INTERVAL 1 DAY - INTERVAL 1 MICROSECOND)"
+    return f"coalesce({time}, {date})"
+
+
 def _data_rows_query(data_table: str, *, link_visits: bool) -> str:
     """The rows of data_table, with link_visits also the visit each row names in LINKED_VISIT.
 
@@ -369,6 +396,7 @@ def _write_obs_windows(
 
     obs_index is the position of the row in `obs`, so that the variables follow the rows of `.obs`, also after they were filtered or reordered since :func:`~ehrdata.io.omop.setup_obs`.
     The start and end dates are those of the columns written by :func:`~ehrdata.io.omop.setup_obs`; a row without a start date, or without an end date if clip_to_end_date, gets no data.
+    At datetime precision, a row without a start datetime starts at midnight of its start date.
     Without clip_to_end_date, and for the person table, the windows have no end date, which an end far in the future stands for.
     The long format tables are written from OBS_WINDOWS_TABLE, so this runs first.
     """
@@ -389,6 +417,17 @@ def _write_obs_windows(
         raise ValueError(msg)
 
     start_dates = pd.to_datetime(obs[columns[start_key]])
+    # at datetime precision, an observation without a start datetime starts at midnight of its start date
+    start_date_key = _get_datetime_key("start", time_defining_table, "date")
+    if start_date_key != start_key and start_date_key in columns and start_dates.isna().any():
+        dates = pd.to_datetime(obs[columns[start_date_key]]).dt.normalize()
+        if start_dates.dt.tz is not None:
+            dates = (
+                dates.dt.tz_localize(start_dates.dt.tz)
+                if dates.dt.tz is None
+                else dates.dt.tz_convert(start_dates.dt.tz)
+            )
+        start_dates = start_dates.fillna(dates)
     _check_valid_birthdates_for_person_table(start_dates, time_defining_table)
     windows = pd.DataFrame(
         {
@@ -484,13 +523,14 @@ def _write_long_observed_table(
     finer_datetime_cols = _finer_datetime_keys(time_key, data_table, time_precision)
     concept_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id"
 
-    row_time = f"epoch_us(CAST(d.{datetime_col} AS TIMESTAMP))"
+    row_timestamp = _row_time(backend_handle, data_table, time_key, time_precision)
+    row_time = f"epoch_us({row_timestamp})"
     start_time = "epoch_us(CAST(o.start_date AS TIMESTAMP))"
     if keep_date == "interval":
         # The candidate intervals of a row run from the interval of the earlier to that of the later of its start and end,
         # within the window and up to the interval of the end date of the observation;
         # the condition then keeps those that hold its start or its end, or that it covers.
-        end_time = f"epoch_us(CAST(d.{_get_datetime_key('end', data_table, time_precision)} AS TIMESTAMP))"
+        end_time = f"epoch_us({_row_time(backend_handle, data_table, 'end', time_precision)})"
         start_step = _floor_division(f"{row_time} - {start_time}", interval_us)
         end_step = f"coalesce({_floor_division(f'{end_time} - {start_time}', interval_us)}, {start_step})"
         end_date_step = _floor_division(
@@ -506,14 +546,14 @@ def _write_long_observed_table(
         time_condition = f"""(({row_time} >= {interval_start} AND {row_time} < {interval_end})
                     OR ({end_time} >= {interval_start} AND {end_time} < {interval_end})
                     OR ({row_time} < {interval_start} AND {end_time} >= {interval_end}))
-                AND CAST(d.{datetime_col} AS DATE) <= o.end_date
+                AND CAST({row_timestamp} AS DATE) <= o.end_date
                 AND CAST(o.start_date + to_microseconds(steps.step * {interval_us}) AS DATE) <= o.end_date"""
     else:
         steps_join = ""
         interval_step = _floor_division(f"{row_time} - {start_time}", interval_us)
         time_condition = f"""{row_time} >= {start_time} - {interval_us * num_intervals_before}
                 AND {row_time} - {start_time} < {interval_us * num_intervals}
-                AND CAST(d.{datetime_col} AS DATE) <= o.end_date"""
+                AND CAST({row_timestamp} AS DATE) <= o.end_date"""
     kept_columns = [
         column
         for column in dict.fromkeys([*data_field_to_keep, *unit_fields, datetime_col, *finer_datetime_cols])

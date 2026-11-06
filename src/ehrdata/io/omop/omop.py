@@ -586,7 +586,8 @@ def setup_variables(
             if multiple data tables are used. For example, if data_tables=['measurement',
             'observation'], data_field_to_keep={'measurement': 'value_as_number',
             'observation': 'value_as_number'}.
-        time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`).
+        time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`),
+            and the date where a datetime is missing, as OMOP requires dates but not datetimes: a start or a timepoint with a date only lies at midnight of that date, and an end at the end of that day. A data point with a date only on the first day of an observation that starts later that day is therefore before its start.
         clip_to_end_date: Whether the data points after the end date of an observation, such as the `visit_end_date`, are left out.
             If `False`, the data points are kept in all intervals, also after the end date.
             Not available for `observation_table="person"`, whose observations have no end date.
@@ -1071,7 +1072,8 @@ def setup_interval_variables(
            if multiple data tables are used. For example, if data_tables=['measurement',
            'observation'], data_field_to_keep={'measurement': 'value_as_number',
            'observation': 'value_as_number'}.
-       time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`).
+       time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`),
+           and the date where a datetime is missing, as OMOP requires dates but not datetimes: a start or a timepoint with a date only lies at midnight of that date, and an end at the end of that day. A data point with a date only on the first day of an observation that starts later that day is therefore before its start.
        clip_to_end_date: Whether the data points after the end date of an observation, such as the `visit_end_date`, are left out.
            If `False`, the data points are kept in all intervals, also after the end date.
            Not available for `observation_table="person"`, whose observations have no end date.

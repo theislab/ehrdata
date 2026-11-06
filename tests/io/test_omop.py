@@ -4358,3 +4358,154 @@ def test_setup_variables_raising_unit_check_keeps_the_earlier_long_table(omop_co
     temp_tables = con.execute("SELECT table_name FROM duckdb_tables() WHERE temporary").fetchall()
     assert ("_ehrdata_observed_rows",) not in temp_tables
     assert earlier.n_vars == 1
+
+
+def _hourly_measurement_of_visits(con, **kwargs):
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    return ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="h",
+        time_precision="datetime",
+        num_intervals=24,
+        concept_ids=[3031147],
+        aggregation_strategy="count",
+        **kwargs,
+    )
+
+
+def test_setup_variables_datetime_precision_reads_a_row_without_datetime_at_midnight(omop_connection_vanilla):
+    """OMOP requires the date of a data point but not its datetime."""
+    con = omop_connection_vanilla
+    with_datetime = _hourly_measurement_of_visits(con)
+    con.execute("UPDATE measurement SET measurement_datetime = NULL WHERE measurement_id = 1")
+
+    edata = _hourly_measurement_of_visits(con)
+
+    # the data point of 12:00 moves to midnight of its date, the first interval of the visit
+    expected = with_datetime.X.copy()
+    expected[0, 0, 12] -= 1
+    expected[0, 0, 0] += 1
+    np.testing.assert_array_equal(edata.X, expected)
+
+
+def test_setup_variables_datetime_precision_starts_a_visit_without_start_datetime_at_midnight(
+    omop_connection_vanilla,
+):
+    """Visit 1 starts at 10:00 on 2100-01-01; without its start datetime it starts at midnight."""
+    con = omop_connection_vanilla
+    con.execute(
+        "UPDATE visit_occurrence SET visit_start_datetime = TIMESTAMP '2100-01-01 10:00:00' WHERE visit_occurrence_id = 1"
+    )
+    con.execute(
+        "UPDATE measurement SET measurement_datetime = TIMESTAMP '2100-01-01 05:00:00' WHERE measurement_id = 1"
+    )
+    with_datetime = _hourly_measurement_of_visits(con)
+    con.execute("UPDATE visit_occurrence SET visit_start_datetime = NULL WHERE visit_occurrence_id = 1")
+
+    edata = _hourly_measurement_of_visits(con)
+
+    # the data point of 05:00 is before the start at 10:00, and in hour 5 of a start at midnight
+    assert with_datetime.X[0, 0, 5] == 0
+    assert edata.X[0, 0, 5] == 1
+    assert pd.isna(edata.obs["visit_start_datetime"].iloc[0])
+
+
+def test_setup_variables_datetime_precision_handles_a_tz_aware_start_without_datetime(omop_connection_vanilla):
+    con = omop_connection_vanilla
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    starts = pd.to_datetime(edata.obs["visit_start_datetime"]).dt.tz_localize("UTC")
+    starts.iloc[0] = pd.NaT
+    edata.obs["visit_start_datetime"] = starts
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="h",
+        time_precision="datetime",
+        num_intervals=24,
+        concept_ids=[3031147],
+        aggregation_strategy="count",
+    )
+    assert edata.X[0].sum() > 0
+
+
+def test_setup_variables_datetime_precision_keeps_a_missing_datetime_as_value(omop_connection_vanilla):
+    """The date fills in the time of a data point, not the datetime column kept as its value."""
+    con = omop_connection_vanilla
+    con.execute("UPDATE measurement SET measurement_datetime = NULL WHERE measurement_id = 1")
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["measurement_datetime"],
+        interval_length_number=1,
+        interval_length_unit="h",
+        time_precision="datetime",
+        num_intervals=24,
+        concept_ids=[3031147],
+        aggregation_strategy="last",
+    )
+    # a data point without a datetime carries no value here, rather than one made up from its date
+    assert pd.isna(edata.X[0, 0, 0])
+
+
+def test_setup_interval_variables_datetime_precision_ends_an_interval_without_end_datetime_at_its_end_date(
+    omop_connection_vanilla,
+):
+    con = omop_connection_vanilla
+    kwargs = {
+        "backend_handle": con,
+        "data_tables": ["drug_exposure"],
+        "data_field_to_keep": ["days_supply"],
+        "interval_length_number": 1,
+        "interval_length_unit": "day",
+        "time_precision": "datetime",
+        "num_intervals": 31,
+        "aggregation_strategy": "count",
+        "keep_date": "interval",
+        "concept_ids": [19073183],
+    }
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    with_datetime = ed.io.omop.setup_interval_variables(edata, **kwargs)
+    con.execute("UPDATE drug_exposure SET drug_exposure_end_datetime = NULL WHERE drug_exposure_id = 1")
+
+    result = ed.io.omop.setup_interval_variables(edata, **kwargs)
+
+    np.testing.assert_array_equal(result.X, with_datetime.X)
+    assert result.X[0, 0, 20] == 1
+
+
+@pytest.mark.parametrize(("end_date", "expected_hours"), [("2100-01-01", range(12, 24)), ("2100-01-02", range(12, 48))])
+def test_setup_interval_variables_datetime_precision_ends_a_date_only_end_at_the_end_of_the_day(
+    omop_connection_vanilla, end_date, expected_hours
+):
+    """OMOP end dates are inclusive, so an end without datetime lies at the end of its day, not at midnight before the start."""
+    con = omop_connection_vanilla
+    con.execute(
+        f"""UPDATE drug_exposure SET drug_exposure_end_date = DATE '{end_date}', drug_exposure_end_datetime = NULL
+        WHERE drug_exposure_id = 1"""
+    )
+    con.execute("DELETE FROM drug_exposure WHERE person_id = 1 AND drug_exposure_id <> 1")
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_occurrence")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=1,
+        interval_length_unit="h",
+        time_precision="datetime",
+        num_intervals=48,
+        aggregation_strategy="count",
+        keep_date="interval",
+        concept_ids=[19073183],
+    )
+    row = list(edata.obs["person_id"]).index(1)
+    assert list(np.flatnonzero(edata.X[row, 0])) == list(expected_hours)
