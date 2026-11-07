@@ -2,20 +2,29 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
+from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
+import sparse as sp
 
 from ehrdata.io._omop_utils import get_table_catalog_dict
 from ehrdata.io.omop._check_arguments import (
     VALID_OBSERVATION_TABLES_JOIN,
     VALID_OBSERVATION_TABLES_SINGLE,
+    _check_valid_aggregation_fill_values,
+    _check_valid_aggregation_strategies,
     _check_valid_aggregation_strategy,
+    _check_valid_aggregation_strategy_mapping,
     _check_valid_backend_handle,
-    _check_valid_birthdates_for_person_table,
+    _check_valid_clip_to_end_date,
+    _check_valid_clip_to_end_date_for_observation_table,
     _check_valid_concept_ids,
+    _check_valid_concept_sets,
     _check_valid_data_field_to_keep,
     _check_valid_death_table,
     _check_valid_edata,
@@ -26,20 +35,36 @@ from ehrdata.io.omop._check_arguments import (
     _check_valid_interval_variable_data_tables,
     _check_valid_keep_date,
     _check_valid_num_intervals,
+    _check_valid_num_intervals_before,
     _check_valid_observation_table,
+    _check_valid_sparse,
     _check_valid_time_precision,
+    _check_valid_unit_conversions,
+    _check_valid_value_range,
+    _check_valid_value_range_variables,
     _check_valid_variable_data_tables,
     _warn_time_precision_interval_mismatch,
 )
 from ehrdata.io.omop._queries import (
+    CONVERTED,
     DATA_TABLE_CONCEPT_ID_TRUNK,
+    IN_RANGE,
+    OBSERVED_ROWS_TABLE,
+    ROW_CONCEPT_ID,
     SINGLE_ROW_AGGREGATION_STRATEGIES,
+    UNIT_CONVERSION_TABLE,
     UNITLESS_AGGREGATION_STRATEGIES,
     _concept_ids_condition,
     _get_ordered_table,
     _get_table_join,
     _get_unit_fields,
-    _write_long_time_interval_table,
+    _instantiate_long_observed_table,
+    _links_rows_to_visits,
+    _registered,
+    _sql_literal,
+    _write_long_observed_table,
+    _write_obs_names,
+    _write_obs_windows,
 )
 
 if TYPE_CHECKING:
@@ -47,6 +72,8 @@ if TYPE_CHECKING:
 
     import duckdb
     from duckdb import DuckDBPyConnection
+
+    from ehrdata import EHRData
 
 DOWNLOAD_VERIFICATION_TAG = "download_verification_tag"
 
@@ -123,9 +150,11 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
     logging.info(f"unused files: {unused_files}")
 
 
-def _collect_units_per_feature(backend_handle, data_table, unit_key="unit_concept_id") -> dict:
+def _collect_units_per_feature(
+    backend_handle, data_table, unit_key="unit_concept_id", key_column="data_table_concept_id"
+) -> dict:
     query = f"""
-    SELECT DISTINCT data_table_concept_id, {unit_key} FROM long_person_timestamp_feature_value_{data_table}
+    SELECT DISTINCT {key_column}, {unit_key} FROM long_person_timestamp_feature_value_{data_table}
     WHERE is_present = 1
     """
     result = backend_handle.execute(query).fetchall()
@@ -139,8 +168,10 @@ def _collect_units_per_feature(backend_handle, data_table, unit_key="unit_concep
     return feature_units
 
 
-def _check_one_unit_per_feature(backend_handle, data_table, unit_key="unit_concept_id") -> None:
-    feature_units = _collect_units_per_feature(backend_handle, data_table, unit_key=unit_key)
+def _check_one_unit_per_feature(
+    backend_handle, data_table, unit_key="unit_concept_id", key_column="data_table_concept_id"
+) -> None:
+    feature_units = _collect_units_per_feature(backend_handle, data_table, unit_key=unit_key, key_column=key_column)
     num_units = np.array([len(units) for _, units in feature_units.items()])
 
     # print(f"no units for features: {np.argwhere(num_units == 0)}")
@@ -148,12 +179,24 @@ def _check_one_unit_per_feature(backend_handle, data_table, unit_key="unit_conce
 
 
 def _check_one_unit_per_feature_for_aggregation(
-    backend_handle, data_table, value_field, aggregation_strategy, unit_fields, *, concept_ids
+    backend_handle,
+    data_table,
+    value_field,
+    aggregation_strategy,
+    unit_fields,
+    *,
+    key_column="data_table_concept_id",
+    variables=None,
 ) -> None:
-    """Verify that the data table allows the chosen aggregation strategy to combine values.
+    """Verify that the observed rows allow the chosen aggregation strategy to combine values.
+
+    Reads OBSERVED_ROWS_TABLE, the rows of the data table in the windows of the observations, while `_write_long_observed_table` runs.
+    The features are the values of key_column: the concept ids, or the names of the concept sets, whose rows are combined across their concepts.
+    With variables, only these features are checked.
 
     A strategy that is not one of SINGLE_ROW_AGGREGATION_STRATEGIES combines the values of several rows into one, which is only meaningful if these values share a unit.
-    Only the rows of the concept_ids carrying a value are considered, as only those enter the aggregation; among these, a missing unit (NULL) is a unit of its own, as in the unit report.
+    Only the rows carrying a value within the value range of their concept are considered, as only those enter the aggregation, and their units after the conversions;
+    among these, a missing unit (NULL) is a unit of its own, as in the unit report.
     Unitless aggregations are exempt: 'is_present' has no unit to begin with, and UNITLESS_AGGREGATION_STRATEGIES yield a number of data points.
     Data tables that do not have a 'unit_concept_id' are exempt, too: they tell no unit that could disagree.
     """
@@ -165,17 +208,22 @@ def _check_one_unit_per_feature_for_aggregation(
     ):
         return
 
-    concept_id_key = f"{DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id"
+    variable_condition = (
+        f" AND {key_column} IN ({', '.join(_sql_literal(variable) for variable in variables)})"
+        if variables is not None
+        else ""
+    )
     feature_unit_pairs = backend_handle.execute(
         f"""
-        SELECT DISTINCT {concept_id_key}, unit_concept_id FROM {data_table}
-        WHERE {value_field} IS NOT NULL AND {_concept_ids_condition(data_table, concept_ids)}
+        SELECT DISTINCT {key_column}, unit_concept_id FROM {OBSERVED_ROWS_TABLE}
+        WHERE {value_field} IS NOT NULL AND {IN_RANGE}{variable_condition}
         """
     ).fetchall()
 
     feature_units: dict = {}
     for feature, unit in feature_unit_pairs:
-        feature_units.setdefault(feature, []).append(unit)
+        if unit not in feature_units.setdefault(feature, []):
+            feature_units[feature].append(unit)
     multiple_units = {feature: sorted(units, key=str) for feature, units in feature_units.items() if len(units) > 1}
 
     if multiple_units:
@@ -193,17 +241,22 @@ def _check_one_unit_per_feature_for_aggregation(
         raise NotImplementedError(msg)
 
 
-def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.DataFrame:
-    feature_units_concept = _collect_units_per_feature(backend_handle, data_table, unit_key="unit_concept_id")
+def _create_feature_unit_concept_id_report(
+    backend_handle, data_table, key_column="data_table_concept_id", report_key="concept_id"
+) -> pd.DataFrame:
+    """The units of each feature among its observed cells, one row per (feature, unit) in the column report_key."""
+    feature_units_concept = _collect_units_per_feature(
+        backend_handle, data_table, unit_key="unit_concept_id", key_column=key_column
+    )
     feature_units_long_format = []
     for feature, units in feature_units_concept.items():
         if len(units) == 0:
-            feature_units_long_format.append({"concept_id": feature, "no_units": True, "multiple_units": False})
+            feature_units_long_format.append({report_key: feature, "no_units": True, "multiple_units": False})
         elif len(units) > 1:
             feature_units_long_format.extend(
                 [
                     {
-                        "concept_id": feature,
+                        report_key: feature,
                         "unit_concept_id": unit,
                         "no_units": False,
                         "multiple_units": True,
@@ -214,56 +267,208 @@ def _create_feature_unit_concept_id_report(backend_handle, data_table) -> pd.Dat
         else:
             feature_units_long_format.append(
                 {
-                    "concept_id": feature,
+                    report_key: feature,
                     "unit_concept_id": units[0],
                     "no_units": False,
                     "multiple_units": False,
                 }
             )
 
-    df = pd.DataFrame(
-        feature_units_long_format, columns=["concept_id", "unit_concept_id", "no_units", "multiple_units"]
-    )
+    df = pd.DataFrame(feature_units_long_format, columns=[report_key, "unit_concept_id", "no_units", "multiple_units"])
     df["unit_concept_id"] = df["unit_concept_id"].astype("Int64")
 
     return df
 
 
-def _create_enriched_var_with_unit_info(backend_handle, ds, var, unit_report) -> pd.DataFrame:
-    feature_concept_id_table = var  # ds["data_table_concept_id"].to_pandas()
+def _concept_set_feature_info(concept_sets, concepts, relationships) -> pd.DataFrame:
+    """One row per concept set: each field of the concept table for the concepts of the set, joined by '; ' in the order of the set.
 
-    feature_concept_id_unit_table = pd.merge(
-        feature_concept_id_table, unit_report, how="left", left_index=True, right_on="concept_id"
+    As for single concepts, a concept id that the concept table lacks is looked up by its 'Mapped from' relationship; a concept found in neither gives an empty value.
+    """
+    by_id = concepts.drop_duplicates("concept_id").set_index("concept_id")
+    ids = [concept_id for set_ids in concept_sets.values() for concept_id in set_ids]
+    mapped: dict = {}
+    if any(concept_id not in by_id.index for concept_id in ids):
+        logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
+        mapped = relationships.drop_duplicates("concept_id_1").set_index("concept_id_1")["concept_id_2"].to_dict()
+
+    def record(concept_id):
+        concept_id = concept_id if concept_id in by_id.index else mapped.get(concept_id)
+        return by_id.loc[concept_id] if concept_id in by_id.index else None
+
+    rows = []
+    for set_ids in concept_sets.values():
+        records = [record(concept_id) for concept_id in set_ids]
+        rows.append(
+            {
+                field: "; ".join("" if r is None or pd.isna(r[field]) else str(r[field]) for r in records)
+                for field in by_id.columns
+            }
+        )
+    return pd.DataFrame(rows, columns=by_id.columns)
+
+
+CONCEPT_IDS_TABLE = "_ehrdata_concept_ids"
+
+
+def _concept_rows(
+    backend_handle, concept_ids, *, unit_concept_ids=(), map_missing: bool
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """The rows of the concept table that the enrichment of the variables with concept_ids reads, and their 'Mapped from' relationships.
+
+    The relationships, columns concept_id_1 and concept_id_2, are those of the concept ids that the concept table lacks, if map_missing.
+    The concept rows, with lowercase columns, are those of concept_ids, of the concepts these are mapped to, and of unit_concept_ids.
+    Only these rows are read from the database, rather than the whole concept and concept_relationship tables.
+    """
+
+    def as_int(concept_id):
+        try:
+            return int(concept_id)
+        except (TypeError, ValueError):
+            return None
+
+    def ids_frame(ids):
+        return pd.DataFrame({"concept_id": pd.array(sorted({as_int(i) for i in ids} - {None}), dtype="Int64")})
+
+    def select(query, ids):
+        with _registered(backend_handle, CONCEPT_IDS_TABLE, ids_frame(ids)):
+            return backend_handle.sql(query).df()
+
+    in_ids = f"IN (SELECT concept_id FROM {CONCEPT_IDS_TABLE})"
+
+    def in_scan_order(query, id_column):
+        # of several rows of an id, the first or the last is used, so the rows keep the order of a scan; a join with the ids does not keep it
+        return (
+            f"SELECT * EXCLUDE (_position) FROM (SELECT *, row_number() OVER () AS _position FROM ({query})) "
+            f"WHERE TRY_CAST({id_column} AS BIGINT) {in_ids} ORDER BY _position"
+        )
+
+    present = set(
+        select(
+            f"SELECT DISTINCT TRY_CAST(concept_id AS BIGINT) AS concept_id FROM concept WHERE TRY_CAST(concept_id AS BIGINT) {in_ids}",
+            concept_ids,
+        )["concept_id"]
+    )
+    missing = [concept_id for concept_id in concept_ids if as_int(concept_id) not in {None, *present}]
+    relationships = pd.DataFrame(columns=["concept_id_1", "concept_id_2"])
+    if map_missing and missing:
+        relationships = select(
+            in_scan_order(
+                "SELECT concept_id_1, concept_id_2 FROM concept_relationship "
+                "WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)",
+                "concept_id_1",
+            ),
+            missing,
+        )
+    concepts = select(
+        in_scan_order("SELECT * FROM concept", "concept_id"),
+        [*concept_ids, *relationships["concept_id_2"], *unit_concept_ids],
+    )
+    concepts.columns = concepts.columns.str.lower()
+    return concepts, relationships
+
+
+def _is_numeric_field(backend_handle, data_table: str, field: str) -> bool:
+    """Whether field of data_table is of a numeric type; 'is_present' is."""
+    if field == "is_present":
+        return True
+    column_types = {row[0].lower(): row[1] for row in backend_handle.execute(f"DESCRIBE {data_table}").fetchall()}
+    return column_types.get(field.lower(), "").startswith(
+        (
+            "TINYINT",
+            "SMALLINT",
+            "INTEGER",
+            "BIGINT",
+            "HUGEINT",
+            "UTINYINT",
+            "USMALLINT",
+            "UINTEGER",
+            "UBIGINT",
+            "UHUGEINT",
+            "FLOAT",
+            "DOUBLE",
+            "DECIMAL",
+        )
     )
 
-    concepts = backend_handle.sql("SELECT * FROM concept").df()
 
-    feature_concept_id_unit_info_table = pd.merge(
-        feature_concept_id_unit_table,
-        concepts,
-        how="left",
-        left_on="unit_concept_id",
-        right_on="concept_id",
+def _unit_concept_codes(backend_handle, unit_concept_ids: pd.Series) -> pd.Series:
+    """The concept_code of each unit concept in the concept table, such as its UCUM code, or a missing value."""
+    tables = {
+        row[0].lower() for row in backend_handle.execute("SELECT table_name FROM information_schema.tables").fetchall()
+    }
+    if "concept" not in tables:
+        return pd.Series(pd.NA, index=unit_concept_ids.index, dtype="string")
+    ids = sorted({int(unit) for unit in unit_concept_ids.dropna()})
+    codes = dict(
+        backend_handle.execute(
+            "SELECT TRY_CAST(concept_id AS BIGINT), CAST(concept_code AS VARCHAR) FROM concept "
+            f"WHERE TRY_CAST(concept_id AS BIGINT) IN ({', '.join(map(str, ids)) or 'NULL'})"
+        ).fetchall()
     )
+    return unit_concept_ids.map(lambda unit: codes.get(int(unit), pd.NA) if pd.notna(unit) else pd.NA).astype("string")
 
-    return feature_concept_id_unit_info_table
+
+def _unit_conversions_of_tables(
+    backend_handle, unit_conversions, *, variables_of_table, concept_sets, data_field_to_keep, numeric_fields
+) -> dict:
+    """The rows of unit_conversions for the concepts of each data table, or None for a table without such concepts.
+
+    The concepts of a table are its variables, or the concepts of the concept sets; conversions of other concepts are not used.
+    Checks that the converted tables have numeric values and a unit_concept_id; `_check_listed_units` checks the units of their rows.
+    """
+    conversions_of_table = {}
+    for table, variables in variables_of_table.items():
+        concepts = (
+            {concept_id for name in variables for concept_id in concept_sets[name]} if concept_sets else set(variables)
+        )
+        conversions = unit_conversions[unit_conversions["concept_id"].astype(int).isin(concepts)].reset_index(drop=True)
+        if conversions.empty:
+            conversions_of_table[table] = None
+            continue
+        value_field = data_field_to_keep[table][0]
+        if value_field == "is_present" or not numeric_fields[table]:
+            msg = f"unit_conversions converts values, which needs a numeric data field, but '{value_field}' of '{table}' is not."
+            raise TypeError(msg)
+        if "unit_concept_id" not in _get_unit_fields(backend_handle, table):
+            msg = f"unit_conversions converts from the unit_concept_id of the data points, which '{table}' lacks."
+            raise ValueError(msg)
+        conversions_of_table[table] = conversions
+    return conversions_of_table
+
+
+def _check_listed_units(backend_handle, data_table, value_field) -> None:
+    """Raise if an observed row of a converted concept carries a value in a unit that the unit conversions do not list for it.
+
+    Reads OBSERVED_ROWS_TABLE while `_write_long_observed_table` runs, so only the rows that enter the aggregation count, whatever their value range;
+    The count is per observation: a data point in two overlapping visits counts twice.
+    """
+    unlisted = backend_handle.execute(
+        f"""
+        SELECT {ROW_CONCEPT_ID}, unit_concept_id, COUNT(*) AS n FROM {OBSERVED_ROWS_TABLE}
+        WHERE {value_field} IS NOT NULL AND NOT {CONVERTED}
+            AND {ROW_CONCEPT_ID} IN (SELECT concept_id FROM {UNIT_CONVERSION_TABLE})
+        GROUP BY ALL ORDER BY n DESC, {ROW_CONCEPT_ID}, unit_concept_id
+        """
+    ).fetchall()
+    if unlisted:
+        listing = ", ".join(
+            f"concept {concept_id} in unit {unit} ({n} data points)" for concept_id, unit, n in unlisted[:5]
+        )
+        msg = f"unit_conversions lists no conversion for {len(unlisted)} (concept, unit) pair(s) of '{data_table}': {listing}."
+        raise ValueError(msg)
 
 
 def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
     """Setup a connection to the OMOP CDM database.
 
-    This function sets up a connection to the OMOP CDM database.
-    It checks the capitalization of the 'person' table, and assumes the same capitalization style is used for all other tables.
-
+    Creates a table in the database for each CSV or Parquet file in `path` whose name, in lower case and without `prefix` and extension, is an OMOP CDM table.
+    The table and its columns are named in lower case, and the columns ending in `_date` and `_datetime` are cast to `DATE` and `TIMESTAMP`.
 
     Args:
         path: The path to the folder containing the CSV or Parquet files.
         backend_handle: The backend handle to the database.
         prefix: The prefix to be removed from the CSV/Parquet filenames.
-
-    Returns:
-        An EHRData object with populated .uns["omop_table_capitalization"] field.
-
     """
     _set_up_duckdb(Path(path), backend_handle, prefix)
 
@@ -301,7 +506,7 @@ def setup_obs(
     - If `"person_observation_period"`, the `observation_period_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
     - If `"person_visit_occurrence"`, the `visit_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
 
-    For the tables other than `"person"`, the respective end date (e.g. `observation_period_end_date`) ends the time series: data points after this day are not considered.
+    For the tables other than `"person"`, the respective end date (e.g. `observation_period_end_date`) ends the time series: data points after this day are not considered, unless `clip_to_end_date=False`.
 
     For `"person_cohort"`, the `subject_id` of the cohort is considered to be the `person_id` for a join.
 
@@ -355,6 +560,102 @@ def setup_obs(
     return EHRData(obs=obs, uns={"omop_io_observation_table": observation_table.split("person_")[-1]})
 
 
+def _variable_setup(setup_id: str, *, data_tables, data_field_to_keep, aggregation_strategy, **arguments) -> dict:
+    """The record of a call of the setup functions for `.uns['omop_io_variable_setup']`.
+
+    setup_id also marks the long format tables of the call in the database, see `_write_obs_names`.
+    The values are strings, numbers, booleans and dicts and lists of these, so that the EHRData can be written to disk;
+    a mapping of `aggregation_strategy` is stored as the lists `variables` and `strategies`, as variable names may contain "/", which a key on disk may not.
+    """
+    return {
+        "setup_id": setup_id,
+        "data_tables": list(data_tables),
+        "data_field_to_keep": {table: list(fields) for table, fields in data_field_to_keep.items()},
+        "aggregation_strategy": aggregation_strategy
+        if isinstance(aggregation_strategy, str)
+        else {
+            "variables": [str(variable) for variable in aggregation_strategy],
+            "strategies": list(aggregation_strategy.values()),
+        },
+        **arguments,
+    }
+
+
+def _same_variables(edata: EHRData, var: pd.DataFrame, tem: pd.DataFrame, setup: dict) -> bool:
+    """Whether edata has the variables var and the intervals tem, and the data tables and time axis of setup, as recorded by an earlier call."""
+    if edata.n_vars != len(var):
+        return False
+    # the names of concept sets identify them; plain concept ids are named by position, and identified by data_table_concept_id
+    if "concept_ids" in var.columns and list(edata.var_names) != [str(name) for name in var.index]:
+        return False
+    for column in ("data_table_concept_id", "concept_ids"):
+        if (column in edata.var.columns) != (column in var.columns):
+            return False
+        if column in var.columns and list(edata.var[column]) != list(var[column]):
+            return False
+    # the intervals of edata, which may be a subset of those set up earlier
+    if "interval_step" not in edata.tem.columns or list(edata.tem["interval_step"]) != list(tem["interval_step"]):
+        return False
+    earlier = edata.uns.get("omop_io_variable_setup")
+    keys = (
+        "data_tables",
+        "time_precision",
+        "interval_length_number",
+        "interval_length_unit",
+        "num_intervals",
+        "num_intervals_before",
+    )
+    return isinstance(earlier, Mapping) and all(
+        key in earlier and list(np.atleast_1d(earlier[key])) == list(np.atleast_1d(setup[key])) for key in keys
+    )
+
+
+def _setup_result(
+    edata: EHRData, *, layer: str | None, tensor, var: pd.DataFrame, tem: pd.DataFrame, setup: dict
+) -> EHRData:
+    """A new EHRData of the rows of edata with the variables var and the intervals tem, and tensor in layer, or in `.X` if layer is None.
+
+    edata is not changed: `.obs` and `.uns` are copied, and `.obsm` and `.obsp` kept; setup becomes `.uns['omop_io_variable_setup']`.
+    `.X`, the other layers, `.varm` and `.varp` are kept if edata has the same variables, data tables and time axis, as after an earlier call that set up another layer;
+    otherwise they cannot describe the new variables and are dropped, with a warning.
+    Kept arrays are those of edata, not copies; of a view, they are copied, so that the result does not write into the object the view is of.
+    Without a tensor, layer keeps what edata has there.
+    """
+    from ehrdata import EHRData
+
+    if edata.is_view:
+        edata = edata.copy()
+    layers = {key: value for key, value in edata.layers.items() if key != layer or tensor is None}
+    varm, varp = dict(edata.varm.items()), dict(edata.varp.items())
+    if not _same_variables(edata, var, tem, setup):
+        dropped = [("X" if key is None else f"layers['{key}']") for key in layers]
+        dropped += [f"varm['{key}']" for key in varm] + [f"varp['{key}']" for key in varp]
+        if dropped:
+            reason = (
+                "other variables, data tables or intervals than those set up"
+                if isinstance(edata.uns.get("omop_io_variable_setup"), Mapping)
+                else "no record of an earlier setup in .uns['omop_io_variable_setup']"
+            )
+            logging.warning(
+                f"The given EHRData has {reason}, so its {', '.join(dropped)} {'is' if len(dropped) == 1 else 'are'} not kept."
+            )
+        layers, varm, varp = {}, {}, {}
+    if tensor is not None:
+        layers[layer] = tensor
+    return EHRData(
+        X=layers.pop(None, None),
+        layers=layers,
+        obs=edata.obs.copy(),
+        var=var,
+        tem=tem,
+        uns={**edata.uns, "omop_io_variable_setup": setup},
+        obsm=dict(edata.obsm.items()),
+        obsp=dict(edata.obsp.items()),
+        varm=varm,
+        varp=varp,
+    )
+
+
 def setup_variables(
     edata,
     *,
@@ -366,33 +667,52 @@ def setup_variables(
     interval_length_number: int,
     interval_length_unit: str,
     time_precision: Literal["date", "datetime"] = "date",
+    clip_to_end_date: bool = True,
+    value_range: Mapping[int | str, tuple[float | None, float | None]] | None = None,
+    unit_conversions: pd.DataFrame | None = None,
     num_intervals: int,
-    concept_ids: Literal["all"] | Sequence[int] = "all",
-    aggregation_strategy: Literal[
-        "last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"
+    num_intervals_before: int = 0,
+    concept_ids: Literal["all"] | Sequence[int] | Mapping[str, Sequence[int]] = "all",
+    aggregation_strategy: Literal["last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"]
+    | Mapping[
+        int | str, Literal["last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"]
     ] = "last",
     enrich_var_with_feature_info: bool = False,
     enrich_var_with_unit_info: bool = False,
     instantiate_tensor: bool = True,
+    sparse: bool = False,
 ):
     """Extracts selected tables of a data-point character from the OMOP CDM.
 
     The distinct `concept_id`s encountered in the selected tables form the variables in the EHRData object.
     The variables are sorted by the `concept_id` for each `data_table` in ascending order, and stacked together in the order that the `data_tables` are specified.
+    With concept sets (see `concept_ids`), the variables are the sets instead.
 
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
-    Writes a unit report of the features to `edata.uns['unit_report_<data_tables>']`.
-    Writes the setup arguments into `edata.uns['omop_io_variable_setup']`.
+    The variables are set up for the rows of `edata.obs`, in their order: the time window of each row is read from the columns that :func:`~ehrdata.io.omop.setup_obs` writes to `.obs`.
+    Hence `edata` can be filtered or reordered between :func:`~ehrdata.io.omop.setup_obs` and this function.
+    With `observation_table="person_visit_occurrence"`, a data point whose `visit_occurrence_id` names a visit of its person in the `visit_occurrence` table belongs to that visit only, and to no visit if it lies outside that visit's window.
+    Any other data point belongs to every visit of its person whose window holds it; the data tables without a `visit_occurrence_id`, such as `specimen`, have only such data points.
+    Visit ids are compared as integers, as OMOP defines them.
+    A row without a start date in `.obs`, or without an end date unless `clip_to_end_date=False`, gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
+
+    Writes a unit report of the features to `.uns['unit_report_<data_tables>']` of the result.
+    Writes the data tables, `data_field_to_keep`, the time axis, `aggregation_strategy` and `clip_to_end_date` into `.uns['omop_io_variable_setup']` of the result, with a `setup_id` that also marks the long format tables of the call,
+    so that :class:`~ehrdata.integrations.torch.OMOPEHRDataset` reads the values of this call, and notices when a later call has replaced its tables.
+    The record describes this call only, also when the result keeps layers of earlier calls.
 
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
+    Its `obs_index` is the position of the row in `edata.obs`; the table `long_person_timestamp_feature_value_<data_table>_obs` holds the `obs_names` of these rows.
+    It holds one row per observation, variable and interval that has data, so its size follows the number of data points.
     This table is instantiated into `.X`/`.layers` if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
 
     Args:
-        edata: Data object to which the variables should be added.
+        edata: Data object whose observations the variables are set up for.
         backend_handle: The backend handle to the database.
         layer: The layer to store the data in. If not specified, uses `X`.
+            The input is not changed. The result keeps `.X` and the other layers of `edata` if `edata` has the same variables, data tables and time axis, as after a call that set up another layer of them.
         data_tables: The tables to be used.
         data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
             'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
@@ -401,17 +721,57 @@ def setup_variables(
             if multiple data tables are used. For example, if data_tables=['measurement',
             'observation'], data_field_to_keep={'measurement': 'value_as_number',
             'observation': 'value_as_number'}.
-        time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`).
+        time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`),
+            and the date where a datetime is missing, as OMOP requires dates but not datetimes: a start or a timepoint with a date only lies at midnight of that date, and an end at the end of that day. A data point with a date only on the first day of an observation that starts later that day is therefore before its start.
+        clip_to_end_date: Whether the data points after the end date of an observation, such as the `visit_end_date`, are left out.
+            If `False`, the data points are kept in all intervals, also after the end date.
+            Not available for `observation_table="person"`, whose observations have no end date.
+        value_range: The range of plausible values of each variable, as `{variable: (lower, upper)}`, keyed like a mapping of `aggregation_strategy`.
+            A data point is kept if `lower <= value <= upper`, and left out before the aggregation otherwise, so that it neither counts nor tells a unit.
+            A bound of `None` leaves that side open, NaN lies in no range, and data points without a value as well as the variables without a range are not filtered.
+            The values are those of the first field of `data_field_to_keep`, which must be numeric.
+            The range of a concept set applies to each of its concepts, and the range of a concept to it in every data table that has it.
+            As with a mapping of `aggregation_strategy`, rows without a concept ID then belong to no variable,
+            and a key that is no variable raises, unless it is one of `concept_ids` without data points.
+        unit_conversions: Conversions of the values of concepts from the units they were recorded in to one unit, before the aggregation.
+            A :class:`~pandas.DataFrame` with one row per recorded unit of a concept: the columns `concept_id` (or `variable`, the name of a concept set, for all its concepts),
+            `unit_concept_id`, `to_unit_concept_id` and `multiplier`, and optionally `offset` (0 if absent) and `to_unit_source_value`.
+            A value becomes `value * multiplier + offset`, and its unit the target unit, in `unit_concept_id` and in `unit_source_value`;
+            without the column `to_unit_source_value`, that is the `concept_code` of the target unit in the `concept` table.
+            A missing `unit_concept_id` converts the data points without a unit, which OMOP often records as `unit_concept_id=0`, a unit that needs a row of its own.
+            A unit that needs no conversion takes a row with multiplier 1, and a missing offset is 0.
+            Every data point with a value of a listed concept that enters the aggregation must be in one of its listed units, a concept is converted to one unit only,
+            and `value_range` applies to the converted values. Conversions of concepts that are no variables of the call are not used, so one table can serve several calls.
+            As with a mapping of `aggregation_strategy`, rows without a concept ID then belong to no variable.
+            In the long format table of a converted data table, the values are of double precision and `unit_concept_id` an integer.
         interval_length_number: Numeric value of the length of one interval.
         interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
-        num_intervals: Number of intervals.
+        num_intervals: Number of intervals from the start of each observation.
+        num_intervals_before: Number of intervals before the start of each observation, such as the hours before a visit for a look-back.
+            The time axis then has `num_intervals_before + num_intervals` intervals, and `.tem["interval_step"]` counts from the start of the observation, the earlier intervals being negative.
+            A data point that names a visit belongs to that visit also in these intervals.
         concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
+            A mapping of names to concept IDs, such as `{"name": [concept_id_1, concept_id_2]}`, defines concept sets:
+            each set is one variable, named by its key and in the order of the mapping, that combines the data points of its concepts.
+            The variables are the sets, also those without data points, and `.var["concept_ids"]` lists the concept IDs of each.
+            Concept sets take one data table, and a concept may belong to one set only.
+            With `enrich_var_with_feature_info`, each field of the `concept` table, such as `concept_name`, lists the values of the concepts of a set, joined by `"; "` in the order of the set.
+            With `enrich_var_with_unit_info`, the columns of the unit's concept are prefixed with `unit_`.
+            The long format table then holds the column `variable` in place of `data_table_concept_id`, and the unit report is keyed by `variable` in place of `concept_id`.
         aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
             For `'last'` and `'first'`, only data points that have a value in the data field of interest (the first field of `data_field_to_keep`) are considered.
+            Data points at the same time, for instance of two concepts of a concept set, are ordered by their value.
             All kept fields are read from that very data point, so that e.g. the units describe the value that is kept.
             Every other strategy combines the values of several data points into one, which requires a single unit per feature.
-            A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points carrying a value (a missing unit is a unit of its own here).
+            A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points that carry a value and enter the aggregation, those in the intervals of an observation (a missing unit is a unit of its own here).
             Exempt are `'count'` and `data_field_to_keep='is_present'`, whose values are numbers of data points and hence carry no unit.
+            For `'mode'`, of several equally frequent values the smallest is kept.
+            Intervals without data points hold 0 for `'count'`, and a missing value for every other strategy and for `data_field_to_keep='is_present'`.
+            A mapping sets a strategy per variable, keyed by its integer concept ID, or by its name for concept sets, such as `{"heart_rate": "median", "urine_output": "sum"}`.
+            Every variable needs a strategy, and a key that is no variable raises, unless it is one of `concept_ids` without data points.
+            Rows without a concept ID then belong to no variable, and a concept in several data tables has one strategy in all of them.
+            A data table whose variables mix `'count'` with other strategies is a float tensor with 0 in the empty intervals of the counted variables, and needs a numeric data field;
+            `sparse=True` raises for it, as a sparse array has one fill value.
         enrich_var_with_feature_info: Whether to enrich the var table with feature
            information. If a concept_id is not found in the concept table, their respective alternate `concept_id` included in the concept_relationship table is retrieved to add the available feature information.
            Otherwise the feature information will be NaN.
@@ -423,6 +783,9 @@ def setup_variables(
             'unit_concept_id' or 'unit_source_value'), the value NULL/NaN is considered
             a single unit.
         instantiate_tensor: Whether to instantiate the tensor within the `EHRData` object.
+        sparse: Whether to store the tensor as a `sparse.COO` array instead of a :class:`numpy.ndarray`.
+            Its fill value is that of the dense tensor: `NaN`, or 0 for `aggregation_strategy="count"` unless `data_field_to_keep='is_present'`.
+            Requires numeric fields in `data_field_to_keep`, and `instantiate_tensor=True`.
 
     Returns:
         An :class:`~ehrdata.EHRData` object with populated `.X`/`.layers` and `.var` field.
@@ -453,8 +816,6 @@ def setup_variables(
         >>> )
         >>> edata_gi
     """
-    from ehrdata import EHRData
-
     _check_valid_edata(edata)
     _check_valid_backend_handle(backend_handle)
     data_tables = _check_valid_variable_data_tables(data_tables)
@@ -464,23 +825,112 @@ def setup_variables(
     _check_valid_time_precision(time_precision)
     _warn_time_precision_interval_mismatch(interval_length_unit, time_precision)
     _check_valid_num_intervals(num_intervals)
-    _check_valid_concept_ids(concept_ids)
-    _check_valid_aggregation_strategy(aggregation_strategy)
+    _check_valid_num_intervals_before(num_intervals_before)
+    concept_sets = None
+    if isinstance(concept_ids, Mapping):
+        concept_sets = _check_valid_concept_sets(concept_ids, data_tables)
+        concept_ids = [concept_id for ids in concept_sets.values() for concept_id in ids]
+    else:
+        _check_valid_concept_ids(concept_ids)
+    key_column = "variable" if concept_sets else "data_table_concept_id"
+    value_range = _check_valid_value_range(value_range, concept_sets=concept_sets is not None)
+    unit_conversions_given = (
+        isinstance(unit_conversions, pd.DataFrame) and "to_unit_source_value" in unit_conversions.columns
+    )
+    unit_conversions = _check_valid_unit_conversions(unit_conversions, concept_sets)
+    strategy_map = None
+    if isinstance(aggregation_strategy, Mapping):
+        strategy_map = _check_valid_aggregation_strategy_mapping(
+            aggregation_strategy, concept_sets=concept_sets is not None
+        )
+    else:
+        _check_valid_aggregation_strategy(aggregation_strategy)
     _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
     _check_valid_enrich_var_with_unit_info(enrich_var_with_unit_info)
+    _check_valid_sparse(sparse, instantiate_tensor)
+    _check_valid_clip_to_end_date(clip_to_end_date)
+    if sparse and aggregation_strategy == "count":
+        is_present_fields = {fields[0] == "is_present" for fields in data_field_to_keep.values()}
+        if len(is_present_fields) > 1:
+            msg = (
+                "sparse=True needs one fill value for all data tables, but with aggregation_strategy='count' "
+                "the empty cells are 0, and NaN for data_field_to_keep='is_present'. "
+                "Set up these data tables in separate calls."
+            )
+            raise ValueError(msg)
 
     time_defining_table = edata.uns.get("omop_io_observation_table", None)
     if time_defining_table is None:
         msg = "The observation table must be set up first, use the `setup_obs` function."
         raise ValueError(msg)
 
-    _check_valid_birthdates_for_person_table(backend_handle, time_defining_table)
+    _check_valid_clip_to_end_date_for_observation_table(clip_to_end_date, time_defining_table)
+    _write_obs_windows(
+        backend_handle, edata.obs, time_defining_table, time_precision, clip_to_end_date=clip_to_end_date
+    )
+    n_obs = edata.n_obs
+    setup_id = uuid.uuid4().hex
+
+    table_strategies = variables_of_table = value_ranges = conversions_of_table = None
+    if strategy_map is not None or value_range is not None or unit_conversions is not None:
+        # the variables are the concepts with a concept id: with strategies, ranges or conversions per variable, rows without one belong to no variable
+        variables_of_table = (
+            {data_tables[0]: list(concept_sets)}
+            if concept_sets
+            else {
+                data_table: sorted(
+                    int(row[0])
+                    for row in backend_handle.execute(
+                        f"SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id FROM {data_table} "
+                        f"WHERE {_concept_ids_condition(data_table, concept_ids)} AND {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id IS NOT NULL"
+                    ).fetchall()
+                )
+                for data_table in data_tables
+            }
+        )
+        requested = [] if concept_sets or concept_ids == "all" else [int(concept_id) for concept_id in concept_ids]
+        numeric_fields = {
+            data_table: _is_numeric_field(backend_handle, data_table, data_field_to_keep[data_table][0])
+            for data_table in data_tables
+        }
+        if strategy_map is not None:
+            table_strategies = _check_valid_aggregation_strategies(strategy_map, variables_of_table, requested)
+            _check_valid_aggregation_fill_values(table_strategies, data_field_to_keep, numeric_fields, sparse=sparse)
+        if unit_conversions is not None:
+            if not unit_conversions_given:
+                unit_conversions["to_unit_source_value"] = _unit_concept_codes(
+                    backend_handle, unit_conversions["to_unit_concept_id"]
+                )
+            conversions_of_table = _unit_conversions_of_tables(
+                backend_handle,
+                unit_conversions,
+                variables_of_table=variables_of_table,
+                concept_sets=concept_sets,
+                data_field_to_keep=data_field_to_keep,
+                numeric_fields=numeric_fields,
+            )
+        if value_range is not None:
+            _check_valid_value_range_variables(
+                value_range, variables_of_table, requested, data_field_to_keep, numeric_fields
+            )
+            # the ranges of the variables, resolved to their concepts
+            ranges_of_concepts = [
+                (concept_id, *bounds)
+                for variable, bounds in value_range.items()
+                for concept_id in (concept_sets[variable] if concept_sets else [variable])
+            ]
+            value_ranges = pd.DataFrame(
+                {
+                    "concept_id": pd.array([row[0] for row in ranges_of_concepts], dtype="Int64"),
+                    "lower": pd.array([row[1] for row in ranges_of_concepts], dtype="Float64"),
+                    "upper": pd.array([row[2] for row in ranges_of_concepts], dtype="Float64"),
+                }
+            )
 
     var_collector = {}
     r_collector = {}
     unit_report_collector = {}
     empty_table_counter = 0
-    concept_mapping = False
     for data_table in data_tables:
         # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
         count = (
@@ -490,24 +940,43 @@ def setup_variables(
             .df()["count"]
             .item()
         )
-        if count == 0:
+        # concept sets are variables also without data points
+        if count == 0 and not concept_sets:
             logging.warning(f"No data found in {data_table}. Returning edata without data of {data_table}.")
             empty_table_counter += 1
             continue
 
         unit_fields = _get_unit_fields(backend_handle, data_table)
-        _check_one_unit_per_feature_for_aggregation(
-            backend_handle,
-            data_table,
-            data_field_to_keep[data_table][0],
-            aggregation_strategy,
-            unit_fields,
-            concept_ids=concept_ids,
+        # with variables per table, the rows of other concepts, and without a concept id, belong to no variable
+        table_concept_ids = (
+            variables_of_table[data_table] if variables_of_table is not None and not concept_sets else concept_ids
+        )
+        strategies = table_strategies[data_table] if table_strategies is not None else None
+        table_unit_conversions = conversions_of_table[data_table] if conversions_of_table is not None else None
+        variables_of_strategy: dict = {}
+        for variable, strategy in (strategies or {}).items():
+            variables_of_strategy.setdefault(strategy, []).append(variable)
+        # the checks run on the rows in the windows of the observations, before these are aggregated
+        value_field = data_field_to_keep[data_table][0]
+        row_checks = []
+        if table_unit_conversions is not None:
+            row_checks.append(partial(_check_listed_units, data_table=data_table, value_field=value_field))
+        # each variable is checked with its own strategy
+        row_checks.extend(
+            partial(
+                _check_one_unit_per_feature_for_aggregation,
+                data_table=data_table,
+                value_field=value_field,
+                aggregation_strategy=strategy,
+                unit_fields=unit_fields,
+                key_column=key_column,
+                variables=variables,
+            )
+            for strategy, variables in (variables_of_strategy or {aggregation_strategy: None}).items()
         )
 
-        _write_long_time_interval_table(
+        _write_long_observed_table(
             backend_handle=backend_handle,
-            time_defining_table=time_defining_table,
             data_table=data_table,
             time_precision=time_precision,
             data_field_to_keep=data_field_to_keep[data_table],
@@ -515,32 +984,59 @@ def setup_variables(
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
-            aggregation_strategy=aggregation_strategy,
-            concept_ids=concept_ids,
+            num_intervals_before=num_intervals_before,
+            aggregation_strategy="last" if strategies is not None else aggregation_strategy,
+            concept_ids=table_concept_ids,
+            link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
+            concept_sets=concept_sets,
+            strategies=strategies,
+            value_ranges=value_ranges,
+            unit_conversions=table_unit_conversions,
+            row_checks=row_checks,
+        )
+        _write_obs_names(backend_handle, data_table, setup_id)
+
+        _check_one_unit_per_feature(backend_handle, data_table, key_column=key_column)
+        unit_report = _create_feature_unit_concept_id_report(
+            backend_handle,
+            data_table=data_table,
+            key_column=key_column,
+            report_key="variable" if concept_sets else "concept_id",
         )
 
-        _check_one_unit_per_feature(backend_handle, data_table)
-        unit_report = _create_feature_unit_concept_id_report(backend_handle, data_table=data_table)
+        if concept_sets:
+            var = pd.DataFrame(
+                {
+                    "variable": list(concept_sets),
+                    "concept_ids": [",".join(str(concept_id) for concept_id in ids) for ids in concept_sets.values()],
+                }
+            )
+        elif variables_of_table is not None:
+            var = pd.DataFrame({"data_table_concept_id": variables_of_table[data_table]})
+        else:
+            var = backend_handle.execute(
+                f"SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AS data_table_concept_id FROM {data_table} WHERE {_concept_ids_condition(data_table, concept_ids)}"
+            ).df()
+            var = var.sort_values("data_table_concept_id").reset_index(drop=True)
 
-        var = backend_handle.execute(
-            f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_table}"
-        ).df()
-
-        var = var.sort_values("data_table_concept_id").reset_index(drop=True)
-
+        concept_mapping = False
         if enrich_var_with_feature_info or enrich_var_with_unit_info:
-            concepts = backend_handle.sql("SELECT * FROM concept").df()
-            concepts.columns = concepts.columns.str.lower()
+            concepts, concepts_relationship = _concept_rows(
+                backend_handle,
+                [concept_id for ids in concept_sets.values() for concept_id in ids]
+                if concept_sets
+                else list(var["data_table_concept_id"]),
+                unit_concept_ids=list(unit_report["unit_concept_id"]) if enrich_var_with_unit_info else [],
+                map_missing=enrich_var_with_feature_info,
+            )
 
             if (
-                any(elem not in set(concepts["concept_id"]) for elem in var["data_table_concept_id"])
-                & enrich_var_with_feature_info
+                enrich_var_with_feature_info
+                and not concept_sets
+                and any(elem not in set(concepts["concept_id"]) for elem in var["data_table_concept_id"])
             ):
                 concept_mapping = True
                 logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
-                concepts_relationship = backend_handle.sql(
-                    "SELECT concept_id_1, concept_id_2 FROM concept_relationship WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)"
-                ).df()
                 concepts_dict = concepts_relationship.set_index("concept_id_1")["concept_id_2"].to_dict()
                 concepts_mapped_idx = [x not in set(concepts["concept_id"]) for x in var["data_table_concept_id"]]
                 var.loc[concepts_mapped_idx, "data_table_concept_id_mapped"] = var.loc[
@@ -550,7 +1046,9 @@ def setup_variables(
                     var["data_table_concept_id"]
                 )
 
-        if enrich_var_with_feature_info:
+        if enrich_var_with_feature_info and concept_sets:
+            var = pd.concat([var, _concept_set_feature_info(concept_sets, concepts, concepts_relationship)], axis=1)
+        elif enrich_var_with_feature_info:
             if concept_mapping:
                 var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id_mapped", right_on="concept_id")
             else:
@@ -565,56 +1063,74 @@ def setup_variables(
                     var,
                     unit_report,
                     how="left",
-                    left_on="data_table_concept_id",
-                    right_on="concept_id",
+                    left_on=key_column,
+                    right_on="variable" if concept_sets else "concept_id",
                     suffixes=("", "_unit"),
                 )
-                var = pd.merge(
-                    var,
-                    concepts,
-                    how="left",
-                    left_on="unit_concept_id",
-                    right_on="concept_id",
-                    suffixes=("", "_unit_concept"),
-                )
+                if concept_sets:
+                    # the columns of the unit's concept, prefixed, so that they do not read as the concept of the variable
+                    var = pd.merge(var, concepts.add_prefix("unit_"), how="left", on="unit_concept_id")
+                else:
+                    var = pd.merge(
+                        var,
+                        concepts,
+                        how="left",
+                        left_on="unit_concept_id",
+                        right_on="concept_id",
+                        suffixes=("", "_unit_concept"),
+                    )
 
         if instantiate_tensor:
-            ds = (
-                (backend_handle.execute(f"SELECT * FROM long_person_timestamp_feature_value_{data_table}").df())
-                .set_index(["obs_id", "data_table_concept_id", "interval_step"])
-                .to_xarray()
+            r_collector[data_table] = _instantiate_long_observed_table(
+                backend_handle,
+                data_table,
+                data_field_to_keep[data_table][0],
+                variables=var[key_column].to_numpy(),
+                n_obs=n_obs,
+                num_intervals=num_intervals,
+                num_intervals_before=num_intervals_before,
+                aggregation_strategy=[strategies[variable] for variable in var[key_column]]
+                if strategies is not None
+                else aggregation_strategy,
+                sparse=sparse,
+                key_column=key_column,
             )
-            # order the values in ds according to the order in var
-            ds = ds.sel(data_table_concept_id=var["data_table_concept_id"].values)
-            r_collector[data_table] = ds[data_field_to_keep[data_table][0]].values
-
-        else:
-            ds = None
 
         var_collector[data_table] = var
         unit_report_collector[data_table] = unit_report
 
     if empty_table_counter == len(data_tables):
         logging.warning("No data found in any of the data tables. Returning edata without data.")
-        return edata
+        return edata.copy()
 
     var = pd.concat(var_collector.values(), axis=0).reset_index(drop=True)
 
-    tem_layer = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
-
-    tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
-
-    var.index = var.index.astype(str)
-
-    # AnnData does not allow to set a layer with value None
-    if instantiate_tensor:
-        edata = (
-            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
-            if layer is not None
-            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
-        )
+    if not instantiate_tensor:
+        tem_layer = None
+    elif sparse:
+        tem_layer = sp.concatenate(list(r_collector.values()), axis=1)
     else:
-        edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+        tem_layer = np.concatenate(list(r_collector.values()), axis=1)
+
+    tem = pd.DataFrame({"interval_step": np.arange(-num_intervals_before, num_intervals)})
+
+    var.index = var.pop("variable").to_numpy() if concept_sets else var.index.astype(str)
+
+    setup = _variable_setup(
+        setup_id,
+        data_tables=data_tables,
+        data_field_to_keep=data_field_to_keep,
+        time_precision=time_precision,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        num_intervals_before=num_intervals_before,
+        aggregation_strategy=strategy_map if strategy_map is not None else aggregation_strategy,
+        clip_to_end_date=clip_to_end_date,
+    )
+    edata = _setup_result(
+        edata, layer=layer, tensor=tem_layer if instantiate_tensor else None, var=var, tem=tem, setup=setup
+    )
 
     for data_table, unit_report in unit_report_collector.items():
         edata.uns[f"unit_report_{data_table}"] = unit_report
@@ -651,9 +1167,11 @@ def setup_interval_variables(
     ],
     data_field_to_keep: str | Sequence[str] | dict[str, str | Sequence[str]],
     time_precision: Literal["date", "datetime"] = "date",
+    clip_to_end_date: bool = True,
     interval_length_number: int,
     interval_length_unit: str,
     num_intervals: int,
+    num_intervals_before: int = 0,
     concept_ids: Literal["all"] | Sequence[int] = "all",
     aggregation_strategy: Literal[
         "last", "first", "mean", "median", "mode", "sum", "count", "min", "max", "std"
@@ -668,18 +1186,30 @@ def setup_interval_variables(
     The variables are sorted by the `concept_id` for each `data_table` in ascending order, and stacked together in the order that the `data_tables` are specified.
     The `data_field_to_keep` parameter specifies which Field in the selected table is to be used for the read-out of the value of a variable.
 
+    The variables are set up for the rows of `edata.obs`, in their order: the time window of each row is read from the columns that :func:`~ehrdata.io.omop.setup_obs` writes to `.obs`.
+    Hence `edata` can be filtered or reordered between :func:`~ehrdata.io.omop.setup_obs` and this function.
+    With `observation_table="person_visit_occurrence"`, a data point whose `visit_occurrence_id` names a visit of its person in the `visit_occurrence` table belongs to that visit only, and to no visit if it lies outside that visit's window.
+    Any other data point belongs to every visit of its person whose window holds it; the data tables without a `visit_occurrence_id`, such as `specimen`, have only such data points.
+    Visit ids are compared as integers, as OMOP defines them.
+    A row without a start date in `.obs`, or without an end date unless `clip_to_end_date=False`, gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
+
     In contrast to `setup_variables`, tables without unit information can be present here.
     Those tell no unit to verify or to carry along; the tables that do have a `unit_concept_id` are treated as in `setup_variables`.
     This function will not write a unit report. Should this be relevant for your work, please do open an issue on https://github.com/theislab/ehrdata.
 
+    Writes the setup arguments into `.uns['omop_io_variable_setup']` of the result, as :func:`~ehrdata.io.omop.setup_variables` does.
+
     Stores a table(s) named `long_person_timestamp_feature_value_<data_table>` in long format in the RDBMS.
+    Its `obs_index` is the position of the row in `edata.obs`; the table `long_person_timestamp_feature_value_<data_table>_obs` holds the `obs_names` of these rows.
+    It holds one row per observation, variable and interval that has data, so its size follows the number of data points.
     This table is instantiated in the `EHRData` object if `instantiate_tensor` is set to `True`;
     otherwise, the table is only stored in the RDBMS for later use.
 
     Args:
-       edata: Data object to which the variables should be added.
+       edata: Data object whose observations the variables are set up for.
        backend_handle: The backend handle to the database.
        layer: The layer to store the data in. If not specified, it uses `X`.
+           The input is not changed. The result keeps `.X` and the other layers of `edata` if `edata` has the same variables, data tables and time axis, as after a call that set up another layer of them.
        data_tables: The tables to be used.
        data_field_to_keep: The CDM Field in the data tables to be kept. Can be e.g.
            'value_as_number' or 'value_as_concept_id'. Importantly, can be 'is_present'
@@ -688,21 +1218,29 @@ def setup_interval_variables(
            if multiple data tables are used. For example, if data_tables=['measurement',
            'observation'], data_field_to_keep={'measurement': 'value_as_number',
            'observation': 'value_as_number'}.
-       time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`).
+       time_precision: The precision of the timestamp used in the table indicated in :func:`~ehrdata.io.omop.setup_obs`. If `"date"`, uses the `date` field (e.g. `visit_start_date` for `"person_visit_occurrence"`). If `"datetime"`, uses the `datetime` field (e.g. `visit_start_datetime` for `"person_visit_occurrence"`),
+           and the date where a datetime is missing, as OMOP requires dates but not datetimes: a start or a timepoint with a date only lies at midnight of that date, and an end at the end of that day. A data point with a date only on the first day of an observation that starts later that day is therefore before its start.
+       clip_to_end_date: Whether the data points after the end date of an observation, such as the `visit_end_date`, are left out.
+           If `False`, the data points are kept in all intervals, also after the end date.
+           Not available for `observation_table="person"`, whose observations have no end date.
        interval_length_number: Numeric value of the length of one interval.
        interval_length_unit: Unit of the interval length, needs to be a unit of :class:`pandas.Timedelta`.
-       num_intervals: Number of intervals.
+       num_intervals: Number of intervals from the start of each observation.
+       num_intervals_before: Number of intervals before the start of each observation, as in :func:`~ehrdata.io.omop.setup_variables`.
        concept_ids: Concept IDs to use from the data tables. If not specified, 'all' are used.
        aggregation_strategy: Strategy to use when aggregating multiple data points within one interval.
            For `'last'` and `'first'`, only data points that have a value in the data field of interest (the first field of `data_field_to_keep`) are considered.
            All kept fields are read from that very data point, so that e.g. the units describe the value that is kept.
            Every other strategy combines the values of several data points into one, which requires a single unit per feature.
-           A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points carrying a value (a missing unit is a unit of its own here).
+           A `NotImplementedError` is raised for features with more than one `unit_concept_id` among their data points that carry a value and enter the aggregation, those in the intervals of an observation (a missing unit is a unit of its own here).
            Exempt are `'count'`, `data_field_to_keep='is_present'`, and the data tables that have no `unit_concept_id` at all.
        enrich_var_with_feature_info: Whether to enrich the var table with feature
            information. If a concept_id is not found in the concept table, their respective alternate `concept_id` included in the concept_relationship table is retrieved to add the available feature information.
            Otherwise the feature information will be NaN.
-       keep_date: Whether to keep the start or end date, or the interval span.
+       keep_date: The time of a data point: its start date, its end date, or the interval from its start to its end.
+           With `"interval"`, a data point belongs to every interval that holds its start or its end, or that it covers;
+           without an end, to the interval of its start only, and without a start, to no interval.
+           A data point that starts after the end date of the observation is left out, also if it ends in the window, unless `clip_to_end_date=False`.
        instantiate_tensor: Whether to instantiate the tensor into the `EHRData` object.
 
     Returns:
@@ -733,8 +1271,6 @@ def setup_interval_variables(
         >>> )
         >>> edata_gi
     """
-    from ehrdata import EHRData
-
     _check_valid_edata(edata)
     _check_valid_backend_handle(backend_handle)
     data_tables = _check_valid_interval_variable_data_tables(data_tables)
@@ -744,9 +1280,11 @@ def setup_interval_variables(
     _check_valid_time_precision(time_precision)
     _warn_time_precision_interval_mismatch(interval_length_unit, time_precision)
     _check_valid_num_intervals(num_intervals)
+    _check_valid_num_intervals_before(num_intervals_before)
     _check_valid_concept_ids(concept_ids)
     _check_valid_aggregation_strategy(aggregation_strategy)
     _check_valid_enrich_var_with_feature_info(enrich_var_with_feature_info)
+    _check_valid_clip_to_end_date(clip_to_end_date)
     _check_valid_keep_date(keep_date)
 
     time_defining_table = edata.uns.get("omop_io_observation_table", None)
@@ -754,12 +1292,15 @@ def setup_interval_variables(
         msg = "The observation table must be set up first, use the `setup_obs` function."
         raise ValueError(msg)
 
-    _check_valid_birthdates_for_person_table(backend_handle, time_defining_table)
+    _check_valid_clip_to_end_date_for_observation_table(clip_to_end_date, time_defining_table)
+    _write_obs_windows(
+        backend_handle, edata.obs, time_defining_table, time_precision, clip_to_end_date=clip_to_end_date
+    )
+    setup_id = uuid.uuid4().hex
 
     var_collector = {}
     r_collector = {}
     empty_table_counter = 0
-    concept_mapping = False
     for data_table in data_tables:
         # dbms complains about our queries, which sometimes need a column to be of type e.g. datetime, when it can't infer types from data
         count = (
@@ -775,18 +1316,9 @@ def setup_interval_variables(
             continue
 
         unit_fields = _get_unit_fields(backend_handle, data_table)
-        _check_one_unit_per_feature_for_aggregation(
-            backend_handle,
-            data_table,
-            data_field_to_keep[data_table][0],
-            aggregation_strategy,
-            unit_fields,
-            concept_ids=concept_ids,
-        )
 
-        _write_long_time_interval_table(
+        _write_long_observed_table(
             backend_handle=backend_handle,
-            time_defining_table=time_defining_table,
             data_table=data_table,
             time_precision=time_precision,
             data_field_to_keep=data_field_to_keep[data_table],
@@ -794,27 +1326,37 @@ def setup_interval_variables(
             interval_length_number=interval_length_number,
             interval_length_unit=interval_length_unit,
             num_intervals=num_intervals,
+            num_intervals_before=num_intervals_before,
             aggregation_strategy=aggregation_strategy,
             concept_ids=concept_ids,
+            link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
             keep_date=keep_date,
+            row_checks=[
+                partial(
+                    _check_one_unit_per_feature_for_aggregation,
+                    data_table=data_table,
+                    value_field=data_field_to_keep[data_table][0],
+                    aggregation_strategy=aggregation_strategy,
+                    unit_fields=unit_fields,
+                )
+            ],
         )
+        _write_obs_names(backend_handle, data_table, setup_id)
 
         var = backend_handle.execute(
-            f"SELECT DISTINCT data_table_concept_id FROM long_person_timestamp_feature_value_{data_table}"
+            f"SELECT DISTINCT {DATA_TABLE_CONCEPT_ID_TRUNK[data_table]}_concept_id AS data_table_concept_id FROM {data_table} WHERE {_concept_ids_condition(data_table, concept_ids)}"
         ).df()
-
         var = var.sort_values("data_table_concept_id").reset_index(drop=True)
 
+        concept_mapping = False
         if enrich_var_with_feature_info:
-            concepts = backend_handle.sql("SELECT * FROM concept").df()
-            concepts.columns = concepts.columns.str.lower()
+            concepts, concepts_relationship = _concept_rows(
+                backend_handle, list(var["data_table_concept_id"]), map_missing=True
+            )
 
             if any(elem not in set(concepts["concept_id"]) for elem in var["data_table_concept_id"]):
                 concept_mapping = True
                 logging.warning("Concept_ids are only partially matching. Mapping concept_ids where applicable.")
-                concepts_relationship = backend_handle.sql(
-                    "SELECT concept_id_1, concept_id_2 FROM concept_relationship WHERE (relationship_id = 'Mapped from') AND (concept_id_1 <> concept_id_2)"
-                ).df()
                 concepts_dict = concepts_relationship.set_index("concept_id_1")["concept_id_2"].to_dict()
                 concepts_mapped_idx = [x not in set(concepts["concept_id"]) for x in var["data_table_concept_id"]]
                 var.loc[concepts_mapped_idx, "data_table_concept_id_mapped"] = var.loc[
@@ -831,40 +1373,47 @@ def setup_interval_variables(
                 var = pd.merge(var, concepts, how="left", left_on="data_table_concept_id", right_on="concept_id")
 
         if instantiate_tensor:
-            ds = (
-                (backend_handle.execute(f"SELECT * FROM long_person_timestamp_feature_value_{data_table}").df())
-                .set_index(["obs_id", "data_table_concept_id", "interval_step"])
-                .to_xarray()
+            r_collector[data_table] = _instantiate_long_observed_table(
+                backend_handle,
+                data_table,
+                data_field_to_keep[data_table][0],
+                variables=var["data_table_concept_id"].to_numpy(),
+                n_obs=edata.n_obs,
+                num_intervals=num_intervals,
+                num_intervals_before=num_intervals_before,
+                aggregation_strategy=aggregation_strategy,
+                sparse=False,
             )
-            ds = ds.sel(data_table_concept_id=var["data_table_concept_id"].values)
-
-            r_collector[data_table] = ds[data_field_to_keep[data_table][0]].values
-
-        else:
-            ds = None
 
         var_collector[data_table] = var
 
     if empty_table_counter == len(data_tables):
         logging.warning("No data found in any of the data tables. Returning edata without data.")
-        return edata
+        return edata.copy()
 
     var = pd.concat(var_collector.values(), axis=0).reset_index(drop=True)
 
     tem_layer = np.concatenate(list(r_collector.values()), axis=1) if instantiate_tensor else None
 
-    tem = pd.DataFrame({"interval_step": np.arange(num_intervals)})
+    tem = pd.DataFrame({"interval_step": np.arange(-num_intervals_before, num_intervals)})
 
     var.index = var.index.astype(str)
 
-    # AnnData does not allow to set a layer with value None
-    if instantiate_tensor:
-        edata = (
-            EHRData(layers={layer: tem_layer}, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
-            if layer is not None
-            else EHRData(X=tem_layer, obs=edata.obs, var=var, uns=edata.uns, tem=tem)
-        )
-    else:
-        edata = EHRData(obs=edata.obs, var=var, uns=edata.uns, tem=tem)
+    setup = _variable_setup(
+        setup_id,
+        data_tables=data_tables,
+        data_field_to_keep=data_field_to_keep,
+        time_precision=time_precision,
+        interval_length_number=interval_length_number,
+        interval_length_unit=interval_length_unit,
+        num_intervals=num_intervals,
+        num_intervals_before=num_intervals_before,
+        aggregation_strategy=aggregation_strategy,
+        clip_to_end_date=clip_to_end_date,
+        keep_date=keep_date,
+    )
+    edata = _setup_result(
+        edata, layer=layer, tensor=tem_layer if instantiate_tensor else None, var=var, tem=tem, setup=setup
+    )
 
     return edata
