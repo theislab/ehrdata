@@ -22,7 +22,7 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION_KEY,
 )
 from ehrdata.io._array_casting import _cast_dataframe_columns_to_writable_dtype, _cast_object_array_to_float_or_str
-from ehrdata.io._coo_codec import is_coo_group, read_coo
+from ehrdata.io._coo_codec import _binsparse_dtype_str, is_coo_group, read_coo
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -140,6 +140,23 @@ def strings_to_categoricals(adata: ad.AnnData, tem: pd.DataFrame) -> None:
     adata.strings_to_categoricals(tem)
 
 
+def encode_for_writing(
+    edata: EHRData, *, convert_strings_to_categoricals: bool
+) -> tuple[ad.AnnData, dict[str, sparse.COO], pd.DataFrame]:
+    """Encode and check an :class:`~ehrdata.EHRData` for every writer, before anything is written.
+
+    Returns the :class:`~anndata.AnnData` and the sparse 3D arrays of :func:`encode_for_disk`, and the cast `.tem`.
+    Raises for data that cannot be written, so that a writer does not replace existing data with a failed write.
+    """
+    adata, sparse_3d_data = encode_for_disk(edata)
+    for coo in sparse_3d_data.values():
+        _binsparse_dtype_str(coo.dtype)
+    tem = _cast_dataframe_columns_to_writable_dtype(edata.tem, "tem")
+    if convert_strings_to_categoricals:
+        strings_to_categoricals(adata, tem)
+    return adata, sparse_3d_data, tem
+
+
 def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:
     """Restore relocated 3D arrays from ``.obsm`` back into ``X``/``layers`` in a dict of init kwargs."""
     obsm = dict(init.get("obsm") or {})
@@ -172,6 +189,19 @@ def read_mapping_with_coo(group: GroupStorageType) -> dict[str, Any]:
         child = group[key]
         out[key] = read_coo(child) if is_coo_group(child) else ad.io.read_elem(child)
     return out
+
+
+# other children are ignored, as by anndata
+_INIT_KEYS = ("X", "obs", "var", "obsm", "varm", "obsp", "varp", "layers", "uns", "raw", "tem")
+
+
+def read_init_dict(group: GroupStorageType) -> dict[str, Any]:
+    """Read the AnnData slots and `.tem` of a group as init kwargs, ignoring other children."""
+    return {
+        k: read_mapping_with_coo(group[k]) if k == "obsm" else ad.io.read_elem(group[k])
+        for k in _INIT_KEYS
+        if k in group
+    }
 
 
 def _check_020_ehrdata_on_disk_format(f: Any) -> bool:
