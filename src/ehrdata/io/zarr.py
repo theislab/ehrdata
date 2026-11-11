@@ -55,7 +55,7 @@ def read_zarr(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_2()
-        >>> ed.io.write_zarr("mimic_2.zarr", edata)
+        >>> ed.io.write_zarr(edata, "mimic_2.zarr")
         >>> edata_from_zarr = ed.io.read_zarr("mimic_2.zarr")
     """
     from ehrdata import EHRData
@@ -118,7 +118,7 @@ def write_zarr(
     filename: str | Path,
     *,
     chunks: Literal["auto" | "ehrdata_auto"] = "auto",
-    convert_strings_to_categoricals: bool = True,
+    convert_strings_to_categoricals: bool = False,
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
@@ -133,6 +133,7 @@ def write_zarr(
         filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
         chunks: Specify strategy of how data should be chunked. For simplicity, currently only 2 options are available: `"auto"` will write the data with :func:`~anndata.io.write_elem`'s default settings. `"ehrdata_auto"` will write the data chunked (and sharded) based on a heuristic that loosely speaking writes slightly smaller chunks.
         convert_strings_to_categoricals: Convert the string columns of `.obs`, `.var` and `.tem` in which a value repeats or is missing to `categorical` dtype.
+            By default, strings are kept.
             The :class:`~ehrdata.EHRData` passed is left unchanged.
 
     Examples:

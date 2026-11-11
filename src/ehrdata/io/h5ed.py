@@ -128,7 +128,7 @@ def write_h5ed(
     *,
     compression: Literal["gzip", "lzf"] | None = None,
     compression_opts: int | None = None,
-    convert_strings_to_categoricals: bool = True,
+    convert_strings_to_categoricals: bool = False,
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to an ehrdata hdf5 file (`.h5ed`).
 
@@ -146,6 +146,7 @@ def write_h5ed(
             Setting compression to 'gzip' can save disk space but will slow down writing and subsequent reading.
         compression_opts: For [`lzf`, `gzip`], see the h5py :ref:`dataset_compression`.
         convert_strings_to_categoricals: Convert the string columns of `.obs`, `.var` and `.tem` in which a value repeats or is missing to `categorical` dtype.
+            By default, strings are kept.
             The :class:`~ehrdata.EHRData` passed is left unchanged.
 
     Examples:

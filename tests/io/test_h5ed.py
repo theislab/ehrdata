@@ -442,19 +442,25 @@ def test_write_read_cast_columns_convert_strings_to_categoricals(
     _assert_columns_anndata_cannot_write_read_back(edata, edata_read)
 
 
-@pytest.mark.parametrize("convert_strings_to_categoricals", [True, False])
-def test_write_read_string_columns_same_from_h5ed_and_zarr(
-    edata_string_columns, convert_strings_to_categoricals, tmp_path
-):
+@pytest.mark.parametrize(
+    ("kwargs", "converted"),
+    [
+        ({"convert_strings_to_categoricals": True}, True),
+        ({"convert_strings_to_categoricals": False}, False),
+        ({}, False),
+    ],
+    ids=["convert", "keep", "default"],
+)
+def test_write_read_string_columns_same_from_h5ed_and_zarr(edata_string_columns, kwargs, converted, tmp_path):
     # https://github.com/theislab/ehrdata/issues/358
     edata = edata_string_columns
     obs, var, tem = edata.obs.copy(), edata.var.copy(), edata.tem.copy()
 
-    write_h5ed(edata, tmp_path / "edata.h5ed", convert_strings_to_categoricals=convert_strings_to_categoricals)
-    write_zarr(edata, tmp_path / "edata.zarr", convert_strings_to_categoricals=convert_strings_to_categoricals)
+    write_h5ed(edata, tmp_path / "edata.h5ed", **kwargs)
+    write_zarr(edata, tmp_path / "edata.zarr", **kwargs)
     edata_read = read_zarr(tmp_path / "edata.zarr")
 
-    # strings with repeated or missing values, also those written for datetimes and timedeltas
+    # repeated or missing values
     for frame, column in [
         ("obs", "sex"),
         ("obs", "site"),
@@ -463,8 +469,8 @@ def test_write_read_string_columns_same_from_h5ed_and_zarr(
         ("tem", "date"),
         ("tem", "duration"),
     ]:
-        assert (getattr(edata_read, frame)[column].dtype == "category") is convert_strings_to_categoricals, column
-    # anndata converts only the strings with repeated or missing values, and a categorical stays one
+        assert (getattr(edata_read, frame)[column].dtype == "category") is converted, column
+    # unique values
     for frame, column in [("obs", "person_source_value"), ("var", "name"), ("tem", "label")]:
         assert getattr(edata_read, frame)[column].dtype != "category", column
     assert edata_read.obs["cohort"].dtype == "category"
