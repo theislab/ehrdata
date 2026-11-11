@@ -25,6 +25,7 @@ from ehrdata.io._ondisk import (
     decode_init_dict,
     encode_for_disk,
     read_mapping_with_coo,
+    strings_to_categoricals,
 )
 
 if TYPE_CHECKING:
@@ -131,7 +132,8 @@ def write_zarr(
         edata: Central data object.
         filename: Name of the output file, can also be prefixed with relative or absolute path to save the file to.
         chunks: Specify strategy of how data should be chunked. For simplicity, currently only 2 options are available: `"auto"` will write the data with :func:`~anndata.io.write_elem`'s default settings. `"ehrdata_auto"` will write the data chunked (and sharded) based on a heuristic that loosely speaking writes slightly smaller chunks.
-        convert_strings_to_categoricals: Convert columns of `str` dtype in `.obs` and `.var` and `.tem` to `categorical` dtype.
+        convert_strings_to_categoricals: Convert the string columns of `.obs`, `.var` and `.tem` in which a value repeats or is missing to `categorical` dtype.
+            The :class:`~ehrdata.EHRData` passed is left unchanged.
 
     Examples:
         >>> import ehrdata as ed
@@ -146,9 +148,7 @@ def write_zarr(
     tem = _cast_dataframe_columns_to_writable_dtype(edata.tem, "tem")
 
     if convert_strings_to_categoricals:
-        adata.strings_to_categoricals(adata.obs)
-        adata.strings_to_categoricals(adata.var)
-        adata.strings_to_categoricals(tem)
+        strings_to_categoricals(adata, tem)
 
     # write_sharded this is a slightly modified version from https://anndata.readthedocs.io/en/stable/tutorials/zarr-v3.html
     # write_sharded is intended as a future blueprint of implementing better chunking defaults for ehrdata based based on real usecases
