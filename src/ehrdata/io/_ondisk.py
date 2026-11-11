@@ -191,6 +191,19 @@ def read_mapping_with_coo(group: GroupStorageType) -> dict[str, Any]:
     return out
 
 
+# other children are ignored, as by anndata
+_INIT_KEYS = ("X", "obs", "var", "obsm", "varm", "obsp", "varp", "layers", "uns", "raw", "tem")
+
+
+def read_init_dict(group: GroupStorageType) -> dict[str, Any]:
+    """Read the AnnData slots and `.tem` of a group as init kwargs, ignoring other children."""
+    return {
+        k: read_mapping_with_coo(group[k]) if k == "obsm" else ad.io.read_elem(group[k])
+        for k in _INIT_KEYS
+        if k in group
+    }
+
+
 def _check_020_ehrdata_on_disk_format(f: Any) -> bool:
     """Return True if the file/store carries the ehrdata 0.2.0 on-disk stamp.
 

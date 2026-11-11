@@ -21,7 +21,7 @@ from ehrdata.io._ondisk import (
     _check_020_ehrdata_on_disk_format,
     decode_init_dict,
     encode_for_writing,
-    read_mapping_with_coo,
+    read_init_dict,
 )
 
 if TYPE_CHECKING:
@@ -78,14 +78,7 @@ def _read_zarr_elem(f: zarr.Group, *, harmonize_missing_values: bool, cast_varia
     encoding_type = f.attrs[EHRDATA_ENCODING_TYPE_KEY_ZARR]
     if encoding_type == EHRDATA_ENCODING_TYPE:
         if "anndata" in f:
-            dictionary_for_init = {}
-            for k in dict(f["anndata"]):
-                if k.startswith("raw."):
-                    continue
-                # obsm may hold ehrdata COO groups anndata can't read, so read it child-by-child.
-                dictionary_for_init[k] = (
-                    read_mapping_with_coo(f["anndata"]["obsm"]) if k == "obsm" else ad.io.read_elem(f["anndata"][k])
-                )
+            dictionary_for_init = read_init_dict(f["anndata"])
         else:
             err = "The zarr store does not contain the 'anndata' group."
             raise ValueError(err)
@@ -95,11 +88,7 @@ def _read_zarr_elem(f: zarr.Group, *, harmonize_missing_values: bool, cast_varia
             warnings.warn("The zarr store does not contain the 'tem' group.", stacklevel=2)
 
     elif encoding_type == "anndata":
-        dictionary_for_init = {}
-        for k in dict(f):
-            if k.startswith("raw."):
-                continue
-            dictionary_for_init[k] = read_mapping_with_coo(f["obsm"]) if k == "obsm" else ad.io.read_elem(f[k])
+        dictionary_for_init = read_init_dict(f)
 
     else:
         err = f"Unknown encoding-type '{encoding_type}'."

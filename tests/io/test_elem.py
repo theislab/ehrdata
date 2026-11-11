@@ -123,6 +123,15 @@ def test_write_elem_existing_key(root, edata_333, edata_string_columns):
     assert "tem_data" not in edata_read.layers
 
 
+def test_read_elem_ignores_other_children(root, edata_333):
+    # e.g. metadata of a package bundling the EHRData
+    write_elem(root, "edata", edata_333)
+    slots = root["edata"] if isinstance(root, h5py.File) else root["edata"]["anndata"]
+    slots.create_group("extra")
+
+    _assert_edata_equal(read_elem(root["edata"]), edata_333)
+
+
 @pytest.mark.parametrize(
     ("edata_unwritable", "error"),
     [

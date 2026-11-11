@@ -23,7 +23,7 @@ from ehrdata.io._ondisk import (
     _check_020_ehrdata_on_disk_format,
     decode_init_dict,
     encode_for_writing,
-    read_mapping_with_coo,
+    read_init_dict,
 )
 
 if TYPE_CHECKING:
@@ -107,12 +107,7 @@ def _read_h5ed_elem(group: h5py.Group, *, harmonize_missing_values: bool, cast_v
     """Read an :class:`~ehrdata.EHRData` from an HDF5 group in the `.h5ed` layout, fully into memory."""
     from ehrdata import EHRData
 
-    dictionary_for_init = {}
-    for k in dict(group):
-        if k.startswith("raw."):
-            continue
-        # obsm may hold ehrdata COO groups anndata can't read, so read it child-by-child.
-        dictionary_for_init[k] = read_mapping_with_coo(group["obsm"]) if k == "obsm" else ad.io.read_elem(group[k])
+    dictionary_for_init = read_init_dict(group)
 
     if _check_020_ehrdata_on_disk_format(group):
         dictionary_for_init = decode_init_dict(dictionary_for_init)
