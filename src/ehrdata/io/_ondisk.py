@@ -27,6 +27,8 @@ from ehrdata.io._coo_codec import is_coo_group, read_coo
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    import pandas as pd
+
     from ehrdata import EHRData
     from ehrdata._types import GroupStorageType
 
@@ -125,6 +127,17 @@ def encode_for_disk(edata: EHRData) -> tuple[ad.AnnData, dict[str, sparse.COO]]:
         shape=None if X is not None else (edata.n_obs, edata.n_vars),
     )
     return adata, sparse_3d_data
+
+
+def strings_to_categoricals(adata: ad.AnnData, tem: pd.DataFrame) -> None:
+    """Convert the string columns of ``.obs``, ``.var`` and ``.tem`` in which a value repeats or is missing to categoricals.
+
+    Converts in place, so pass the copies built for writing (see :func:`encode_for_disk`), never the caller's data.
+    The writers of every format call this, so that the same columns come back as categoricals from every format.
+    """
+    adata.strings_to_categoricals(adata.obs)
+    adata.strings_to_categoricals(adata.var)
+    adata.strings_to_categoricals(tem)
 
 
 def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:

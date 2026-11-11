@@ -416,6 +416,85 @@ def test_write_read_h5ed_casts_object_layers(X_any_array_type_322, with_X, tmp_p
     _assert_object_layers_read_back(edata, read_h5ed(path))
 
 
+@pytest.mark.parametrize("convert_strings_to_categoricals", [True, False])
+@pytest.mark.parametrize(
+    ("write", "read", "suffix"), [(write_h5ed, read_h5ed, "h5ed"), (write_zarr, read_zarr, "zarr")]
+)
+def test_write_read_cast_columns_convert_strings_to_categoricals(
+    write, read, suffix, convert_strings_to_categoricals, tmp_path
+):
+    # https://github.com/theislab/ehrdata/issues/358
+    edata = _edata_with_columns_anndata_cannot_write(np.zeros((3, 2)))
+    path = tmp_path / f"string_columns.{suffix}"
+
+    write(edata, path, convert_strings_to_categoricals=convert_strings_to_categoricals)
+    edata_read = read(path, harmonize_missing_values=False)
+
+    # strings, datetimes and mixed values with repeated or missing values
+    for column in ["birth_datetime", "gender_source_value", "race_source_value", "death_date", "concept_code"]:
+        assert isinstance(edata_read.obs[column].dtype, pd.CategoricalDtype) is convert_strings_to_categoricals
+    assert isinstance(edata_read.tem["phase"].dtype, pd.CategoricalDtype) is convert_strings_to_categoricals
+    # no repeated or missing values
+    assert not isinstance(edata_read.obs["person_source_value"].dtype, pd.CategoricalDtype)
+    assert not isinstance(edata_read.var["valid_start_date"].dtype, pd.CategoricalDtype)
+    assert not isinstance(edata_read.tem["timestamp"].dtype, pd.CategoricalDtype)
+
+    _assert_columns_anndata_cannot_write_read_back(edata, edata_read)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "converted"),
+    [
+        ({"convert_strings_to_categoricals": True}, True),
+        ({"convert_strings_to_categoricals": False}, False),
+        ({}, False),
+    ],
+    ids=["convert", "keep", "default"],
+)
+def test_write_read_string_columns_same_from_h5ed_and_zarr(edata_string_columns, kwargs, converted, tmp_path):
+    # https://github.com/theislab/ehrdata/issues/358
+    edata = edata_string_columns
+    obs, var, tem = edata.obs.copy(), edata.var.copy(), edata.tem.copy()
+
+    write_h5ed(edata, tmp_path / "edata.h5ed", **kwargs)
+    write_zarr(edata, tmp_path / "edata.zarr", **kwargs)
+    edata_read = read_zarr(tmp_path / "edata.zarr")
+
+    # repeated or missing values
+    for frame, column in [
+        ("obs", "sex"),
+        ("obs", "site"),
+        ("var", "unit"),
+        ("tem", "kind"),
+        ("tem", "date"),
+        ("tem", "duration"),
+    ]:
+        assert (getattr(edata_read, frame)[column].dtype == "category") is converted, column
+    # unique values
+    for frame, column in [("obs", "person_source_value"), ("var", "name"), ("tem", "label")]:
+        assert getattr(edata_read, frame)[column].dtype != "category", column
+    assert edata_read.obs["cohort"].dtype == "category"
+    assert edata_read.obs["sex"].astype(str).tolist() == ["F", "M", "F"]
+    assert edata_read.tem["date"].astype(str).tolist() == [
+        "2000-01-01T00:00:00",
+        "2000-01-01T00:00:00",
+        "2000-01-02T00:00:00",
+    ]
+
+    # .h5ed reads back the same, also backed
+    for edata_h5ed in [
+        read_h5ed(tmp_path / "edata.h5ed"),
+        read_h5ed(tmp_path / "edata.h5ed", backed="r", harmonize_missing_values=False, cast_variables_to_float=False),
+    ]:
+        for frame in ("obs", "var", "tem"):
+            pd.testing.assert_frame_equal(getattr(edata_h5ed, frame), getattr(edata_read, frame))
+
+    # the input is left unchanged
+    pd.testing.assert_frame_equal(edata.obs, obs)
+    pd.testing.assert_frame_equal(edata.var, var)
+    pd.testing.assert_frame_equal(edata.tem, tem)
+
+
 @pytest.mark.parametrize(
     ("write", "read", "suffix"), [(write_h5ed, read_h5ed, "h5ed"), (write_zarr, read_zarr, "zarr")]
 )

@@ -136,20 +136,17 @@ def test_write_read_zarr_basic(edata_name, chunks, request, tmp_path):
         _assert_dtype_object_array_with_missing_values_equal(edata.layers[key], edata_read.layers[key])
 
     _check_aligned_anndata_parts_equal(edata, edata_read)
-    pd.testing.assert_frame_equal(edata.tem.iloc[:, :1], edata_read.tem.iloc[:, :1])
+    pd.testing.assert_frame_equal(edata.tem, edata_read.tem)
 
     # check the test file is an ehrdata zarr store
     store = zarr.open(store_path)
     assert store.attrs["encoding-type"] == "ehrdata"
     assert store.attrs["ehrdata-encoding-version"] == EHRDATA_ONDISK_VERSION
 
-    # check success of convert_strings_to_categoricals
-    if "obs_col_2" in edata_read.obs.columns:
-        assert edata_read.obs["obs_col_2"].dtype == "category"
-    if "var_col_2" in edata_read.var.columns:
-        assert edata_read.var["var_col_2"].dtype == "category"
-    if "tem_col_2" in edata_read.tem.columns:
-        assert edata_read.tem["tem_col_2"].dtype == "category"
+    # strings are kept by default
+    for frame, column in [("obs", "obs_col_2"), ("var", "var_col_2")]:
+        if column in getattr(edata, frame).columns:
+            assert getattr(edata_read, frame)[column].dtype == getattr(edata, frame)[column].dtype
 
 
 def test_write_zarr_chunks_error(edata_333, tmp_path):
@@ -341,16 +338,3 @@ def test_write_read_zarr_casts_object_layers(X_any_array_type_322, with_X, tmp_p
     write_zarr(edata, path)
 
     _assert_object_layers_read_back(edata, read_zarr(path))
-
-
-def test_write_zarr_keeps_string_columns_without_convert_strings_to_categoricals(X_any_array_type_322, tmp_path):
-    edata = _edata_with_columns_anndata_cannot_write(X_any_array_type_322)
-    path = tmp_path / "string_columns.zarr"
-
-    write_zarr(edata, path, convert_strings_to_categoricals=False)
-    edata_read = read_zarr(path, harmonize_missing_values=False)
-
-    # each would become categorical if converted
-    for column in ["birth_datetime", "gender_source_value", "race_source_value", "death_date", "concept_code"]:
-        assert not isinstance(edata_read.obs[column].dtype, pd.CategoricalDtype)
-    assert not isinstance(edata_read.tem["phase"].dtype, pd.CategoricalDtype)

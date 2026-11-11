@@ -28,6 +28,7 @@ from ehrdata.io._ondisk import (
     decode_init_dict,
     encode_for_disk,
     read_mapping_with_coo,
+    strings_to_categoricals,
 )
 
 if TYPE_CHECKING:
@@ -127,6 +128,7 @@ def write_h5ed(
     *,
     compression: Literal["gzip", "lzf"] | None = None,
     compression_opts: int | None = None,
+    convert_strings_to_categoricals: bool = False,
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to an ehrdata hdf5 file (`.h5ed`).
 
@@ -134,7 +136,7 @@ def write_h5ed(
     To write the file, `X` and `layers` cannot be written as `object` dtype.
     If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a string dtype.
     The same holds for the `object` columns of `.obs`, `.var` and `.tem`; integers and booleans among them stay exact, and missing values stay missing.
-    Datetime and timedelta columns are written as ISO 8601 strings, read back as categorical in `.obs` and `.var` if a value repeats or is missing.
+    Datetime and timedelta columns are written as ISO 8601 strings, read back as categorical with `convert_strings_to_categoricals=True` if a value repeats or is missing.
 
 
     Args:
@@ -143,6 +145,9 @@ def write_h5ed(
         compression: Optional file compression.
             Setting compression to 'gzip' can save disk space but will slow down writing and subsequent reading.
         compression_opts: For [`lzf`, `gzip`], see the h5py :ref:`dataset_compression`.
+        convert_strings_to_categoricals: Convert the string columns of `.obs`, `.var` and `.tem` in which a value repeats or is missing to `categorical` dtype.
+            By default, strings are kept.
+            The :class:`~ehrdata.EHRData` passed is left unchanged.
 
     Examples:
         >>> import ehrdata as ed
@@ -152,10 +157,17 @@ def write_h5ed(
     filename = Path(filename)
 
     adata, sparse_3d_data = encode_for_disk(edata)
+    tem = _cast_dataframe_columns_to_writable_dtype(edata.tem, "tem")
+
+    if convert_strings_to_categoricals:
+        strings_to_categoricals(adata, tem)
+
     adata.write_h5ad(
         filename,
         compression=compression,
         compression_opts=compression_opts,
+        # converted above, with .tem; AnnData.write_h5ad would otherwise convert .obs and .var by default
+        convert_strings_to_categoricals=False,
     )
     with h5py.File(filename, "a") as f:
         if sparse_3d_data:
@@ -164,7 +176,7 @@ def write_h5ed(
                 write_coo_h5(
                     obsm_group.create_group(key), coo, compression=compression, compression_opts=compression_opts
                 )
-        ad.io.write_elem(f, "tem", _cast_dataframe_columns_to_writable_dtype(edata.tem, "tem"))
+        ad.io.write_elem(f, "tem", tem)
         # Identify the file as ehrdata, namespaced to not clash with anndata's own encoding attrs.
         f.attrs[EHRDATA_ENCODING_TYPE_KEY] = EHRDATA_ENCODING_TYPE
         f.attrs[EHRDATA_ONDISK_VERSION_KEY] = str(EHRDATA_ONDISK_VERSION)
