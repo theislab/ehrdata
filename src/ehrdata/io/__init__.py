@@ -1,5 +1,6 @@
 from . import omop
 from .csv import read_csv
+from .elem import read_elem, write_elem
 from .events import from_events
 from .fhir import read_fhir
 from .h5ed import read_h5ad, read_h5ed, write_h5ad, write_h5ed

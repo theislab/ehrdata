@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import anndata as ad
@@ -17,21 +16,19 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION_KEY,
 )
 from ehrdata.core.ehrdata import _silence_anndata_nd_warning
-from ehrdata.io._array_casting import (
-    _cast_dataframe_columns_to_writable_dtype,
-    _cast_variables_to_float,
-)
+from ehrdata.io._array_casting import _cast_variables_to_float
 from ehrdata.io._coo_codec import write_coo_h5
 from ehrdata.io._ondisk import (
     _allow_write_nullable_strings,
     _check_020_ehrdata_on_disk_format,
     decode_init_dict,
-    encode_for_disk,
+    encode_for_writing,
     read_mapping_with_coo,
-    strings_to_categoricals,
 )
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from ehrdata import EHRData
 
 
@@ -78,19 +75,10 @@ def read_h5ed(
         raise ValueError(msg)
 
     if backed in {None, False}:
-        dictionary_for_init = {}
-
         with h5py.File(filename, "r") as f:
-            for k in dict(f):
-                if k.startswith("raw."):
-                    continue
-                # obsm may hold ehrdata COO groups anndata can't read, so read it child-by-child.
-                dictionary_for_init[k] = read_mapping_with_coo(f["obsm"]) if k == "obsm" else ad.io.read_elem(f[k])
-            is_ehrdata_020 = _check_020_ehrdata_on_disk_format(f)
-
-        if is_ehrdata_020:
-            dictionary_for_init = decode_init_dict(dictionary_for_init)
-        edata = EHRData(**dictionary_for_init)
+            return _read_h5ed_elem(
+                f, harmonize_missing_values=harmonize_missing_values, cast_variables_to_float=cast_variables_to_float
+            )
 
     else:
         mode = backed
@@ -112,6 +100,24 @@ def read_h5ed(
                 raise NotImplementedError(msg_0)
             edata = EHRData.from_adata(adata, tem=tem)
 
+    return edata
+
+
+def _read_h5ed_elem(group: h5py.Group, *, harmonize_missing_values: bool, cast_variables_to_float: bool) -> EHRData:
+    """Read an :class:`~ehrdata.EHRData` from an HDF5 group in the `.h5ed` layout, fully into memory."""
+    from ehrdata import EHRData
+
+    dictionary_for_init = {}
+    for k in dict(group):
+        if k.startswith("raw."):
+            continue
+        # obsm may hold ehrdata COO groups anndata can't read, so read it child-by-child.
+        dictionary_for_init[k] = read_mapping_with_coo(group["obsm"]) if k == "obsm" else ad.io.read_elem(group[k])
+
+    if _check_020_ehrdata_on_disk_format(group):
+        dictionary_for_init = decode_init_dict(dictionary_for_init)
+    edata = EHRData(**dictionary_for_init)
+
     if harmonize_missing_values:
         _harmonize_on_read(edata)
 
@@ -121,7 +127,6 @@ def read_h5ed(
     return edata
 
 
-@_allow_write_nullable_strings
 def write_h5ed(
     edata: EHRData,
     filename: str | Path,
@@ -154,32 +159,49 @@ def write_h5ed(
         >>> edata = ed.dt.mimic_2()
         >>> ed.io.write_h5ed(edata, "mimic_2.h5ed")
     """
-    filename = Path(filename)
+    with h5py.File(filename, "w") as f:
+        _write_h5ed_elem(
+            f,
+            "/",
+            edata,
+            compression=compression,
+            compression_opts=compression_opts,
+            convert_strings_to_categoricals=convert_strings_to_categoricals,
+        )
 
-    adata, sparse_3d_data = encode_for_disk(edata)
-    tem = _cast_dataframe_columns_to_writable_dtype(edata.tem, "tem")
 
-    if convert_strings_to_categoricals:
-        strings_to_categoricals(adata, tem)
-
-    adata.write_h5ad(
-        filename,
-        compression=compression,
-        compression_opts=compression_opts,
-        # converted above, with .tem; AnnData.write_h5ad would otherwise convert .obs and .var by default
-        convert_strings_to_categoricals=False,
+@_allow_write_nullable_strings
+def _write_h5ed_elem(
+    parent: h5py.Group,
+    key: str,
+    edata: EHRData,
+    *,
+    compression: Literal["gzip", "lzf"] | None,
+    compression_opts: int | None,
+    convert_strings_to_categoricals: bool,
+) -> None:
+    """Write an :class:`~ehrdata.EHRData` to `parent[key]` in the `.h5ed` layout; `key="/"` writes into the file root."""
+    adata, sparse_3d_data, tem = encode_for_writing(
+        edata, convert_strings_to_categoricals=convert_strings_to_categoricals
     )
-    with h5py.File(filename, "a") as f:
-        if sparse_3d_data:
-            obsm_group = f.require_group("obsm")
-            for key, coo in sparse_3d_data.items():
-                write_coo_h5(
-                    obsm_group.create_group(key), coo, compression=compression, compression_opts=compression_opts
-                )
-        ad.io.write_elem(f, "tem", tem)
-        # Identify the file as ehrdata, namespaced to not clash with anndata's own encoding attrs.
-        f.attrs[EHRDATA_ENCODING_TYPE_KEY] = EHRDATA_ENCODING_TYPE
-        f.attrs[EHRDATA_ONDISK_VERSION_KEY] = str(EHRDATA_ONDISK_VERSION)
+
+    ad.io.write_elem(
+        parent, key, adata, dataset_kwargs={"compression": compression, "compression_opts": compression_opts}
+    )
+    group = parent[key]
+    # anndata writes a null `raw`; .h5ed files have none
+    if "raw" in group:
+        del group["raw"]
+    if sparse_3d_data:
+        obsm_group = group.require_group("obsm")
+        for obsm_key, coo in sparse_3d_data.items():
+            write_coo_h5(
+                obsm_group.create_group(obsm_key), coo, compression=compression, compression_opts=compression_opts
+            )
+    ad.io.write_elem(group, "tem", tem)
+    # Identify the group as ehrdata, namespaced to not clash with anndata's own encoding attrs.
+    group.attrs[EHRDATA_ENCODING_TYPE_KEY] = EHRDATA_ENCODING_TYPE
+    group.attrs[EHRDATA_ONDISK_VERSION_KEY] = str(EHRDATA_ONDISK_VERSION)
 
 
 def read_h5ad(

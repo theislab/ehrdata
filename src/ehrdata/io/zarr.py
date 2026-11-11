@@ -14,23 +14,22 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION,
     EHRDATA_ONDISK_VERSION_KEY,
 )
-from ehrdata.io._array_casting import (
-    _cast_dataframe_columns_to_writable_dtype,
-    _cast_variables_to_float,
-)
+from ehrdata.io._array_casting import _cast_variables_to_float
 from ehrdata.io._coo_codec import write_coo_zarr
 from ehrdata.io._ondisk import (
     _allow_write_nullable_strings,
     _check_020_ehrdata_on_disk_format,
     decode_init_dict,
-    encode_for_disk,
+    encode_for_writing,
     read_mapping_with_coo,
-    strings_to_categoricals,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from os import PathLike
+
+    import pandas as pd
+    import sparse
 
     from ehrdata import EHRData
 
@@ -58,12 +57,19 @@ def read_zarr(
         >>> ed.io.write_zarr(edata, "mimic_2.zarr")
         >>> edata_from_zarr = ed.io.read_zarr("mimic_2.zarr")
     """
-    from ehrdata import EHRData
-
     if isinstance(filename, Path):
         filename = str(filename)
 
     f = filename if isinstance(filename, zarr.Group) else zarr.open(filename, mode="r")
+
+    return _read_zarr_elem(
+        f, harmonize_missing_values=harmonize_missing_values, cast_variables_to_float=cast_variables_to_float
+    )
+
+
+def _read_zarr_elem(f: zarr.Group, *, harmonize_missing_values: bool, cast_variables_to_float: bool) -> EHRData:
+    """Read an :class:`~ehrdata.EHRData` from a Zarr group in the :func:`~ehrdata.io.write_zarr` layout."""
+    from ehrdata import EHRData
 
     if EHRDATA_ENCODING_TYPE_KEY_ZARR not in f.attrs:
         err = f"The zarr store does not contain the required '{EHRDATA_ENCODING_TYPE_KEY_ZARR}' attribute."
@@ -112,12 +118,11 @@ def read_zarr(
     return edata
 
 
-@_allow_write_nullable_strings
 def write_zarr(
     edata: EHRData,
     filename: str | Path,
     *,
-    chunks: Literal["auto" | "ehrdata_auto"] = "auto",
+    chunks: Literal["auto", "ehrdata_auto"] = "auto",
     convert_strings_to_categoricals: bool = False,
 ) -> None:
     """Write :class:`~ehrdata.EHRData` objects to disk.
@@ -139,17 +144,55 @@ def write_zarr(
     Examples:
         >>> import ehrdata as ed
         >>> edata = ed.dt.mimic_2()
-        >>> ed.io.write_zarr("mimic_2.ehrdata.zarr", edata)
+        >>> ed.io.write_zarr(edata, "mimic_2.ehrdata.zarr")
     """
-    filename = Path(filename)
+    store = zarr.open_group(Path(filename), mode="a", use_consolidated=False, zarr_format=3)
+    _check_chunks(store, chunks)
+    encoded = encode_for_writing(edata, convert_strings_to_categoricals=convert_strings_to_categoricals)
+    _write_zarr_group(store, *encoded, chunks=chunks)
 
-    store = zarr.open_group(filename, mode="a", use_consolidated=False, zarr_format=3)
 
-    adata, coo_obsm = encode_for_disk(edata)
-    tem = _cast_dataframe_columns_to_writable_dtype(edata.tem, "tem")
+def _write_zarr_elem(
+    parent: zarr.Group,
+    key: str,
+    edata: EHRData,
+    *,
+    chunks: Literal["auto", "ehrdata_auto"],
+    convert_strings_to_categoricals: bool,
+) -> None:
+    """Write an :class:`~ehrdata.EHRData` to `parent[key]` in the :func:`~ehrdata.io.write_zarr` layout, replacing an existing `parent[key]`."""
+    if parent.metadata.consolidated_metadata is not None:
+        # as anndata.io.write_elem
+        msg = "Cannot overwrite/edit a store with consolidated metadata"
+        raise ValueError(msg)
+    _check_chunks(parent, chunks)
+    encoded = encode_for_writing(edata, convert_strings_to_categoricals=convert_strings_to_categoricals)
+    if key in parent:
+        del parent[key]
+    _write_zarr_group(parent.create_group(key), *encoded, chunks=chunks)
 
-    if convert_strings_to_categoricals:
-        strings_to_categoricals(adata, tem)
+
+def _check_chunks(group: zarr.Group, chunks: str) -> None:
+    if chunks not in {"auto", "ehrdata_auto"}:
+        err = (
+            f"chunks={chunks} is not implemented. Currently, only chunks='auto' and chunks='ehrdata_auto' is supported."
+        )
+        raise NotImplementedError(err)
+    if chunks == "ehrdata_auto" and group.metadata.zarr_format == 2:
+        msg = "chunks='ehrdata_auto' writes sharded arrays, which need Zarr format 3; the group is Zarr format 2."
+        raise ValueError(msg)
+
+
+@_allow_write_nullable_strings
+def _write_zarr_group(
+    store: zarr.Group,
+    adata: ad.AnnData,
+    coo_obsm: dict[str, sparse.COO],
+    tem: pd.DataFrame,
+    *,
+    chunks: Literal["auto", "ehrdata_auto"],
+) -> None:
+    """Write the parts of :func:`~ehrdata.io._ondisk.encode_for_writing` into the Zarr group `store`."""
 
     # write_sharded this is a slightly modified version from https://anndata.readthedocs.io/en/stable/tutorials/zarr-v3.html
     # write_sharded is intended as a future blueprint of implementing better chunking defaults for ehrdata based based on real usecases
@@ -172,18 +215,13 @@ def write_zarr(
                 dataset_kwargs = {"shards": (2**16,), "chunks": (2**8,), **dataset_kwargs}
             func(g, k, elem, dataset_kwargs=dataset_kwargs)
 
-        # anndata 0.13 rejects writing with key "/" into a non-root subgroup, so dispatch from the root store under the "anndata" key (matching the chunks="auto" write_elem path).
+        # anndata 0.13 rejects writing with key "/" into a non-root subgroup, so dispatch under the "anndata" key (matching the chunks="auto" write_elem path).
         return ad.experimental.write_dispatched(group, "anndata", adata, callback=callback)
 
     if chunks == "auto":
         ad.io.write_elem(store, "anndata", adata)
-    elif chunks == "ehrdata_auto":
-        write_sharded(store, adata)
     else:
-        err = (
-            f"chunks={chunks} is not implemented. Currently, only chunks='auto' and chunks='ehrdata_auto' is supported."
-        )
-        raise NotImplementedError(err)
+        write_sharded(store, adata)
 
     # ehrdata serializes sparse.COO tensors itself (anndata has no COO writer); see io._coo_codec.
     if coo_obsm:

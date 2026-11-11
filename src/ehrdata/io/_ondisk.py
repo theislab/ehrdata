@@ -22,7 +22,7 @@ from ehrdata.core.constants import (
     EHRDATA_ONDISK_VERSION_KEY,
 )
 from ehrdata.io._array_casting import _cast_dataframe_columns_to_writable_dtype, _cast_object_array_to_float_or_str
-from ehrdata.io._coo_codec import is_coo_group, read_coo
+from ehrdata.io._coo_codec import _binsparse_dtype_str, is_coo_group, read_coo
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -138,6 +138,23 @@ def strings_to_categoricals(adata: ad.AnnData, tem: pd.DataFrame) -> None:
     adata.strings_to_categoricals(adata.obs)
     adata.strings_to_categoricals(adata.var)
     adata.strings_to_categoricals(tem)
+
+
+def encode_for_writing(
+    edata: EHRData, *, convert_strings_to_categoricals: bool
+) -> tuple[ad.AnnData, dict[str, sparse.COO], pd.DataFrame]:
+    """Encode and check an :class:`~ehrdata.EHRData` for every writer, before anything is written.
+
+    Returns the :class:`~anndata.AnnData` and the sparse 3D arrays of :func:`encode_for_disk`, and the cast `.tem`.
+    Raises for data that cannot be written, so that a writer does not replace existing data with a failed write.
+    """
+    adata, sparse_3d_data = encode_for_disk(edata)
+    for coo in sparse_3d_data.values():
+        _binsparse_dtype_str(coo.dtype)
+    tem = _cast_dataframe_columns_to_writable_dtype(edata.tem, "tem")
+    if convert_strings_to_categoricals:
+        strings_to_categoricals(adata, tem)
+    return adata, sparse_3d_data, tem
 
 
 def decode_init_dict(init: dict[str, Any]) -> dict[str, Any]:

@@ -13,10 +13,12 @@
     :nosignatures:
 
     io.read_csv
+    io.read_elem
     io.read_fhir
     io.read_h5ed
     io.read_meds
     io.read_zarr
+    io.write_elem
     io.write_h5ed
     io.write_meds
     io.write_zarr
