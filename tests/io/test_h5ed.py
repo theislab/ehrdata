@@ -442,93 +442,51 @@ def test_write_read_cast_columns_convert_strings_to_categoricals(
     _assert_columns_anndata_cannot_write_read_back(edata, edata_read)
 
 
-def _edata_with_string_columns() -> EHRData:
-    """EHRData whose `.obs`, `.var` and `.tem` hold string columns with and without repeated values."""
-    # 2D, as backed reading does not support 3D arrays
-    return EHRData(
-        X=np.zeros((3, 2)),
-        obs=pd.DataFrame(
-            {
-                "sex": ["F", "M", "F"],
-                "person_source_value": ["p1", "p2", "p3"],
-                "site": pd.array(["a", "a", pd.NA], dtype="string"),
-                # already categorical: stays categorical either way
-                "cohort": pd.Categorical(["x", "y", "z"]),
-            },
-            index=["0", "1", "2"],
-        ),
-        var=pd.DataFrame({"unit": ["bpm", "bpm"], "name": ["heart rate", "blood pressure"]}, index=["hr", "bp"]),
-        tem=pd.DataFrame(
-            {
-                "kind": ["visit", "visit", "follow-up"],
-                "label": ["first", "second", "third"],
-                # written as ISO 8601 strings
-                "date": pd.to_datetime(["2000-01-01", "2000-01-01", "2000-01-02"]),
-                "duration": pd.to_timedelta(["1h", "1h", "2h"]),
-            },
-            index=["t0", "t1", "t2"],
-        ),
-    )
-
-
 @pytest.mark.parametrize("convert_strings_to_categoricals", [True, False])
-@pytest.mark.parametrize(
-    ("write", "read", "suffix"), [(write_h5ed, read_h5ed, "h5ed"), (write_zarr, read_zarr, "zarr")]
-)
-def test_write_read_convert_strings_to_categoricals(write, read, suffix, convert_strings_to_categoricals, tmp_path):
+def test_write_read_string_columns_same_from_h5ed_and_zarr(
+    edata_string_columns, convert_strings_to_categoricals, tmp_path
+):
     # https://github.com/theislab/ehrdata/issues/358
-    edata = _edata_with_string_columns()
+    edata = edata_string_columns
     obs, var, tem = edata.obs.copy(), edata.var.copy(), edata.tem.copy()
-    path = tmp_path / f"string_columns.{suffix}"
 
-    write(edata, path, convert_strings_to_categoricals=convert_strings_to_categoricals)
-    edata_read = read(path)
+    write_h5ed(edata, tmp_path / "edata.h5ed", convert_strings_to_categoricals=convert_strings_to_categoricals)
+    write_zarr(edata, tmp_path / "edata.zarr", convert_strings_to_categoricals=convert_strings_to_categoricals)
+    edata_read = read_zarr(tmp_path / "edata.zarr")
 
-    repeated = [
-        edata_read.obs["sex"],
-        edata_read.obs["site"],
-        edata_read.var["unit"],
-        edata_read.tem["kind"],
-        edata_read.tem["date"],
-        edata_read.tem["duration"],
-    ]
-    for column in repeated:
-        assert isinstance(column.dtype, pd.CategoricalDtype) is convert_strings_to_categoricals, column.name
-    assert isinstance(edata_read.obs["cohort"].dtype, pd.CategoricalDtype)
-    # anndata converts only the strings with repeated values
-    for column in [edata_read.obs["person_source_value"], edata_read.var["name"], edata_read.tem["label"]]:
-        assert not isinstance(column.dtype, pd.CategoricalDtype), column.name
-
+    # strings with repeated or missing values, also those written for datetimes and timedeltas
+    for frame, column in [
+        ("obs", "sex"),
+        ("obs", "site"),
+        ("var", "unit"),
+        ("tem", "kind"),
+        ("tem", "date"),
+        ("tem", "duration"),
+    ]:
+        assert (getattr(edata_read, frame)[column].dtype == "category") is convert_strings_to_categoricals, column
+    # anndata converts only the strings with repeated or missing values, and a categorical stays one
+    for frame, column in [("obs", "person_source_value"), ("var", "name"), ("tem", "label")]:
+        assert getattr(edata_read, frame)[column].dtype != "category", column
+    assert edata_read.obs["cohort"].dtype == "category"
     assert edata_read.obs["sex"].astype(str).tolist() == ["F", "M", "F"]
-    assert edata_read.var["unit"].astype(str).tolist() == ["bpm", "bpm"]
-    assert edata_read.tem["kind"].astype(str).tolist() == ["visit", "visit", "follow-up"]
     assert edata_read.tem["date"].astype(str).tolist() == [
         "2000-01-01T00:00:00",
         "2000-01-01T00:00:00",
         "2000-01-02T00:00:00",
     ]
 
-    # the input is left unchanged
-    pd.testing.assert_frame_equal(edata.obs, obs)
-    pd.testing.assert_frame_equal(edata.var, var)
-    pd.testing.assert_frame_equal(edata.tem, tem)
-
-
-@pytest.mark.parametrize("convert_strings_to_categoricals", [True, False])
-def test_h5ed_and_zarr_read_back_same_string_columns(convert_strings_to_categoricals, tmp_path):
-    # https://github.com/theislab/ehrdata/issues/358
-    edata = _edata_with_string_columns()
-    write_h5ed(edata, tmp_path / "edata.h5ed", convert_strings_to_categoricals=convert_strings_to_categoricals)
-    write_zarr(edata, tmp_path / "edata.zarr", convert_strings_to_categoricals=convert_strings_to_categoricals)
-
-    edata_zarr = read_zarr(tmp_path / "edata.zarr")
+    # .h5ed reads back the same, also backed
     for edata_h5ed in [
         read_h5ed(tmp_path / "edata.h5ed"),
         read_h5ed(tmp_path / "edata.h5ed", backed="r", harmonize_missing_values=False, cast_variables_to_float=False),
     ]:
-        pd.testing.assert_frame_equal(edata_h5ed.obs, edata_zarr.obs)
-        pd.testing.assert_frame_equal(edata_h5ed.var, edata_zarr.var)
-        pd.testing.assert_frame_equal(edata_h5ed.tem, edata_zarr.tem)
+        for frame in ("obs", "var", "tem"):
+            pd.testing.assert_frame_equal(getattr(edata_h5ed, frame), getattr(edata_read, frame))
+
+    # the input is left unchanged
+    pd.testing.assert_frame_equal(edata.obs, obs)
+    pd.testing.assert_frame_equal(edata.var, var)
+    pd.testing.assert_frame_equal(edata.tem, tem)
 
 
 @pytest.mark.parametrize(

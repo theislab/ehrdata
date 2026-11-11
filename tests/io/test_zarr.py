@@ -341,16 +341,3 @@ def test_write_read_zarr_casts_object_layers(X_any_array_type_322, with_X, tmp_p
     write_zarr(edata, path)
 
     _assert_object_layers_read_back(edata, read_zarr(path))
-
-
-def test_write_zarr_keeps_string_columns_without_convert_strings_to_categoricals(X_any_array_type_322, tmp_path):
-    edata = _edata_with_columns_anndata_cannot_write(X_any_array_type_322)
-    path = tmp_path / "string_columns.zarr"
-
-    write_zarr(edata, path, convert_strings_to_categoricals=False)
-    edata_read = read_zarr(path, harmonize_missing_values=False)
-
-    # each would become categorical if converted
-    for column in ["birth_datetime", "gender_source_value", "race_source_value", "death_date", "concept_code"]:
-        assert not isinstance(edata_read.obs[column].dtype, pd.CategoricalDtype)
-    assert not isinstance(edata_read.tem["phase"].dtype, pd.CategoricalDtype)

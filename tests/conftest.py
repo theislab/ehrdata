@@ -345,6 +345,35 @@ def edata_330(X_numpy_33, obs_31, var_31):
 
 
 @pytest.fixture
+def edata_string_columns():
+    """EHRData whose `.obs`, `.var` and `.tem` hold string columns with and without repeated or missing values."""
+    # 2D, as backed reading does not support 3D arrays
+    return EHRData(
+        X=np.zeros((3, 2)),
+        obs=pd.DataFrame(
+            {
+                "sex": ["F", "M", "F"],
+                "person_source_value": ["p1", "p2", "p3"],
+                "site": pd.array(["a", "a", pd.NA], dtype="string"),
+                "cohort": pd.Categorical(["x", "y", "z"]),
+            },
+            index=["0", "1", "2"],
+        ),
+        var=pd.DataFrame({"unit": ["bpm", "bpm"], "name": ["heart rate", "blood pressure"]}, index=["hr", "bp"]),
+        tem=pd.DataFrame(
+            {
+                "kind": ["visit", "visit", "follow-up"],
+                "label": ["first", "second", "third"],
+                # written as ISO 8601 strings
+                "date": pd.to_datetime(["2000-01-01", "2000-01-01", "2000-01-02"]),
+                "duration": pd.to_timedelta(["1h", "1h", "2h"]),
+            },
+            index=["t0", "t1", "t2"],
+        ),
+    )
+
+
+@pytest.fixture
 def adata_33(X_numpy_33, obs_31, var_31):
     return ad.AnnData(X=X_numpy_33, obs=obs_31, var=var_31)
 
