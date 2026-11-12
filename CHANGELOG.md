@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning][].
 - {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` take `num_intervals_before` to add intervals before the start of each observation, such as a look-back before a visit. ([#350](https://github.com/theislab/ehrdata/pull/350)) @eroell
 - {func}`~ehrdata.io.write_h5ed` takes `convert_strings_to_categoricals`, as {func}`~ehrdata.io.write_zarr` does, and both convert the same columns: the string columns of `.obs`, `.var` and `.tem` in which a value repeats or is missing, including the datetimes and timedeltas written as ISO 8601 strings. ([#358](https://github.com/theislab/ehrdata/issues/358)) @eroell
 - {func}`~ehrdata.io.write_elem` and {func}`~ehrdata.io.read_elem` write and read an {class}`~ehrdata.EHRData` into and from a group of an HDF5 file or a Zarr store, such as a file that holds other data next to it. The group holds the same layout as a file written with {func}`~ehrdata.io.write_h5ed` or a store written with {func}`~ehrdata.io.write_zarr`, with which they share the implementation; the on-disk format is unchanged. ([#360](https://github.com/theislab/ehrdata/pull/360)) @eroell
-- The {doc}`tutorials/donordata` tutorial shows how ehrdata integrates with [donordata](https://github.com/theislab/donordata), the foundation for joint analyses of rich patient data and omics. ([#NNN](https://github.com/theislab/ehrdata/pull/NNN)) @eroell
+- The {doc}`tutorials/donordata` tutorial shows how ehrdata integrates with [donordata](https://github.com/theislab/donordata), the foundation for joint analyses of rich patient data and omics. ([#363](https://github.com/theislab/ehrdata/pull/363)) @eroell
 
 ### Changed
 
