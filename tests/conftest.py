@@ -1,18 +1,22 @@
 import datetime as dt
+from decimal import Decimal
 from pathlib import Path
 
 import anndata as ad
 import dask.array as da
 import duckdb
+import h5py
 import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse as sp
 import sparse
+import zarr
 
 from ehrdata import EHRData
-from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
+from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME, EHRDATA_ONDISK_VERSION_KEY
 from ehrdata.dt import mimic_iv_omop
+from ehrdata.io import read_elem, read_h5ed, read_zarr, write_elem, write_h5ed, write_zarr
 from ehrdata.io.omop import setup_connection
 
 
@@ -163,12 +167,17 @@ def X_any_array_type_322(request):
 
 
 def _edata_with_object_layers(X) -> EHRData:
-    """EHRData with `object` layers of numbers and of strings, with missing values, next to `X` (may be `None`)."""
-    numbers = np.array([[[1, None], [2, 3]], [[4, 5], [6, 7]], [[8, 9], [10, 11]]], dtype=object)
+    """EHRData with `object` layers of numbers, of strings, of codes and of both, with missing values, next to `X` (may be `None`)."""
+    # e.g. Decimal from SQL drivers
+    numbers = np.array([[[1, None], [Decimal(2), 3]], [[4, 5], [6, 7]], [[8, 9], [10, 11]]], dtype=object)
     strings = np.array([[["1", None], ["a", "b"]], [["2", "3"], ["c", None]], [["4", "5"], ["d", "e"]]], dtype=object)
+    codes = np.array(
+        [[["007", "010"], ["250", "nan"]], [["V45", "042"], ["1", "2"]], [["3", "4"], ["5", "6"]]], dtype=object
+    )
+    mixed = np.array([[[1, "007"], [None, "nan"]], [[Decimal("2.5"), "a"], [3, None]], [["", 4], [5, 6]]], dtype=object)
     return EHRData(
         X=X,
-        layers={"numbers": numbers, "strings": strings},
+        layers={"numbers": numbers, "strings": strings, "codes": codes, "mixed": mixed},
         obs=pd.DataFrame(index=["0", "1", "2"]),
         var=pd.DataFrame(index=["0", "1"]),
         tem=pd.DataFrame(index=["0", "1"]),
@@ -176,17 +185,19 @@ def _edata_with_object_layers(X) -> EHRData:
 
 
 def _assert_object_layers_read_back(edata: EHRData, edata_read: EHRData):
+    assert edata_read.layers["numbers"].dtype == np.float64
     assert np.array_equal(
-        edata_read.layers["numbers"].astype(np.float64),
+        edata_read.layers["numbers"],
         np.array([[[1, np.nan], [2, 3]], [[4, 5], [6, 7]], [[8, 9], [10, 11]]]),
         equal_nan=True,
     )
-    # cast per variable on read; missing values are np.nan again
-    strings = edata_read.layers["strings"]
-    assert np.array_equal(strings[:, 0, :].astype(np.float64), np.array([[1, np.nan], [2, 3], [4, 5]]), equal_nan=True)
-    _assert_dtype_object_array_with_missing_values_equal(
-        strings[:, 1, :].astype(object), np.array([["a", "b"], ["c", np.nan], ["d", "e"]], dtype=object)
-    )
+    # exact: text stays text, numbers next to text are floats, missing values np.nan
+    for key in ("strings", "codes", "mixed"):
+        layer, written = edata_read.layers[key].ravel(), edata.layers[key].ravel()
+        assert edata_read.layers[key].dtype == object
+        assert _values(pd.Series(layer)) == list(written)
+        assert [isinstance(value, str) for value in layer] == [isinstance(value, str) for value in written]
+        assert all(isinstance(value, float) for value in layer if not isinstance(value, str))
 
     if edata.X is None:
         assert edata_read.X is None
@@ -195,8 +206,41 @@ def _assert_object_layers_read_back(edata: EHRData, edata_read: EHRData):
         assert np.array_equal(_to_dense(edata_read.X), _to_dense(edata.X), equal_nan=True)
 
     # the input is left unchanged
-    assert edata.layers["numbers"].dtype == object
-    assert edata.layers["strings"].dtype == object
+    assert edata.layers["strings"][0, 0, 1] is None
+    assert edata.layers["mixed"][0, 0, 0] == 1
+    assert all(layer.dtype == object for key, layer in edata.layers.items() if key is not None)
+
+
+def _set_version(group, version: str | None):
+    if version is not None:
+        group.attrs[EHRDATA_ONDISK_VERSION_KEY] = version
+
+
+@pytest.fixture(params=["h5ed", "zarr", "elem_h5", "elem_zarr"])
+def write_read(request, tmp_path):
+    """Write an EHRData as a file, a store, or a group of either, and read it back; `version` overwrites its on-disk version."""
+
+    def write_read(edata: EHRData, *, version: str | None = None, **read_kwargs) -> EHRData:
+        if request.param == "h5ed":
+            write_h5ed(edata, tmp_path / "edata.h5ed")
+            with h5py.File(tmp_path / "edata.h5ed", "a") as f:
+                _set_version(f, version)
+            return read_h5ed(tmp_path / "edata.h5ed", **read_kwargs)
+        if request.param == "zarr":
+            write_zarr(edata, tmp_path / "edata.zarr")
+            _set_version(zarr.open_group(tmp_path / "edata.zarr"), version)
+            return read_zarr(tmp_path / "edata.zarr", **read_kwargs)
+        if request.param == "elem_h5":
+            with h5py.File(tmp_path / "bundle.h5", "w") as f:
+                write_elem(f, "edata", edata)
+                _set_version(f["edata"], version)
+                return read_elem(f["edata"], **read_kwargs)
+        root = zarr.open_group(tmp_path / "bundle.zarr", mode="w")
+        write_elem(root, "edata", edata)
+        _set_version(root["edata"], version)
+        return read_elem(root["edata"], **read_kwargs)
+
+    return write_read
 
 
 @pytest.fixture

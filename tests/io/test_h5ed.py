@@ -13,13 +13,13 @@ from tests.conftest import (
     _assert_columns_anndata_cannot_write_read_back,
     _assert_dtype_object_array_with_missing_values_equal,
     _assert_io_read,
-    _assert_object_layers_read_back,
     _assert_shape_matches,
     _edata_with_columns_anndata_cannot_write,
     _edata_with_object_layers,
 )
 
 from ehrdata import EHRData
+from ehrdata.core.constants import EHRDATA_ONDISK_VERSION
 from ehrdata.io import read_h5ad, read_h5ed, read_zarr, write_h5ad, write_h5ed, write_zarr
 
 TEST_PATH_H5AD = TEST_DATA_PATH / "toy_h5ad"
@@ -191,7 +191,7 @@ def test_write_h5ed_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
         assert "_ed_ondisk_layers_tem_data" in f["obsm"]
         assert "tem_data" not in f["layers"]
         assert f.attrs["ehrdata-encoding-type"] == "ehrdata"
-        assert f.attrs["ehrdata-encoding-version"] == "0.2.0"
+        assert f.attrs["ehrdata-encoding-version"] == EHRDATA_ONDISK_VERSION
 
     edata_read = read_h5ed(path)
     _assert_shape_matches(edata_read, (3, 3, 3))
@@ -405,15 +405,19 @@ def test_write_read_h5ed_casts_columns_anndata_cannot_write(X_any_array_type_322
     _assert_columns_anndata_cannot_write_read_back(edata, read_h5ed(path, harmonize_missing_values=False))
 
 
-@pytest.mark.parametrize("with_X", [True, False])
-def test_write_read_h5ed_casts_object_layers(X_any_array_type_322, with_X, tmp_path):
-    # each layer is cast on its own, whatever `X` is
-    edata = _edata_with_object_layers(X_any_array_type_322 if with_X else None)
-    path = tmp_path / "object_layers.h5ed"
+def test_write_h5ed_object_arrays_with_kinds(tmp_path):
+    # strings, with the kind of each value in a reserved .obsm key
+    edata = _edata_with_object_layers(np.array([["a", 1], [None, "007"], ["b", "c"]], dtype=object))
+    write_h5ed(edata, tmp_path / "edata.h5ed")
 
-    write_h5ed(edata, path)
-
-    _assert_object_layers_read_back(edata, read_h5ed(path))
+    with h5py.File(tmp_path / "edata.h5ed", "r") as f:
+        assert f["X"].dtype.kind == "O"
+        assert f["obsm"]["_ed_ondisk_kinds_X"][()].tolist() == [[0, 1], [2, 0], [0, 0]]
+        assert f["obsm"]["_ed_ondisk_layers_numbers"].dtype == np.float64
+        assert "_ed_ondisk_kinds_layers_numbers" not in f["obsm"]
+        for key in ("strings", "codes", "mixed"):
+            assert f["obsm"][f"_ed_ondisk_kinds_layers_{key}"].dtype == np.uint8
+            assert f["obsm"][f"_ed_ondisk_kinds_layers_{key}"].shape == (3, 2, 2)
 
 
 @pytest.mark.parametrize("convert_strings_to_categoricals", [True, False])
@@ -499,19 +503,24 @@ def test_write_read_string_columns_same_from_h5ed_and_zarr(edata_string_columns,
     ("write", "read", "suffix"), [(write_h5ed, read_h5ed, "h5ed"), (write_zarr, read_zarr, "zarr")]
 )
 def test_write_backed_h5ed(write, read, suffix, tmp_path):
-    # h5py reads the string layer as `object`; a backed EHRData cannot be copied
-    edata = EHRData(X=np.zeros((2, 2)), layers={"strings": np.array([["a", None], ["c", "d"]], dtype=object)})
+    # a backed EHRData cannot be copied
+    edata = EHRData(X=np.zeros((2, 2)), layers={"strings": np.array([["a", None], ["007", 1]], dtype=object)})
     write_h5ed(edata, tmp_path / "edata.h5ed")
-    edata_backed = read_h5ed(
-        tmp_path / "edata.h5ed", backed="r", harmonize_missing_values=False, cast_variables_to_float=False
-    )
+    edata_backed = read_h5ed(tmp_path / "edata.h5ed", backed="r")
     path = tmp_path / f"edata_rewritten.{suffix}"
 
     write(edata_backed, path)
 
-    _assert_dtype_object_array_with_missing_values_equal(
-        read(path).layers["strings"].astype(object), np.array([["a", np.nan], ["c", "d"]], dtype=object)
-    )
+    expected = np.array([["a", np.nan], ["007", 1.0]], dtype=object)
+    for edata_read in (edata_backed, read(path)):
+        _assert_dtype_object_array_with_missing_values_equal(edata_read.layers["strings"], expected)
+
+
+def test_read_h5ed_backed_object_X_raises(tmp_path):
+    write_h5ed(EHRData(X=np.array([["a", None], ["c", "d"]], dtype=object)), tmp_path / "edata.h5ed")
+
+    with pytest.raises(NotImplementedError, match="Backed reading of an X"):
+        read_h5ed(tmp_path / "edata.h5ed", backed="r")
 
 
 def test_write_h5ed_repeated_column_names(tmp_path):

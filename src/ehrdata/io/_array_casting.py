@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
+import decimal
+import numbers
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -11,6 +13,7 @@ import sparse
 if TYPE_CHECKING:
     from ehrdata import EHRData
 from ehrdata._logger import logger
+from ehrdata.core.constants import VALUE_KIND_MISSING, VALUE_KIND_NUMBER, VALUE_KIND_TEXT
 
 
 def _is_numeric_or_bool(array: Any) -> bool:
@@ -52,19 +55,97 @@ def _cast_variables_to_float(edata: EHRData) -> None:
             edata.layers[key] = _cast_columns_to_float(array)
 
 
-def _cast_object_array_to_float_or_str(array: Any, name: str) -> Any:
-    """Cast an in-memory `object` array to float, else to str; return other arrays unchanged."""
+# `infer_dtype` of object arrays that are cast to float as a whole
+_FLOAT_CASTABLE = {"empty", "floating", "integer", "mixed-integer-float", "boolean", "decimal"}
+
+
+def _is_exact_integer(value: Any) -> bool:
+    try:
+        return float(int(value)) == int(value)
+    except OverflowError:
+        return False
+
+
+def _number_to_string(value: Any) -> str:
+    # as written if that reads back as the same float, e.g. "3" for 3
+    text = str(value)
+    with contextlib.suppress(ValueError):
+        if float(text) == float(value):
+            return text
+    return repr(float(value))
+
+
+def _encode_object_array(array: Any, name: str) -> tuple[Any, np.ndarray | None]:
+    """Encode an in-memory `object` array for writing; return other arrays unchanged.
+
+    If every value is a real number (also a bool or `Decimal`), and an integer only if float64 holds it exactly, or missing,
+    the values are returned as float, with `None`.
+    Otherwise they are returned as strings, with the kind of each value: text, number or missing.
+    Strings are never parsed into numbers.
+    """
     if not isinstance(array, np.ndarray | sparse.COO) or array.dtype != np.object_:
         # backed and dask arrays are written as they are
-        return array
-    if isinstance(array, np.ndarray):
-        # missing values become "nan" in a str array, which harmonize_missing_values reads back as np.nan
-        array = np.where(pd.isna(array), np.nan, array)
-    try:
-        return array.astype(np.float64)
-    except (TypeError, ValueError):
-        logger.warning(f"edata.{name} is of dtype object and not numeric: it is cast to dtype 'str' for writing.")
-        return array.astype(str)
+        return array, None
+    if isinstance(array, sparse.COO):
+        try:
+            return array.astype(np.float64), None
+        except (TypeError, ValueError):
+            logger.warning(f"edata.{name} is of dtype object and not numeric: it is cast to dtype 'str' for writing.")
+            return array.astype(str), None
+
+    is_missing = np.asarray(
+        pd.isna(array), dtype=bool
+    )  # TODO: find out if scipy sparse can ever enter, as this would be a densification.
+    if pd.api.types.infer_dtype(array.ravel(), skipna=True) in _FLOAT_CASTABLE:
+        with contextlib.suppress(OverflowError):
+            values = np.where(is_missing, np.nan, array).astype(np.float64)
+            # integers from 2**53 on may not be exact
+            if not (np.abs(values[~is_missing]) >= 2**53).any():
+                return values, None
+
+    flat, flat_missing = array.ravel(), is_missing.ravel()
+    kinds = np.full(flat.shape, VALUE_KIND_MISSING, dtype=np.uint8)
+    strings = np.full(flat.shape, "nan", dtype=object)  # an object array of str, not fixed width
+    type_ids = np.fromiter(map(id, map(type, flat)), dtype=np.uintp, count=flat.size)
+    inexact_integers = False
+    # by type, to vectorize
+    for value_type in set(map(type, flat[~flat_missing])):
+        mask = (type_ids == id(value_type)) & ~flat_missing
+        values = flat[mask]
+        if issubclass(value_type, str):
+            kinds[mask], strings[mask] = VALUE_KIND_TEXT, values
+        elif issubclass(value_type, int | np.integer) and not issubclass(value_type, bool):
+            try:
+                exact = np.abs(values.astype(np.float64)) < 2**53
+            except OverflowError:
+                exact = np.zeros(values.shape, dtype=bool)
+            exact[~exact] = np.frompyfunc(_is_exact_integer, 1, 1)(values[~exact]).astype(bool)
+            inexact_integers |= not exact.all()
+            kinds[mask] = np.where(exact, VALUE_KIND_NUMBER, VALUE_KIND_TEXT)
+            strings[mask] = np.fromiter(map(str, values), dtype=object, count=values.size)
+        elif issubclass(value_type, numbers.Real | decimal.Decimal | np.bool_):
+            to_string = str if value_type in {float, np.float64} else _number_to_string
+            kinds[mask] = VALUE_KIND_NUMBER
+            strings[mask] = np.fromiter(map(to_string, values), dtype=object, count=values.size)
+        else:
+            kinds[mask] = VALUE_KIND_TEXT
+            strings[mask] = np.fromiter(map(_to_string, values), dtype=object, count=values.size)
+
+    if not (kinds == VALUE_KIND_TEXT).any():
+        return np.where(is_missing, np.nan, array).astype(np.float64), None
+    if inexact_integers:
+        logger.warning(f"edata.{name} holds integers that float64 does not hold exactly: they are written as text.")
+    return strings.reshape(array.shape), kinds.reshape(array.shape)
+
+
+def _decode_object_array(strings: Any, kinds: np.ndarray) -> np.ndarray:
+    """Restore the values of an array encoded by :func:`_encode_object_array`."""
+    strings = np.asarray(strings)
+    values = strings.astype(object)
+    is_number = kinds == VALUE_KIND_NUMBER
+    values[is_number] = strings[is_number].astype(np.float64)
+    values[kinds == VALUE_KIND_MISSING] = np.nan
+    return values
 
 
 def _to_string(value: Any) -> str:

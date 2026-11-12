@@ -14,6 +14,7 @@ DEFAULT_TEM_LAYER_NAME = "tem_data"
 # On-disk format (see :mod:`ehrdata.io._ondisk` for the layout).
 # EHRData stores time-series as 3D arrays in `X`/`layers`, but anndata only guarantees 2D arrays there (https://github.com/scverse/anndata/issues/2430) and enforces this since release 0.13.0
 # Since storage version 0.2.0 (ehrdata release 0.3.0), 3D arrays are relocated into the reserved `.obsm` keys below on write and restored on read.
+# Since storage version 0.3.0, an `object` X/layer of text next to numbers or missing values is written as strings, with the kind of each value in a reserved `.obsm` key, and read back exactly.
 # Bump only when the on-disk layout changes.
 #
 # The attribute key that stamps a store as ehrdata differs by format, on purpose:
@@ -23,11 +24,23 @@ EHRDATA_ENCODING_TYPE_KEY = "ehrdata-encoding-type"
 EHRDATA_ENCODING_TYPE_KEY_ZARR = "encoding-type"
 EHRDATA_ENCODING_TYPE = "ehrdata"
 EHRDATA_ONDISK_VERSION_KEY = "ehrdata-encoding-version"
-EHRDATA_ONDISK_VERSION = "0.2.0"
+EHRDATA_ONDISK_VERSION = "0.3.0"
+# the versions this ehrdata reads; files of other versions written by ehrdata raise
+EHRDATA_ONDISK_VERSIONS_READ = ("0.2.0", "0.3.0")
+
+# Prefix of the `.obsm` keys reserved for the on-disk layout.
+EHRDATA_OBSM_RESERVED_PREFIX = "_ed_ondisk_"
 
 # Reserved `.obsm` keys holding a 3D `X` / a 3D layer `<name>` on disk.
 EHRDATA_OBSM_3D_X_KEY = "_ed_ondisk_X"
 EHRDATA_OBSM_3D_LAYER_PREFIX = "_ed_ondisk_layers_"
+
+# Reserved `.obsm` keys holding the kind of each value of an `X` / a layer `<name>` written as strings, as uint8.
+EHRDATA_OBSM_KINDS_X_KEY = "_ed_ondisk_kinds_X"
+EHRDATA_OBSM_KINDS_LAYER_PREFIX = "_ed_ondisk_kinds_layers_"
+VALUE_KIND_TEXT = 0
+VALUE_KIND_NUMBER = 1  # read back as float64
+VALUE_KIND_MISSING = 2  # read back as np.nan
 
 # Missing values
 # --------------

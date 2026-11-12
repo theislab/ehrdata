@@ -7,19 +7,18 @@ from typing import TYPE_CHECKING, Any, Literal
 import anndata as ad
 import zarr
 
-from ehrdata._feature_types import _harmonize_on_read
 from ehrdata.core.constants import (
     EHRDATA_ENCODING_TYPE,
     EHRDATA_ENCODING_TYPE_KEY_ZARR,
     EHRDATA_ONDISK_VERSION,
     EHRDATA_ONDISK_VERSION_KEY,
 )
-from ehrdata.io._array_casting import _cast_variables_to_float
 from ehrdata.io._coo_codec import write_coo_zarr
 from ehrdata.io._ondisk import (
     _allow_write_nullable_strings,
-    _check_020_ehrdata_on_disk_format,
+    apply_read_heuristics,
     decode_init_dict,
+    ehrdata_on_disk_version,
     encode_for_writing,
     read_init_dict,
 )
@@ -37,19 +36,25 @@ if TYPE_CHECKING:
 def read_zarr(
     filename: PathLike[str] | zarr.Group | str,
     *,
-    harmonize_missing_values: bool = True,
-    cast_variables_to_float: bool = True,
+    harmonize_missing_values: bool | None = None,
+    cast_variables_to_float: bool | None = None,
 ) -> EHRData:
     """Read a zarr store into an :class:`~ehrdata.EHRData` object.
 
     Can also read :class:`~anndata.AnnData` Zarr stores. In this case, a default `.tem` field is created in the `ehrdata object`.
+    `X` and `layers` read back exactly as written by :func:`~ehrdata.io.write_zarr`.
+    Stores written before ehrdata's on-disk version 0.3.0, and anndata stores, are read as before:
+    missing values written as strings are harmonized, and the variables of non-numeric arrays cast to float.
 
     Args:
         filename: The filename, or a Zarr storage class.
-        harmonize_missing_values: Whether to call `ehrdata.harmonize_missing_values` on all detected layers.
+        harmonize_missing_values: Whether to call :func:`~ehrdata.harmonize_missing_values` on `X` and all layers.
+            By default (`None`), only for stores written before on-disk version 0.3.0 and anndata stores, and
+            leaving `sparse.COO` arrays untouched. `True` also applies it to `sparse.COO` arrays, treating their zeros as missing.
         cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`.
             If the cast fails for the values of one variable, then the values of these variable remain unaltered.
             This can be helpful to recover arrays that were of dtype `object` when they were written to disk.
+            By default (`None`), only for stores written before on-disk version 0.3.0 and anndata stores.
 
     Examples:
         >>> import ehrdata as ed
@@ -67,7 +72,9 @@ def read_zarr(
     )
 
 
-def _read_zarr_elem(f: zarr.Group, *, harmonize_missing_values: bool, cast_variables_to_float: bool) -> EHRData:
+def _read_zarr_elem(
+    f: zarr.Group, *, harmonize_missing_values: bool | None, cast_variables_to_float: bool | None
+) -> EHRData:
     """Read an :class:`~ehrdata.EHRData` from a Zarr group in the :func:`~ehrdata.io.write_zarr` layout."""
     from ehrdata import EHRData
 
@@ -94,16 +101,17 @@ def _read_zarr_elem(f: zarr.Group, *, harmonize_missing_values: bool, cast_varia
         err = f"Unknown encoding-type '{encoding_type}'."
         raise ValueError(err)
 
-    if _check_020_ehrdata_on_disk_format(f):
-        dictionary_for_init = decode_init_dict(dictionary_for_init)
+    version = ehrdata_on_disk_version(f)
+    if version is not None:
+        dictionary_for_init = decode_init_dict(dictionary_for_init, version)
     edata = EHRData(**dictionary_for_init)
 
-    if harmonize_missing_values:
-        _harmonize_on_read(edata)
-
-    if cast_variables_to_float:
-        _cast_variables_to_float(edata)
-
+    apply_read_heuristics(
+        edata,
+        version,
+        harmonize_missing_values=harmonize_missing_values,
+        cast_variables_to_float=cast_variables_to_float,
+    )
     return edata
 
 
@@ -117,8 +125,12 @@ def write_zarr(
     """Write :class:`~ehrdata.EHRData` objects to disk.
 
     To write to a `.zarr` store, `X`, and `layers` cannot be written as `object` dtype.
-    If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a `str` dtype.
-    The same holds for the `object` columns of `.obs`, `.var` and `.tem`; integers and booleans among them stay exact, and missing values stay missing.
+    An `object` array whose values are all numbers, including booleans and `Decimal`, or missing is written as float.
+    Otherwise, its values are written as strings, with the kind of each value (text, number or missing) next to it.
+    :func:`~ehrdata.io.read_zarr` reads it back exactly: text stays text, including codes like `"007"` and `"nan"`,
+    numbers, also booleans, become floats and missing values `np.nan`. Integers that float64 does not hold exactly are written as text.
+    `.obsm` keys starting with `_ed_ondisk_` are reserved.
+    The `object` columns of `.obs`, `.var` and `.tem` are written as a numeric dtype where their values allow it, and as strings otherwise; integers and booleans among them stay exact, and missing values stay missing.
     Datetime and timedelta columns are written as ISO 8601 strings, read back as categorical with `convert_strings_to_categoricals=True` if a value repeats or is missing.
 
 

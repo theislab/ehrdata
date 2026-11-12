@@ -1,0 +1,9 @@
+{
+    "attributes": {
+        "ehrdata-encoding-type": "ehrdata-coo",
+        "ehrdata-encoding-version": "0.2.0",
+        "binsparse": "{\"version\": \"0.1\", \"format\": \"COO\", \"shape\": [3, 2, 2], \"number_of_stored_values\": 2, \"data_types\": {\"indices_0\": \"int64\", \"indices_1\": \"int64\", \"indices_2\": \"int64\", \"values\": \"float64\"}, \"fill\": true}"
+    },
+    "zarr_format": 3,
+    "node_type": "group"
+}
