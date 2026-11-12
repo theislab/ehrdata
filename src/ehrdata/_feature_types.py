@@ -582,13 +582,15 @@ def harmonize_missing_values(
     return edata if copy else None
 
 
-def _harmonize_on_read(edata: EHRData) -> None:
+def _harmonize_on_read(edata: EHRData, *, skip_coo: bool) -> None:
     layers = [None] if edata.X is not None else []
     # anndata 0.13's unified `.X` slot shows up as key None in edata.layers too; skip the duplicate
     layers += [key for key in edata.layers if key is not None]
 
     for layer in layers:
         label = "X" if layer is None else f"layer {layer}"
+        if skip_coo and isinstance(edata.X if layer is None else edata.layers[layer], sparse.COO):
+            continue
         try:
             harmonize_missing_values(edata, layer=layer)
             logger.info(f"Harmonizing missing values of {label}")

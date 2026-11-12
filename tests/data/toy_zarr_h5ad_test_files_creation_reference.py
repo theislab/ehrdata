@@ -11,6 +11,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import scipy as sp
+import sparse
 
 import ehrdata as ed
 from ehrdata.core.constants import DEFAULT_TEM_LAYER_NAME
@@ -75,7 +76,8 @@ with h5py.File(TOY_H5AD / "edata_sparse_with_tem.h5ad", "w") as h5ad_file:
 
 
 #########################
-# edata_minimal_v0_2_0.h5ed / .ehrdata.zarr:  tiny EHRData written in the current 0.2.0 encoding format
+# edata_minimal_v0_2_0.h5ed / .ehrdata.zarr:  tiny EHRData written in the 0.2.0 encoding format, by ehrdata before
+# on-disk version 0.3.0 (running this with a later ehrdata writes its own version)
 # (3D arrays relocated into .obsm + `ehrdata-encoding-version="0.2.0"` stamp). Together with the
 # plain-anndata "version 0" adata_basic.* above, these form the minimal read-test corpus
 # (2x2: {h5, zarr} x {version-0 plain-anndata, 0.2.0 encoding format}).
@@ -89,3 +91,23 @@ edata_minimal = ed.EHRData(
 )
 ed.io.write_h5ed(edata_minimal.copy(), TOY_H5ED / "edata_minimal_v0_2_0.h5ed")
 ed.io.write_zarr(edata_minimal.copy(), TOY_ZARR / "edata_minimal_v0_2_0.ehrdata.zarr")
+
+
+#########################
+# edata_object_layers_v0_2_0.h5ed / .ehrdata.zarr:  an `object` layer of codes and missing values, and a zero-filled
+# sparse.COO layer, written by ehrdata before on-disk version 0.3.0 (strings, missing values as "nan"); run with such an ehrdata
+counts = np.zeros((3, 2, 2))
+counts[0, 0, 1] = 2
+counts[2, 1, 0] = 1
+edata_object_layers = ed.EHRData(
+    X=np.arange(6, dtype=float).reshape(3, 2),
+    layers={
+        "codes": np.array([["007", None], ["250", "V45"], ["042", "nan"]], dtype=object),
+        "counts": sparse.COO.from_numpy(counts),
+    },
+    obs=pd.DataFrame(index=["0", "1", "2"]),
+    var=pd.DataFrame(index=["0", "1"]),
+    tem=pd.DataFrame(index=["0", "1"]),
+)
+ed.io.write_h5ed(edata_object_layers, TOY_H5ED / "edata_object_layers_v0_2_0.h5ed")
+ed.io.write_zarr(edata_object_layers, TOY_ZARR / "edata_object_layers_v0_2_0.ehrdata.zarr")

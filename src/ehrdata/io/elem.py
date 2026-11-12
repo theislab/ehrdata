@@ -27,7 +27,7 @@ def write_elem(
     Use this to write an :class:`~ehrdata.EHRData` as one part of a larger file or store, next to other data.
     `parent[key]` holds the same layout as a file written with :func:`~ehrdata.io.write_h5ed` for an :class:`h5py.Group`,
     and as a store written with :func:`~ehrdata.io.write_zarr` for a :class:`zarr.Group`, and
-    the data is cast for writing as these functions do.
+    the data is cast for writing as these functions do; `X` and `layers` read back exactly.
     An existing `parent[key]` is replaced, as with :func:`anndata.io.write_elem`.
     Zarr stores with consolidated metadata cannot be written to.
     Read it back with :func:`~ehrdata.io.read_elem`.
@@ -94,21 +94,26 @@ def write_elem(
 def read_elem(
     group: h5py.Group | zarr.Group,
     *,
-    harmonize_missing_values: bool = True,
-    cast_variables_to_float: bool = True,
+    harmonize_missing_values: bool | None = None,
+    cast_variables_to_float: bool | None = None,
 ) -> EHRData:
     """Read an :class:`~ehrdata.EHRData` from a group of an HDF5 file or a Zarr store.
 
     Reads a group written with :func:`~ehrdata.io.write_elem`, :func:`~ehrdata.io.write_h5ed` or :func:`~ehrdata.io.write_zarr`,
     fully into memory.
-    Like :func:`~ehrdata.io.read_h5ed` and :func:`~ehrdata.io.read_zarr`, it also reads :class:`~anndata.AnnData` groups.
+    Like :func:`~ehrdata.io.read_h5ed` and :func:`~ehrdata.io.read_zarr`, it also reads :class:`~anndata.AnnData` groups,
+    and reads `X` and `layers` back exactly, applying the heuristics below by default only to groups written before
+    ehrdata's on-disk version 0.3.0 and to :class:`~anndata.AnnData` groups.
 
     Args:
         group: The group to read, such as `f["edata"]` of an open :class:`h5py.File` or a :class:`zarr.Group`.
-        harmonize_missing_values: Whether to call `ehrdata.harmonize_missing_values` on all detected layers.
+        harmonize_missing_values: Whether to call :func:`~ehrdata.harmonize_missing_values` on `X` and all layers.
+            By default (`None`), only for groups written before on-disk version 0.3.0 and :class:`~anndata.AnnData` groups,
+            and leaving `sparse.COO` arrays untouched. `True` also applies it to `sparse.COO` arrays, treating their zeros as missing.
         cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`.
             If the cast fails for the values of one variable, then the values of these variable remain unaltered.
             This can be helpful to recover arrays that were of dtype `object` when they were written to disk.
+            By default (`None`), only for groups written before on-disk version 0.3.0 and :class:`~anndata.AnnData` groups.
 
     Examples:
         >>> import h5py

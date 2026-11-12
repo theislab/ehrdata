@@ -6,24 +6,26 @@ from typing import TYPE_CHECKING, Literal
 import anndata as ad
 import h5py
 
-from ehrdata._feature_types import _harmonize_on_read
 from ehrdata.core.constants import (
     EHRDATA_ENCODING_TYPE,
     EHRDATA_ENCODING_TYPE_KEY,
     EHRDATA_OBSM_3D_LAYER_PREFIX,
     EHRDATA_OBSM_3D_X_KEY,
+    EHRDATA_OBSM_KINDS_X_KEY,
     EHRDATA_ONDISK_VERSION,
     EHRDATA_ONDISK_VERSION_KEY,
 )
 from ehrdata.core.ehrdata import _silence_anndata_nd_warning
-from ehrdata.io._array_casting import _cast_variables_to_float
 from ehrdata.io._coo_codec import write_coo_h5
 from ehrdata.io._ondisk import (
     _allow_write_nullable_strings,
-    _check_020_ehrdata_on_disk_format,
+    apply_read_heuristics,
+    decode_backed_layers,
     decode_init_dict,
+    ehrdata_on_disk_version,
     encode_for_writing,
     read_init_dict,
+    writes_exact_arrays,
 )
 
 if TYPE_CHECKING:
@@ -36,12 +38,15 @@ def read_h5ed(
     filename: Path | str,
     *,
     backed: Literal["r", "r+"] | bool | None = None,
-    harmonize_missing_values: bool = True,
-    cast_variables_to_float: bool = True,
+    harmonize_missing_values: bool | None = None,
+    cast_variables_to_float: bool | None = None,
 ) -> EHRData:
     """Read an ehrdata hdf5 file (`.h5ed`) into an :class:`~ehrdata.EHRData` object.
 
     Also can read plain anndata `.h5ad` files.
+    `X` and `layers` read back exactly as written by :func:`~ehrdata.io.write_h5ed`.
+    Files written before ehrdata's on-disk version 0.3.0, and plain anndata files, are read as before:
+    missing values written as strings are harmonized, and the variables of non-numeric arrays cast to float.
 
     Args:
         filename: Path to the file or directory to read.
@@ -51,12 +56,17 @@ def read_h5ed(
             That means any changes to other slots like obs will not be written to disk in backed mode.
             If you would like save changes made to these slots of a backed EHRData,
             write them to a new file (see :func:`~ehrdata.io.write_h5ed`).
-        harmonize_missing_values: Whether to call `ehrdata.harmonize_missing_values` on all detected layers.
-            Cannot be called if `backed`.
+            Backed reading applies neither `harmonize_missing_values` nor `cast_variables_to_float`.
+            It does not support 3D arrays, nor an `X` of text next to numbers or missing values.
+        harmonize_missing_values: Whether to call :func:`~ehrdata.harmonize_missing_values` on `X` and all layers.
+            By default (`None`), only for files written before on-disk version 0.3.0 and plain anndata files, and
+            leaving `sparse.COO` arrays untouched. `True` also applies it to `sparse.COO` arrays, treating their zeros as missing.
+            Cannot be `True` if `backed`.
         cast_variables_to_float: For non-numeric arrays, try to cast the values for each variable to dtype `np.float64`.
             If the cast fails for the values of one variable, then the values of these variable remain unaltered.
             This can be helpful to recover arrays that were of dtype `object` when they were written to disk.
-            Cannot be called if `backed`.
+            By default (`None`), only for files written before on-disk version 0.3.0 and plain anndata files.
+            Cannot be `True` if `backed`.
 
     Examples:
         >>> import ehrdata as ed
@@ -85,40 +95,48 @@ def read_h5ed(
         if mode is True:
             mode = "r+"
 
-        with _silence_anndata_nd_warning():
-            adata = ad.read_h5ad(filename, backed=mode)
-
         with h5py.File(filename, "r") as f:
             tem = ad.io.read_elem(f["tem"]) if "tem" in f else None
 
-            # A 0.2.0 file relocates 3D `X`/layers into `.obsm`; backed mode can't move them back
+            # 3D `X`/layers are relocated into `.obsm`; backed mode can't move them back
             obsm = f.get("obsm", {})
-            if _check_020_ehrdata_on_disk_format(f) and (
+            version = ehrdata_on_disk_version(f)
+            if version is not None and (
                 EHRDATA_OBSM_3D_X_KEY in obsm or any(k.startswith(EHRDATA_OBSM_3D_LAYER_PREFIX) for k in obsm)
             ):
                 msg_0 = "Backed reading of .h5ed files with 3D arrays is not supported. Please open an issue on GitHub if you need this feature."
                 raise NotImplementedError(msg_0)
-            edata = EHRData.from_adata(adata, tem=tem)
+            if writes_exact_arrays(version) and EHRDATA_OBSM_KINDS_X_KEY in obsm:
+                msg_1 = "Backed reading of an X of text next to numbers or missing values is not supported; read it without `backed`."
+                raise NotImplementedError(msg_1)
+
+        with _silence_anndata_nd_warning():
+            adata = ad.read_h5ad(filename, backed=mode)
+        if version is not None:
+            decode_backed_layers(adata, version)
+        edata = EHRData.from_adata(adata, tem=tem)
 
     return edata
 
 
-def _read_h5ed_elem(group: h5py.Group, *, harmonize_missing_values: bool, cast_variables_to_float: bool) -> EHRData:
+def _read_h5ed_elem(
+    group: h5py.Group, *, harmonize_missing_values: bool | None, cast_variables_to_float: bool | None
+) -> EHRData:
     """Read an :class:`~ehrdata.EHRData` from an HDF5 group in the `.h5ed` layout, fully into memory."""
     from ehrdata import EHRData
 
+    version = ehrdata_on_disk_version(group)
     dictionary_for_init = read_init_dict(group)
-
-    if _check_020_ehrdata_on_disk_format(group):
-        dictionary_for_init = decode_init_dict(dictionary_for_init)
+    if version is not None:
+        dictionary_for_init = decode_init_dict(dictionary_for_init, version)
     edata = EHRData(**dictionary_for_init)
 
-    if harmonize_missing_values:
-        _harmonize_on_read(edata)
-
-    if cast_variables_to_float:
-        _cast_variables_to_float(edata)
-
+    apply_read_heuristics(
+        edata,
+        version,
+        harmonize_missing_values=harmonize_missing_values,
+        cast_variables_to_float=cast_variables_to_float,
+    )
     return edata
 
 
@@ -134,8 +152,12 @@ def write_h5ed(
 
     `.h5ed` is the ehrdata on-disk format.
     To write the file, `X` and `layers` cannot be written as `object` dtype.
-    If any of these fields is of `object` dtype, this function will attempt to cast it to a numeric dtype; if this fails, the field will be casted to a string dtype.
-    The same holds for the `object` columns of `.obs`, `.var` and `.tem`; integers and booleans among them stay exact, and missing values stay missing.
+    An `object` array whose values are all numbers, including booleans and `Decimal`, or missing is written as float.
+    Otherwise, its values are written as strings, with the kind of each value (text, number or missing) next to it.
+    :func:`~ehrdata.io.read_h5ed` reads it back exactly: text stays text, including codes like `"007"` and `"nan"`,
+    numbers, also booleans, become floats and missing values `np.nan`. Integers that float64 does not hold exactly are written as text.
+    `.obsm` keys starting with `_ed_ondisk_` are reserved.
+    The `object` columns of `.obs`, `.var` and `.tem` are written as a numeric dtype where their values allow it, and as strings otherwise; integers and booleans among them stay exact, and missing values stay missing.
     Datetime and timedelta columns are written as ISO 8601 strings, read back as categorical with `convert_strings_to_categoricals=True` if a value repeats or is missing.
 
 
@@ -203,8 +225,8 @@ def read_h5ad(
     filename: Path | str,
     *,
     backed: Literal["r", "r+"] | bool | None = None,
-    harmonize_missing_values: bool = True,
-    cast_variables_to_float: bool = True,
+    harmonize_missing_values: bool | None = None,
+    cast_variables_to_float: bool | None = None,
 ) -> EHRData:
     """Deprecated alias for :func:`read_h5ed`.
 

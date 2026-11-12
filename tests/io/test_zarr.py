@@ -12,11 +12,9 @@ from tests.conftest import (
     _assert_columns_anndata_cannot_write_read_back,
     _assert_dtype_object_array_with_missing_values_equal,
     _assert_io_read,
-    _assert_object_layers_read_back,
     _assert_shape_matches,
     _check_aligned_anndata_parts_equal,
     _edata_with_columns_anndata_cannot_write,
-    _edata_with_object_layers,
 )
 
 from ehrdata.core.constants import EHRDATA_ONDISK_VERSION
@@ -179,7 +177,7 @@ def test_write_zarr_v2_relocates_3d_arrays_to_obsm(edata_333, tmp_path):
 
 def test_write_read_zarr_X_none_with_3d_layer(edata_330, tmp_path):
 
-    # X=None is a first-class state (encode_for_disk drops a None X); reading it with harmonization on (the default) must not crash on the None X.
+    # X=None is a first-class state (encode_for_disk drops a None X); reading it with harmonization on must not crash on the None X.
     edata = edata_330.copy()
     edata.layers["tem_data"] = np.arange(3 * 3 * 3).reshape(3, 3, 3).astype(float)
     edata.X = None
@@ -187,7 +185,7 @@ def test_write_read_zarr_X_none_with_3d_layer(edata_330, tmp_path):
     path = tmp_path / "edata_X_none.ehrdata.zarr"
     write_zarr(edata.copy(), path)
 
-    edata_read = read_zarr(path)  # harmonize_missing_values=True by default
+    edata_read = read_zarr(path, harmonize_missing_values=True)
     _assert_shape_matches(edata_read, (3, 3, 3), check_X_None=True)
     assert edata_read.X is None
     assert np.array_equal(edata.layers["tem_data"], edata_read.layers["tem_data"])
@@ -313,7 +311,7 @@ def test_read_minimal_corpus_zarr():
 
     store_020 = zarr.open(TEST_PATH_ZARR / "edata_minimal_v0_2_0.ehrdata.zarr")
     assert store_020.attrs["ehrdata-encoding-type"] == "ehrdata"
-    assert store_020.attrs["ehrdata-encoding-version"] == str(EHRDATA_ONDISK_VERSION)
+    assert store_020.attrs["ehrdata-encoding-version"] == "0.2.0"
     edata_020 = read_zarr(TEST_PATH_ZARR / "edata_minimal_v0_2_0.ehrdata.zarr")
     _assert_shape_matches(edata_020, (3, 2, 2))
     assert np.array_equal(np.asarray(edata_020.layers["tem_data"]), np.arange(3 * 2 * 2, dtype=float).reshape(3, 2, 2))
@@ -327,14 +325,3 @@ def test_write_read_zarr_casts_columns_anndata_cannot_write(X_any_array_type_322
     write_zarr(edata, path)
 
     _assert_columns_anndata_cannot_write_read_back(edata, read_zarr(path, harmonize_missing_values=False))
-
-
-@pytest.mark.parametrize("with_X", [True, False])
-def test_write_read_zarr_casts_object_layers(X_any_array_type_322, with_X, tmp_path):
-    # each layer is cast on its own, whatever `X` is
-    edata = _edata_with_object_layers(X_any_array_type_322 if with_X else None)
-    path = tmp_path / "object_layers.zarr"
-
-    write_zarr(edata, path)
-
-    _assert_object_layers_read_back(edata, read_zarr(path))
