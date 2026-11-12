@@ -16,5 +16,6 @@ real_dataset_example_physionet2019
 omop_intro
 omop_ml
 interactive_visualization
+donordata
 lamindb
 ```

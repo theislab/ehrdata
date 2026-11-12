@@ -12,5 +12,5 @@ build:
       - asdf global uv latest
     build:
       html:
-        - uvx hatch run docs:build
+        - UV_TORCH_BACKEND=cpu uvx hatch run docs:build
         - mv docs/_build $READTHEDOCS_OUTPUT
