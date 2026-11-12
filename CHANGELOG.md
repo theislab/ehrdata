@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+## [0.6.0]
+
 ### Added
 
 - {func}`~ehrdata.io.omop.setup_variables` takes `sparse=True` to store the tensor as a `sparse.COO` array. Its query now aggregates only the intervals that hold data points, rather than every combination of observation, variable and interval, so memory and time follow the number of data points. ([#341](https://github.com/theislab/ehrdata/pull/341)) @eroell
