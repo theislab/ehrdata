@@ -40,8 +40,7 @@ def _detect_feature_type(
     Returns:
         The detected feature type (one of 'date', 'categorical', or 'numeric'), or `None` if the series has no values, and a boolean, which is True if the feature type is uncertain.
     """
-    col[col.isin(MISSING_VALUES)] = np.nan
-    col = col.infer_objects()
+    col = col.mask(col.isin(MISSING_VALUES)).infer_objects()
     col = col.dropna()
     if len(col) == 0:
         return None, False
