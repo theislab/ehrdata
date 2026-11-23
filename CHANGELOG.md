@@ -194,7 +194,6 @@ and this project adheres to [Semantic Versioning][].
 
 - More concise messages in {func}`~ehrdata.infer_feature_types`. ([#215](https://github.com/theislab/ehrdata/pull/215)) @zethson
 
-
 ## [0.1.0]
 
 ### Added
@@ -242,7 +241,6 @@ and this project adheres to [Semantic Versioning][].
 - {func}`~ehrdata.io.write_zarr` now writes an `EHRData` specific store encoding, with `anndata` as a substore. This change allows to use `AnnData` with its change to consolidated Zarr metadata, and better isolates `AnnData`'s io. ([#185](https://github.com/theislab/ehrdata/pull/185)) @eroell
 - {func}`~ehrdata.io.read_zarr` is adapted to read the new store encoding, and can also deal with `AnnData` stores. ([#185](https://github.com/theislab/ehrdata/pull/185)) @eroell
 
-
 ## [0.0.9]
 
 ### Maintenance
@@ -259,7 +257,6 @@ and this project adheres to [Semantic Versioning][].
 
 - Rename `ed.pl.vitessce.gen_config` to `ed.integrations.vitessce.gen_config` ([#181](https://github.com/theislab/ehrdata/pull/181)) @eroell
 - Rename `ed.tl.omop.EHRDataset` to `ed.integrations.torch.OMOPEHRDataset` ([#181](https://github.com/theislab/ehrdata/pull/181)) @eroell
-
 
 ## [0.0.8]
 
