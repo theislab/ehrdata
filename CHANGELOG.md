@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning][].
 
 - The {doc}`tutorials/hidata` tutorial uses [hidata](https://github.com/theislab/hidata), the new name of donordata, now installed from PyPI. ([#366](https://github.com/theislab/ehrdata/pull/366)) @eroell
 
+### Documentation
+
+- The documentation uses the theme and configuration of [scverse-doc](https://github.com/scverse/scverse-doc), which replaces the deprecated scanpydoc, and links to anndata's documentation at its new address. ([#368](https://github.com/theislab/ehrdata/pull/368)) @eroell
+
 ## [0.6.0]
 
 ### Added
