@@ -597,7 +597,6 @@ def _write_long_observed_table(
             if len(variables_of_strategy) > 1
             else ""
         )
-        # interval_step is an INTEGER, and so is interval_us below 2**31 µs, about 36 min: multiply them as BIGINT
         groups.append(
             f"""
             SELECT obs_id, person_id, {key_column}, interval_step,
