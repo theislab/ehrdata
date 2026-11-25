@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Fixed
+
+- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with short intervals have better tolerance to not raise an `OutOfRangeException`. The bounds of these intervals overflowed a 32-bit integer. ([#XXX](https://github.com/theislab/ehrdata/pull/XXX)) @eroell
+
 ## [0.6.0]
 
 ### Added
