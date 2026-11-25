@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning][].
 
 - The documentation uses the theme and configuration of [scverse-doc](https://github.com/scverse/scverse-doc), which replaces the deprecated scanpydoc, and links to anndata's documentation at its new address. ([#368](https://github.com/theislab/ehrdata/pull/368)) @eroell
 
+### Maintenance
+
+- Support duckdb 2.0.1 in the tests. ([#370](https://github.com/theislab/ehrdata/pull/370)) @eroell
+
 ## [0.6.0]
 
 ### Added

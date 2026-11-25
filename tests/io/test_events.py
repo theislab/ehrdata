@@ -207,10 +207,12 @@ def test_from_events_input_types(events, tmp_path):
 
 def test_from_events_relation_without_pyarrow(events, monkeypatch):
     expected = from_events(events).X
-    relation = duckdb.connect().from_df(events)
-    monkeypatch.setitem(sys.modules, "pyarrow", None)
+    # Without pyarrow, pandas stores strings as Python objects.
+    with pd.option_context("mode.string_storage", "python"):
+        relation = duckdb.connect().from_df(events.astype({"code": "str"}))
+        monkeypatch.setitem(sys.modules, "pyarrow", None)
 
-    np.testing.assert_array_equal(from_events(relation).X, expected)
+        np.testing.assert_array_equal(from_events(relation).X, expected)
 
 
 def test_from_events_column_names(events):
