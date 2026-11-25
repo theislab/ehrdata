@@ -45,17 +45,11 @@ optional-dependencies.doc = [
   "ehrdata[lamin,torch]",            # do not include vitessce[all] in doc: https://github.com/keller-mark/esbuild-py/issues/19
   "ipykernel",
   "ipython",
-  "myst-nb>=1.1",
   "numpy<2.5",                       # numba (via sparse) caps numpy<2.5; lamindb otherwise pulls 2.5.1, forcing uv to backtrack numba into an unbuildable llvmlite and break the RTD build. Relax when numba supports newer numpy.
   "pandas",
-  "scanpydoc",
-  "sphinx>=9.1",
+  "scverse-doc[full]>=0.6",
   "sphinx-autodoc-typehints",
-  "sphinx-book-theme>=1",
-  "sphinx-copybutton",
-  "sphinx-design",
   "sphinxcontrib-bibtex>=1",
-  "sphinxext-opengraph",
   "vitessce",
 ]
 optional-dependencies.ehrapy = [

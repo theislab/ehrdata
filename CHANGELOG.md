@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Documentation
+
+- The documentation uses the theme and configuration of [scverse-doc](https://github.com/scverse/scverse-doc), which replaces the deprecated scanpydoc, and links to anndata's documentation at its new address. ([#366](https://github.com/theislab/ehrdata/pull/366)) @eroell
+
 ## [0.6.0]
 
 ### Added
