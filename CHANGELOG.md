@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Changed
 
-- The {doc}`tutorials/hidata` tutorial uses [hidata](https://github.com/theislab/hidata), the new name of donordata, now installed from PyPI. ([#366](https://github.com/theislab/ehrdata/pull/366)) @eroell
+- The {doc}`tutorials/hidata` tutorial uses [hidata](https://github.com/theislab/hidata), the new name of donordata, now installed from PyPI. ([#369](https://github.com/theislab/ehrdata/pull/369)) @eroell
 
 ### Documentation
 
