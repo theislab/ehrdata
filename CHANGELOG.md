@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning][].
 
 - The {doc}`tutorials/hidata` tutorial uses [hidata](https://github.com/theislab/hidata), the new name of donordata, now installed from PyPI. ([#369](https://github.com/theislab/ehrdata/pull/369)) @eroell
 
+### Fixed
+
+- {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` with short intervals have better tolerance to not raise an `OutOfRangeException`. The bounds of these intervals overflowed a 32-bit integer. ([#367](https://github.com/theislab/ehrdata/pull/367)) @eroell
+
 ### Documentation
 
 - The documentation uses the theme and configuration of [scverse-doc](https://github.com/scverse/scverse-doc), which replaces the deprecated scanpydoc, and links to anndata's documentation at its new address. ([#368](https://github.com/theislab/ehrdata/pull/368)) @eroell

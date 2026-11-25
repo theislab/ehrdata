@@ -2346,6 +2346,93 @@ def test_setup_variables_intervals_have_the_exact_length(
     assert intervals["interval_end"].tolist() == boundaries[intervals["interval_step"] + 1].tolist()
 
 
+def _assert_minute_intervals_of_person_1(con, data_table, concept_id, steps):
+    """The long format table holds the 1 min intervals at steps for person 1, whose observation_period starts 2100-01-01."""
+    intervals = con.execute(
+        f"""SELECT interval_step, interval_start, interval_end FROM long_person_timestamp_feature_value_{data_table}
+        WHERE obs_id = 1 AND data_table_concept_id = {concept_id} ORDER BY interval_step"""
+    ).df()
+    start = pd.Timestamp("2100-01-01")
+    assert intervals["interval_step"].tolist() == steps
+    assert intervals["interval_start"].tolist() == [start + pd.Timedelta(step, "min") for step in steps]
+    assert intervals["interval_end"].tolist() == [start + pd.Timedelta(step + 1, "min") for step in steps]
+
+
+@pytest.mark.parametrize("num_intervals_before", [0, 60])
+def test_setup_variables_minute_intervals_far_from_the_start(omop_connection_vanilla, num_intervals_before):
+    """1 min intervals with a bound more than 2**31 µs, about 36 min, from the start of the observation hold their data points."""
+    con = omop_connection_vanilla
+    con.execute("DELETE FROM measurement WHERE person_id = 1")
+    # data points in the minutes -36, 5, 35 and 65 from the start of the observation_period of person 1;
+    # the interval of minute -36 is the first to start, and that of minute 35 the first to end, more than 2**31 µs from it
+    _add_measurement_rows(
+        con,
+        [
+            (20, 1, 3031147, "2099-12-31 23:24:00", 1, 9557),
+            (21, 1, 3031147, "2100-01-01 00:05:30", 2, 9557),
+            (22, 1, 3031147, "2100-01-01 00:35:00", 3, 9557),
+            (23, 1, 3031147, "2100-01-01 01:05:59", 4, 9557),
+        ],
+    )
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        interval_length_number=1,
+        interval_length_unit="min",
+        time_precision="datetime",
+        num_intervals=70,
+        num_intervals_before=num_intervals_before,
+        concept_ids=[3031147],
+        aggregation_strategy="last",
+    )
+
+    values = {-36: 1, 5: 2, 35: 3, 65: 4}
+    steps = [step for step in values if step >= -num_intervals_before]
+    expected = np.full(num_intervals_before + 70, np.nan)
+    expected[[step + num_intervals_before for step in steps]] = [values[step] for step in steps]
+    np.testing.assert_array_equal(edata.X[0, 0], expected)
+    _assert_minute_intervals_of_person_1(con, "measurement", 3031147, steps)
+
+
+@pytest.mark.parametrize("num_intervals_before", [0, 60])
+def test_setup_interval_variables_minute_intervals_far_from_the_start(omop_connection_vanilla, num_intervals_before):
+    """With keep_date="interval", 1 min intervals with a bound more than 2**31 µs from the start hold their exposures."""
+    con = omop_connection_vanilla
+    con.execute("DELETE FROM drug_exposure WHERE person_id = 1")
+    # exposures in the minutes -37 to -36, 34 to 35, and from 65 on without an end
+    con.execute(
+        """INSERT INTO drug_exposure (drug_exposure_id, person_id, drug_concept_id, drug_exposure_start_date,
+            drug_exposure_start_datetime, drug_exposure_end_date, drug_exposure_end_datetime, days_supply)
+        VALUES (10, 1, 19073183, '2099-12-31', '2099-12-31 23:23:30', '2099-12-31', '2099-12-31 23:24:30', 10),
+               (11, 1, 19073183, '2100-01-01', '2100-01-01 00:34:30', '2100-01-01', '2100-01-01 00:35:30', 20),
+               (12, 1, 19073183, '2100-01-01', '2100-01-01 01:05:00', NULL, NULL, 30)"""
+    )
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_observation_period")
+    edata = ed.io.omop.setup_interval_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["drug_exposure"],
+        data_field_to_keep=["days_supply"],
+        interval_length_number=1,
+        interval_length_unit="min",
+        time_precision="datetime",
+        num_intervals=70,
+        num_intervals_before=num_intervals_before,
+        aggregation_strategy="max",
+        keep_date="interval",
+    )
+
+    values = {-37: 10, -36: 10, 34: 20, 35: 20, 65: 30}
+    steps = [step for step in values if step >= -num_intervals_before]
+    expected = np.full(num_intervals_before + 70, np.nan)
+    expected[[step + num_intervals_before for step in steps]] = [values[step] for step in steps]
+    np.testing.assert_array_equal(edata.X[0, 1], expected)
+    _assert_minute_intervals_of_person_1(con, "drug_exposure", 19073183, steps)
+
+
 @pytest.mark.parametrize("observation_table", VANILLA_PERSONS_WITH_OBSERVATION_TABLE_ENTRY)
 @pytest.mark.parametrize(
     ("write", "read", "suffix"),

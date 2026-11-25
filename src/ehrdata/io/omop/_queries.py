@@ -600,8 +600,8 @@ def _write_long_observed_table(
         groups.append(
             f"""
             SELECT obs_id, person_id, {key_column}, interval_step,
-                start_date + to_microseconds(interval_step * {interval_us}) AS interval_start,
-                start_date + to_microseconds((interval_step + 1) * {interval_us}) AS interval_end,
+                start_date + to_microseconds(CAST(interval_step AS BIGINT) * {interval_us}) AS interval_start,
+                start_date + to_microseconds((CAST(interval_step AS BIGINT) + 1) * {interval_us}) AS interval_end,
                 {value_query}, obs_index
             FROM {OBSERVED_ROWS_TABLE}
             {condition}
