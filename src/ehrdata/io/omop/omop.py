@@ -83,8 +83,10 @@ def _get_table_list() -> list:
     return flat_table_list
 
 
-def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
-    """Create tables in the backend from CSV or Parquet files in the path from datasets in the OMOP Common Data model."""
+def _set_up_duckdb(
+    path: Path, backend_handle: DuckDBPyConnection, prefix: str = "", *, materialize: bool = True
+) -> None:
+    """Create tables or views in the backend from CSV or Parquet files in the path from datasets in the OMOP Common Data model."""
     tables = _get_table_list()
 
     used_tables = []
@@ -97,49 +99,49 @@ def _set_up_duckdb(path: Path, backend_handle: DuckDBPyConnection, prefix: str =
         if regular_omop_table_name in tables:
             used_tables.append(regular_omop_table_name)
 
-            dtype = {"measurement_source_value": str} if regular_omop_table_name == "measurement" else None
-
-            # Detect file format and read accordingly
+            # the absolute path, so that a view reads its file from any working directory
+            file = _sql_literal(str((path / filename).resolve()))
             file_extension = filename.split(".")[-1].lower()
             if file_extension == "parquet":
-                # Read parquet file
-                temp_relation = backend_handle.read_parquet(str(path / filename))
+                source = f"read_parquet({file})"
             elif file_extension == "csv":
-                # Read CSV file
-                temp_relation = backend_handle.read_csv(path / filename, dtype=dtype)  # noqa: F841
+                types = (
+                    ", types = {'measurement_source_value': 'VARCHAR'}"
+                    if regular_omop_table_name == "measurement"
+                    else ""
+                )
+                source = f"read_csv({file}{types})"
             else:
                 logging.warning(f"Unsupported file format for {filename}. Skipping.")
                 continue
 
             # reading from csv/parquet bears risk of not getting correct schema:
-            # enforce the critical date and datetime columns, prone to be read as VARCHAR
-            schema_df = backend_handle.execute("DESCRIBE temp_relation").df()
+            # enforce the critical date and datetime columns, prone to be read as VARCHAR, and name the columns in lower case
             select_parts = []
-            for _, row in schema_df.iterrows():
-                col = row["column_name"]
+            for col, *_ in backend_handle.execute(f"DESCRIBE SELECT * FROM {source}").fetchall():
                 col_lower = col.lower()
                 if col_lower.endswith("_datetime"):
                     # Cast to TIMESTAMP (handles YYYY-MM-DD HH:MM:SS)
-                    select_parts.append(f'TRY_CAST("{col}" AS TIMESTAMP) AS "{col}"')
+                    select_parts.append(f'TRY_CAST("{col}" AS TIMESTAMP) AS "{col_lower}"')
                 elif col_lower.endswith("_date"):
                     # Cast to DATE (handles YYYY-MM-DD)
-                    select_parts.append(f'TRY_CAST("{col}" AS DATE) AS "{col}"')
+                    select_parts.append(f'TRY_CAST("{col}" AS DATE) AS "{col_lower}"')
                 else:
-                    select_parts.append(f'"{col}" AS "{col}"')
+                    select_parts.append(f'"{col}" AS "{col_lower}"')
             select_columns = ", ".join(select_parts)
-            create_table_query = f"CREATE OR REPLACE VIEW temp_table AS SELECT {select_columns} FROM temp_relation"
-            backend_handle.execute(create_table_query)
 
-            # make query to create table with lowercase column names
-            column_names = backend_handle.execute("DESCRIBE temp_table").df()["column_name"].values
-            select_columns = ", ".join([f'"{col}" AS "{col.lower()}"' for col in column_names])
-            create_table_with_lowercase_columns_query = (
-                f"CREATE OR REPLACE TABLE {regular_omop_table_name} AS SELECT {select_columns} FROM temp_table"
+            # DuckDB replaces a table only by a table and a view only by a view
+            kind, other_kind, other_type = ("TABLE", "VIEW", "VIEW") if materialize else ("VIEW", "TABLE", "BASE TABLE")
+            if backend_handle.execute(
+                """SELECT 1 FROM information_schema.tables
+                WHERE table_catalog = current_database() AND table_schema = current_schema()
+                    AND lower(table_name) = ? AND table_type = ?""",
+                [regular_omop_table_name, other_type],
+            ).fetchone():
+                backend_handle.execute(f"DROP {other_kind} {regular_omop_table_name}")
+            backend_handle.execute(
+                f"CREATE OR REPLACE {kind} {regular_omop_table_name} AS SELECT {select_columns} FROM {source}"
             )
-
-            backend_handle.execute(create_table_with_lowercase_columns_query)
-
-            backend_handle.execute("DROP VIEW temp_table")
 
         elif filename_trunk != DOWNLOAD_VERIFICATION_TAG:
             unused_files.append(filename)
@@ -459,18 +461,27 @@ def _check_listed_units(backend_handle, data_table, value_field) -> None:
         raise ValueError(msg)
 
 
-def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefix: str = "") -> None:
+def setup_connection(
+    path: Path | str, backend_handle: DuckDBPyConnection, prefix: str = "", *, materialize: bool = True
+) -> None:
     """Setup a connection to the OMOP CDM database.
 
     Creates a table in the database for each CSV or Parquet file in `path` whose name, in lower case and without `prefix` and extension, is an OMOP CDM table.
     The table and its columns are named in lower case, and the columns ending in `_date` and `_datetime` are cast to `DATE` and `TIMESTAMP`.
 
+    By default, each table is a copy of its file in the database.
+    With `materialize=False`, each table is a view that reads its file at every query instead, so that setting up a large CDM copies nothing into the database.
+    A query of a view reads only the columns it needs, and from a Parquet file only the row groups that can hold the rows it selects.
+    The files must then stay in place while the connection is used, and a CSV file is parsed again by every query, so views suit Parquet files best.
+
     Args:
         path: The path to the folder containing the CSV or Parquet files.
         backend_handle: The backend handle to the database.
         prefix: The prefix to be removed from the CSV/Parquet filenames.
+        materialize: Whether to copy each file into a table of the database.
+            If `False`, each table is a view over its file.
     """
-    _set_up_duckdb(Path(path), backend_handle, prefix)
+    _set_up_duckdb(Path(path), backend_handle, prefix, materialize=materialize)
 
 
 def setup_obs(
