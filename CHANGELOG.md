@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+### Added
+
+- {func}`~ehrdata.io.omop.setup_obs` takes `observation_table="person_visit_detail"`, one observation per row of the `visit_detail` table, such as the stays in intensive care units within a hospital visit. {func}`~ehrdata.io.omop.setup_variables` and {func}`~ehrdata.io.omop.setup_interval_variables` start its time series at `visit_detail_start_date(time)` and attribute a data point that names a visit detail by its `visit_detail_id` to that visit detail, as they do with `visit_occurrence_id` for visits. ([#372](https://github.com/theislab/ehrdata/pull/372)) @eroell
+
 ### Changed
 
 - The {doc}`tutorials/hidata` tutorial uses [hidata](https://github.com/theislab/hidata), the new name of donordata, now installed from PyPI. ([#369](https://github.com/theislab/ehrdata/pull/369)) @eroell
