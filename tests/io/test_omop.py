@@ -1,6 +1,7 @@
 import logging
 import re
 
+import duckdb
 import numpy as np
 import pandas as pd
 import pytest
@@ -2311,6 +2312,83 @@ def test_setup_connection_replaces_the_tables(omop_connection_vanilla):
     con.execute("DELETE FROM measurement")
 
     ed.io.omop.setup_connection(path="tests/data/toy_omop/vanilla", backend_handle=con)
+
+    assert con.execute("SELECT COUNT(*) FROM measurement").fetchall()[0][0] == 9
+
+
+def _table_types(con) -> dict[str, str]:
+    return dict(con.execute("SELECT table_name, table_type FROM information_schema.tables").fetchall())
+
+
+@pytest.mark.parametrize("folder", ["vanilla", "vanilla_parquet", "capital_letters"])
+def test_setup_connection_views_read_as_the_tables(folder):
+    """With materialize=False, each table is a view over its file, with the columns and rows of the table copied by default."""
+    path = f"tests/data/toy_omop/{folder}"
+    tables, views = duckdb.connect(), duckdb.connect()
+    ed.io.omop.setup_connection(path=path, backend_handle=tables)
+    ed.io.omop.setup_connection(path=path, backend_handle=views, materialize=False)
+
+    table_types = _table_types(tables)
+    assert set(table_types.values()) == {"BASE TABLE"}
+    assert _table_types(views) == dict.fromkeys(table_types, "VIEW")
+    for table in table_types:
+        assert [column[:2] for column in views.execute(f"DESCRIBE {table}").fetchall()] == [
+            column[:2] for column in tables.execute(f"DESCRIBE {table}").fetchall()
+        ]
+        pd.testing.assert_frame_equal(
+            views.execute(f"SELECT * FROM {table} ORDER BY ALL").df(),
+            tables.execute(f"SELECT * FROM {table} ORDER BY ALL").df(),
+        )
+
+
+@pytest.mark.parametrize("observation_table", ["person_observation_period", "person_visit_occurrence"])
+def test_setup_variables_on_views(observation_table):
+    """setup_obs, setup_variables and setup_interval_variables give the same on views as on tables."""
+    results = []
+    for materialize in (True, False):
+        con = duckdb.connect()
+        ed.io.omop.setup_connection(path="tests/data/toy_omop/vanilla", backend_handle=con, materialize=materialize)
+        edata = ed.io.omop.setup_obs(backend_handle=con, observation_table=observation_table, death_table=True)
+        intervals = {"interval_length_number": 1, "interval_length_unit": "day", "num_intervals": 3}
+        variables = ed.io.omop.setup_variables(
+            edata.copy(),
+            backend_handle=con,
+            data_tables=["measurement"],
+            data_field_to_keep=["value_as_number"],
+            **intervals,
+        )
+        interval_variables = ed.io.omop.setup_interval_variables(
+            edata.copy(),
+            backend_handle=con,
+            data_tables=["drug_exposure"],
+            data_field_to_keep=["is_present"],
+            **intervals,
+        )
+        results.append((edata, variables, interval_variables))
+
+    for tables, views in zip(*results, strict=True):
+        pd.testing.assert_frame_equal(views.obs, tables.obs)
+        pd.testing.assert_frame_equal(views.var, tables.var)
+        pd.testing.assert_frame_equal(views.tem, tables.tem)
+        np.testing.assert_array_equal(views.X, tables.X)
+
+
+@pytest.mark.parametrize("materialize", [True, False])
+def test_setup_connection_replaces_tables_and_views(materialize):
+    """Setting up a connection again with views replaces its tables, and with tables its views."""
+    con = duckdb.connect()
+    ed.io.omop.setup_connection(path="tests/data/toy_omop/vanilla", backend_handle=con, materialize=not materialize)
+    ed.io.omop.setup_connection(path="tests/data/toy_omop/vanilla", backend_handle=con, materialize=materialize)
+
+    assert set(_table_types(con).values()) == {"BASE TABLE" if materialize else "VIEW"}
+    assert con.execute("SELECT COUNT(*) FROM measurement").fetchall()[0][0] == 9
+
+
+def test_setup_connection_views_read_from_any_working_directory(tmp_path, monkeypatch):
+    """A view reads its file by its absolute path, also when set up from a relative one."""
+    con = duckdb.connect()
+    ed.io.omop.setup_connection(path="tests/data/toy_omop/vanilla_parquet", backend_handle=con, materialize=False)
+    monkeypatch.chdir(tmp_path)
 
     assert con.execute("SELECT COUNT(*) FROM measurement").fetchall()[0][0] == 9
 
