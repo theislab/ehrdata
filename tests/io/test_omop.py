@@ -148,7 +148,7 @@ def test_setup_obs_invalid_observation_table_value(omop_connection_vanilla):
     with pytest.raises(
         ValueError,
         match=re.escape(
-            "observation_table must be one of ['person', 'person_cohort', 'person_observation_period', 'person_visit_occurrence']."
+            "observation_table must be one of ['person', 'person_cohort', 'person_observation_period', 'person_visit_occurrence', 'person_visit_detail']."
         ),
     ):
         ed.io.omop.setup_obs(backend_handle=con, observation_table="perso")
@@ -4924,3 +4924,154 @@ def test_setup_interval_variables_enrichment_maps_concepts_per_data_table(omop_c
     )
     names = dict(zip(edata.var["data_table_concept_id"], edata.var["concept_name"], strict=True))
     assert names[19073183] == "a drug"
+
+
+def _add_visit_details(con):
+    """Visit details within the visits of 2100-01-01 to 2100-01-31: for person 1 the overlapping details 11 and 12 of 2100-01-02 06:00 to
+    2100-01-05 06:00, and 13 in March; for person 2 the detail 21 of 2100-01-01 10:00 to 2100-01-03 10:00."""
+    con.execute(
+        """CREATE TABLE visit_detail (visit_detail_id BIGINT, person_id BIGINT, visit_detail_concept_id BIGINT,
+            visit_detail_start_date DATE, visit_detail_start_datetime TIMESTAMP, visit_detail_end_date DATE,
+            visit_detail_end_datetime TIMESTAMP, visit_detail_type_concept_id BIGINT, care_site_id BIGINT, visit_occurrence_id BIGINT)"""
+    )
+    con.execute(
+        """INSERT INTO visit_detail VALUES
+            (11, 1, 32037, '2100-01-02', '2100-01-02 06:00:00', '2100-01-05', '2100-01-05 06:00:00', 32817, NULL, 1),
+            (12, 1, 32037, '2100-01-02', '2100-01-02 06:00:00', '2100-01-05', '2100-01-05 06:00:00', 32817, NULL, 1),
+            (13, 1, 32037, '2100-03-01', '2100-03-01 00:00:00', '2100-03-31', '2100-03-31 00:00:00', 32817, NULL, 1),
+            (21, 2, 32037, '2100-01-01', '2100-01-01 10:00:00', '2100-01-03', '2100-01-03 10:00:00', 32817, NULL, 2)"""
+    )
+
+
+VISIT_DETAIL_ROWS = {
+    # concept 3022318 of person 1: (visit_detail_id, time, value)
+    "measurement": """INSERT INTO measurement (measurement_id, person_id, measurement_concept_id, measurement_date,
+            measurement_datetime, value_as_number, unit_concept_id, unit_source_value, visit_detail_id)
+        VALUES (10, 1, 3022318, '2100-01-02', '2100-01-02 12:00:00', 51, 9557, 'mEq/L', 11),
+               (11, 1, 3022318, '2100-01-02', '2100-01-02 13:00:00', 55, 9557, 'mEq/L', 12),
+               (12, 1, 3022318, '2100-01-02', '2100-01-02 14:00:00', 40, 9557, 'mEq/L', NULL),
+               (13, 1, 3022318, '2100-01-03', '2100-01-03 12:00:00', 80, 9557, 'mEq/L', 999),
+               (15, 1, 3022318, '2100-01-03', '2100-01-03 13:00:00', 33, 9557, 'mEq/L', 21),
+               (14, 1, 3022318, '2100-03-02', '2100-03-02 12:00:00', 90, 9557, 'mEq/L', 11)""",
+    "drug_exposure": """INSERT INTO drug_exposure (drug_exposure_id, person_id, drug_concept_id, drug_exposure_start_date,
+            drug_exposure_start_datetime, drug_exposure_end_date, drug_exposure_end_datetime, days_supply, visit_detail_id)
+        VALUES (10, 1, 19073183, '2100-01-02', '2100-01-02 12:00:00', '2100-01-02', '2100-01-02 12:30:00', 51, 11),
+               (11, 1, 19073183, '2100-01-02', '2100-01-02 13:00:00', '2100-01-02', '2100-01-02 13:30:00', 55, 12),
+               (12, 1, 19073183, '2100-01-02', '2100-01-02 14:00:00', '2100-01-02', '2100-01-02 14:30:00', 40, NULL),
+               (13, 1, 19073183, '2100-01-03', '2100-01-03 12:00:00', '2100-01-03', '2100-01-03 12:30:00', 80, 999),
+               (15, 1, 19073183, '2100-01-03', '2100-01-03 13:00:00', '2100-01-03', '2100-01-03 13:30:00', 33, 21),
+               (14, 1, 19073183, '2100-03-02', '2100-03-02 12:00:00', '2100-03-02', '2100-03-02 12:30:00', 90, 11)""",
+}
+
+
+@pytest.mark.parametrize("death_table", [False, True])
+def test_setup_obs_person_visit_detail(omop_connection_vanilla, death_table):
+    """One row per visit detail, with its person, ordered by visit_detail_id."""
+    con = omop_connection_vanilla
+    _add_visit_details(con)
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_detail", death_table=death_table)
+    assert list(edata.obs["visit_detail_id"]) == [11, 12, 13, 21]
+    assert list(edata.obs["person_id"]) == [1, 1, 1, 2]
+    assert {"year_of_birth", "visit_detail_start_datetime", "visit_detail_end_date"} <= set(edata.obs.columns)
+    assert edata.uns["omop_io_observation_table"] == "visit_detail"
+    assert ("death_date" in edata.obs.columns) == death_table
+
+
+@pytest.mark.parametrize(
+    ("setup_function", "data_table", "kwargs"),
+    [
+        (ed.io.omop.setup_variables, "measurement", {}),
+        (ed.io.omop.setup_interval_variables, "drug_exposure", {"keep_date": "start"}),
+        (ed.io.omop.setup_interval_variables, "drug_exposure", {"keep_date": "interval"}),
+    ],
+)
+def test_setup_functions_on_visit_details(omop_connection_vanilla, setup_function, data_table, kwargs):
+    """The windows start at the start datetime of a visit detail, and a row that names a visit detail of its person belongs to it only;
+    any other row to every visit detail whose window holds it."""
+    con = omop_connection_vanilla
+    _add_visit_details(con)
+    con.execute(VISIT_DETAIL_ROWS[data_table])
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_detail")
+    detail = {detail_id: i for i, detail_id in enumerate(edata.obs["visit_detail_id"])}
+
+    def setup(aggregation_strategy):
+        return setup_function(
+            edata,
+            backend_handle=con,
+            data_tables=[data_table],
+            data_field_to_keep=["value_as_number" if data_table == "measurement" else "days_supply"],
+            concept_ids=[3022318 if data_table == "measurement" else 19073183],
+            interval_length_number=1,
+            interval_length_unit="day",
+            num_intervals=3,
+            time_precision="datetime",
+            aggregation_strategy=aggregation_strategy,
+            **kwargs,
+        ).X[:, 0]
+
+    largest, count = setup("max"), setup("count")
+    # with keep_date="interval", the exposure of person 1 that lasts all January and names no detail covers every day of both details
+    month_long = int(kwargs.get("keep_date") == "interval")
+    # the first day from 2100-01-02 06:00: each overlapping detail takes the row it names, 51 or 55, and the row without a detail, 40
+    assert (largest[detail[11], 0], count[detail[11], 0]) == (51, 2 + month_long)
+    assert (largest[detail[12], 0], count[detail[12], 0]) == (55, 2 + month_long)
+    # the second day: a detail id that is no detail, 80, or a detail of another person, 33, falls back to person and time
+    assert largest[detail[11], 1] == largest[detail[12], 1] == 80
+    assert count[detail[11], 1] == count[detail[12], 1] == 2 + month_long
+    # person 2 takes no row of person 1, also not the one that names its detail 21, and the row of March names detail 11, outside of
+    # whose window it lies, so 13 does not take it
+    assert not np.isin(largest[detail[21]], [51, 55, 40, 80, 33]).any()
+    assert (count[detail[13]] == 0).all()
+
+
+def test_setup_variables_on_visit_details_with_time_precision_date(omop_connection_vanilla):
+    """At date precision, the windows of the visit details start at midnight of their start date."""
+    con = omop_connection_vanilla
+    _add_visit_details(con)
+    con.execute(VISIT_DETAIL_ROWS["measurement"])
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_detail")
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        concept_ids=[3022318],
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+        time_precision="date",
+        aggregation_strategy="count",
+    )
+    detail = {detail_id: i for i, detail_id in enumerate(edata.obs["visit_detail_id"])}
+    # 2100-01-02 is the first day of details 11 and 12, and the second of detail 21, which takes no row of person 1
+    np.testing.assert_array_equal(edata.X[detail[11], 0], [2, 2, 0])
+    np.testing.assert_array_equal(edata.X[detail[21], 0], [0, 0, 0])
+
+
+# Shares the default mimic-iv download path with test_mimic_iv_omop (tests/dt/test_dt.py)
+@pytest.mark.xdist_group(name="dataset_mimic_iv_omop")
+def test_mimic_iv_omop_icu_stays_as_visit_details(omop_connection_mimic_iv):
+    """In the MIMIC-IV demo, the stays in intensive care units are visit details within the hospital visits."""
+    con = omop_connection_mimic_iv
+    edata = ed.io.omop.setup_obs(backend_handle=con, observation_table="person_visit_detail")
+    assert edata.n_obs == con.execute("SELECT count(*) FROM visit_detail").fetchone()[0]
+
+    icu_stays = con.execute(
+        """SELECT visit_detail_id FROM visit_detail JOIN care_site USING (care_site_id)
+        WHERE care_site_name ILIKE '%intensive care%' OR care_site_name ILIKE '%(CCU)%'"""
+    ).df()["visit_detail_id"]
+    icu = edata[edata.obs["visit_detail_id"].isin(icu_stays).to_numpy()].copy()
+    assert 0 < icu.n_obs < edata.n_obs
+    icu = ed.io.omop.setup_variables(
+        icu,
+        backend_handle=con,
+        data_tables=["measurement"],
+        data_field_to_keep=["value_as_number"],
+        concept_ids=[3016723],  # creatinine
+        interval_length_number=1,
+        interval_length_unit="h",
+        num_intervals=24,
+        time_precision="datetime",
+        aggregation_strategy="last",
+    )
+    assert np.isfinite(icu.X).any(axis=(1, 2)).sum() > icu.n_obs / 2

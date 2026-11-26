@@ -11,6 +11,7 @@ from sparse import COO
 TIME_DEFINING_TABLE_SUBJECT_KEY = {
     "person": "person_id",
     "visit_occurrence": "person_id",
+    "visit_detail": "person_id",
     "observation_period": "person_id",
     "cohort": "subject_id",
 }
@@ -20,7 +21,11 @@ TIME_DEFINING_TABLE_ID_KEY = {
     "cohort": "subject_id",
     "observation_period": "observation_period_id",
     "visit_occurrence": "visit_occurrence_id",
+    "visit_detail": "visit_detail_id",
 }
+
+# The observations whose ids the rows of the data tables can name, as visit_occurrence_id and visit_detail_id.
+VISIT_TABLES = ("visit_occurrence", "visit_detail")
 
 DATA_TABLE_CONCEPT_ID_TRUNK = {
     "measurement": "measurement",
@@ -45,6 +50,7 @@ DATA_TABLE_DATE_KEYS = {
     "start": {
         "person": {"date": "birth_datetime", "datetime": "birth_datetime"},
         "visit_occurrence": {"date": "visit_start_date", "datetime": "visit_start_datetime"},
+        "visit_detail": {"date": "visit_detail_start_date", "datetime": "visit_detail_start_datetime"},
         "observation_period": {"date": "observation_period_start_date"},
         "cohort": {"date": "cohort_start_date"},
         "drug_exposure": {"date": "drug_exposure_start_date", "datetime": "drug_exposure_start_datetime"},
@@ -61,6 +67,7 @@ DATA_TABLE_DATE_KEYS = {
     },
     "end": {
         "visit_occurrence": {"date": "visit_end_date", "datetime": "visit_end_datetime"},
+        "visit_detail": {"date": "visit_detail_end_date", "datetime": "visit_detail_end_datetime"},
         "observation_period": {"date": "observation_period_end_date"},
         "cohort": {"date": "cohort_end_date"},
         "drug_exposure": {"date": "drug_exposure_end_date", "datetime": "drug_exposure_end_datetime"},
@@ -121,14 +128,16 @@ SINGLE_ROW_AGGREGATION_STRATEGIES = ("last", "first")
 UNITLESS_AGGREGATION_STRATEGIES = ("count",)
 
 
-def _links_rows_to_visits(backend_handle: duckdb.DuckDBPyConnection, time_defining_table: str, data_table: str) -> bool:
-    """Whether the rows of data_table are attributed to visit observations by their visit_occurrence_id.
+def _linked_visit_table(
+    backend_handle: duckdb.DuckDBPyConnection, time_defining_table: str, data_table: str
+) -> str | None:
+    """The visit table by whose ids the rows of data_table are attributed to the observations, or None.
 
-    That is the case if the observations are visits, data_table has a visit_occurrence_id, which 'specimen' and the era tables do not,
-    and the database has a visit_occurrence table to tell which visits the ids name.
+    That is the case if the observations are visits or visit details, data_table has their id, `visit_occurrence_id` or `visit_detail_id`,
+    which 'specimen' and the era tables do not, and the database has the visit table to tell which visits the ids name.
     """
-    if time_defining_table != "visit_occurrence":
-        return False
+    if time_defining_table not in VISIT_TABLES:
+        return None
 
     def columns(table: str) -> set[str]:
         return {
@@ -138,12 +147,13 @@ def _links_rows_to_visits(backend_handle: duckdb.DuckDBPyConnection, time_defini
             ).fetchall()
         }
 
-    return "visit_occurrence_id" in columns(data_table) and {"visit_occurrence_id", "person_id"} <= columns(
-        "visit_occurrence"
-    )
+    id_key = TIME_DEFINING_TABLE_ID_KEY[time_defining_table]
+    if id_key in columns(data_table) and {id_key, "person_id"} <= columns(time_defining_table):
+        return time_defining_table
+    return None
 
 
-LINKED_VISIT = "ehrdata_linked_visit_occurrence_id"
+LINKED_VISIT = "ehrdata_linked_visit_id"
 
 
 def _row_time(
@@ -173,27 +183,29 @@ def _row_time(
     return f"coalesce({time}, {date})"
 
 
-def _data_rows_query(data_table: str, *, link_visits: bool) -> str:
-    """The rows of data_table, with link_visits also the visit each row names in LINKED_VISIT.
+def _data_rows_query(data_table: str, *, linked_visit_table: str | None) -> str:
+    """The rows of data_table, with a linked_visit_table also the visit each row names in LINKED_VISIT.
 
-    A row names a visit if its visit_occurrence_id is a visit of the same person in the visit_occurrence table; otherwise LINKED_VISIT is NULL.
+    A row names a visit if its id of the linked_visit_table, `visit_occurrence_id` or `visit_detail_id`, is a visit of the same person in that table;
+    otherwise LINKED_VISIT is NULL.
     """
-    if not link_visits:
+    if linked_visit_table is None:
         return f"SELECT * FROM {data_table}"
+    id_key = TIME_DEFINING_TABLE_ID_KEY[linked_visit_table]
     return f"""
-        SELECT d.*, v.visit_occurrence_id AS {LINKED_VISIT}
+        SELECT d.*, v.{id_key} AS {LINKED_VISIT}
         FROM {data_table} AS d
-        LEFT JOIN (SELECT DISTINCT TRY_CAST(visit_occurrence_id AS BIGINT) AS visit_occurrence_id, person_id FROM visit_occurrence) AS v
-            ON TRY_CAST(d.visit_occurrence_id AS BIGINT) = v.visit_occurrence_id AND d.person_id = v.person_id
+        LEFT JOIN (SELECT DISTINCT TRY_CAST({id_key} AS BIGINT) AS {id_key}, person_id FROM {linked_visit_table}) AS v
+            ON TRY_CAST(d.{id_key} AS BIGINT) = v.{id_key} AND d.person_id = v.person_id
     """
 
 
-def _visit_condition(data_alias: str, obs_alias: str, *, link_visits: bool) -> str:
+def _visit_condition(data_alias: str, obs_alias: str, *, linked_visit_table: str | None) -> str:
     """The SQL condition that a row of a data table may belong to a visit observation, besides lying in its window.
 
     A row that names a visit of its person belongs to that visit only; any other row to every visit of its person whose window holds it.
     """
-    if not link_visits:
+    if linked_visit_table is None:
         return "TRUE"
     return (
         f"({data_alias}.{LINKED_VISIT} IS NULL OR {data_alias}.{LINKED_VISIT} = TRY_CAST({obs_alias}.obs_id AS BIGINT))"
@@ -491,7 +503,7 @@ def _write_long_observed_table(
     num_intervals_before: int = 0,
     unit_fields: Sequence[str] = (),
     concept_ids: Literal["all"] | Sequence[int] = "all",
-    link_visits: bool = False,
+    linked_visit_table: str | None = None,
     concept_sets: Mapping[str, Sequence[int]] | None = None,
     strategies: Mapping[int | str, str] | None = None,
     value_ranges: pd.DataFrame | None = None,
@@ -511,7 +523,7 @@ def _write_long_observed_table(
     keep_date names the time of a row: the column of `DATA_TABLE_DATE_KEYS` under "timepoint", "start" or "end".
     With "interval", a row spans from its start to its end, and belongs to every interval that holds its start or its end, or that it covers.
     A row without an end then belongs to the interval of its start only, and a row without a start to no interval. Its start, and the start of the interval, must not be after the end date of the observation.
-    With link_visits, a row that names a visit of its person is joined to that visit only, see `_visit_condition`.
+    With a linked_visit_table, a row that names a visit of its person is joined to that visit only, see `_visit_condition`.
     Only the cells that receive a row carrying a value are aggregated and stored, so the table grows with the data rather than with observations x concepts x intervals.
     The intervals run from num_intervals_before intervals before the start of the observation; interval_step counts from its start, so the earlier ones are negative.
 
@@ -634,10 +646,10 @@ def _write_long_observed_table(
             SELECT o.obs_id, o.obs_index, o.person_id, o.start_date, {key_select} AS {key_column},
                 CAST({interval_step} AS INTEGER) AS interval_step, 1 AS is_present{kept_select},
                 TRY_CAST(d.{concept_key} AS BIGINT) AS {ROW_CONCEPT_ID}, coalesce({range_condition}, FALSE) AS {IN_RANGE}{converted_select}
-            FROM ({_converted_rows_query(_data_rows_query(data_table, link_visits=link_visits), concept_key, data_field_to_keep[0], unit_fields, unit_conversions=unit_conversions)}) AS d
+            FROM ({_converted_rows_query(_data_rows_query(data_table, linked_visit_table=linked_visit_table), concept_key, data_field_to_keep[0], unit_fields, unit_conversions=unit_conversions)}) AS d
             {variable_join}
             {range_join}
-            JOIN observations AS o ON d.person_id = o.person_id AND {_visit_condition("d", "o", link_visits=link_visits)}
+            JOIN observations AS o ON d.person_id = o.person_id AND {_visit_condition("d", "o", linked_visit_table=linked_visit_table)}
             {steps_join}
             WHERE {concept_condition}
                 AND {time_condition}

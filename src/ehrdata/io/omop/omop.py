@@ -59,7 +59,7 @@ from ehrdata.io.omop._queries import (
     _get_table_join,
     _get_unit_fields,
     _instantiate_long_observed_table,
-    _links_rows_to_visits,
+    _linked_visit_table,
     _registered,
     _sql_literal,
     _write_long_observed_table,
@@ -475,7 +475,9 @@ def setup_connection(path: Path | str, backend_handle: DuckDBPyConnection, prefi
 
 def setup_obs(
     backend_handle: duckdb.DuckDBPyConnection,
-    observation_table: Literal["person", "person_cohort", "person_observation_period", "person_visit_occurrence"],
+    observation_table: Literal[
+        "person", "person_cohort", "person_observation_period", "person_visit_occurrence", "person_visit_detail"
+    ],
     *,
     death_table: bool = False,
 ):
@@ -491,6 +493,7 @@ def setup_obs(
     - `"person_cohort"`: Create one row per person `subject_id` in a cohort in the `cohort` table
     - `"person_observation_period"`: Create one row per observation_period_id in the `observation_period` table
     - `"person_visit_occurrence"`: Create one row per visit_occurrence_id in the `visit_occurrence` table
+    - `"person_visit_detail"`: Create one row per visit_detail_id in the `visit_detail` table, such as the stays in intensive care units within a hospital visit
 
     Data characterizing the rows such as person demographics, and e.g. visit start and end dates are stored in the `.obs` field of the created `EHRData` object.
     Notice a single `person_id` can have multiple rows for e.g. `"person_visit_occurrence"` if a person has multiple visit occurrences.
@@ -505,6 +508,7 @@ def setup_obs(
     - If `"person_cohort"`, the `cohort_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
     - If `"person_observation_period"`, the `observation_period_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
     - If `"person_visit_occurrence"`, the `visit_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
+    - If `"person_visit_detail"`, the `visit_detail_start_date(time)` will be used as "time 0" in the :func:`~ehrdata.io.omop.setup_variables` and :func:`~ehrdata.io.omop.setup_interval_variables` functions.
 
     For the tables other than `"person"`, the respective end date (e.g. `observation_period_end_date`) ends the time series: data points after this day are not considered, unless `clip_to_end_date=False`.
 
@@ -548,6 +552,8 @@ def setup_obs(
             obs = _get_table_join(backend_handle, "person", "observation_period")
         elif observation_table == "person_visit_occurrence":
             obs = _get_table_join(backend_handle, "person", "visit_occurrence")
+        elif observation_table == "person_visit_detail":
+            obs = _get_table_join(backend_handle, "person", "visit_detail")
 
     if death_table:
         death = backend_handle.sql("SELECT * FROM death").df()
@@ -694,6 +700,7 @@ def setup_variables(
     Hence `edata` can be filtered or reordered between :func:`~ehrdata.io.omop.setup_obs` and this function.
     With `observation_table="person_visit_occurrence"`, a data point whose `visit_occurrence_id` names a visit of its person in the `visit_occurrence` table belongs to that visit only, and to no visit if it lies outside that visit's window.
     Any other data point belongs to every visit of its person whose window holds it; the data tables without a `visit_occurrence_id`, such as `specimen`, have only such data points.
+    With `observation_table="person_visit_detail"`, the same holds for the `visit_detail_id` of a data point and the visit details in the `visit_detail` table.
     Visit ids are compared as integers, as OMOP defines them.
     A row without a start date in `.obs`, or without an end date unless `clip_to_end_date=False`, gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
 
@@ -987,7 +994,7 @@ def setup_variables(
             num_intervals_before=num_intervals_before,
             aggregation_strategy="last" if strategies is not None else aggregation_strategy,
             concept_ids=table_concept_ids,
-            link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
+            linked_visit_table=_linked_visit_table(backend_handle, time_defining_table, data_table),
             concept_sets=concept_sets,
             strategies=strategies,
             value_ranges=value_ranges,
@@ -1190,6 +1197,7 @@ def setup_interval_variables(
     Hence `edata` can be filtered or reordered between :func:`~ehrdata.io.omop.setup_obs` and this function.
     With `observation_table="person_visit_occurrence"`, a data point whose `visit_occurrence_id` names a visit of its person in the `visit_occurrence` table belongs to that visit only, and to no visit if it lies outside that visit's window.
     Any other data point belongs to every visit of its person whose window holds it; the data tables without a `visit_occurrence_id`, such as `specimen`, have only such data points.
+    With `observation_table="person_visit_detail"`, the same holds for the `visit_detail_id` of a data point and the visit details in the `visit_detail` table.
     Visit ids are compared as integers, as OMOP defines them.
     A row without a start date in `.obs`, or without an end date unless `clip_to_end_date=False`, gets no data; with `observation_table="person"`, every row needs a `birth_datetime`.
 
@@ -1329,7 +1337,7 @@ def setup_interval_variables(
             num_intervals_before=num_intervals_before,
             aggregation_strategy=aggregation_strategy,
             concept_ids=concept_ids,
-            link_visits=_links_rows_to_visits(backend_handle, time_defining_table, data_table),
+            linked_visit_table=_linked_visit_table(backend_handle, time_defining_table, data_table),
             keep_date=keep_date,
             row_checks=[
                 partial(
