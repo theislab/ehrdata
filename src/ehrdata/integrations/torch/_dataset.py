@@ -228,20 +228,39 @@ class OMOPEHRDataset(torch.utils.data.Dataset):
         # The window is that of the row of edata.obs, so that rows of the same person, such as repeated cohort entries, keep their own.
         omop_io_observation_table = self.edata.uns["omop_io_observation_table"]
 
-        # Get the appropriate date/datetime column names based on precision
+        # Get the appropriate date/datetime column names based on precision, falling back to date where datetime is missing
         time_precision = "datetime" if self.datetime else "date"
-        start_date_col = DATA_TABLE_DATE_KEYS["start"][omop_io_observation_table].get(
-            time_precision, DATA_TABLE_DATE_KEYS["start"][omop_io_observation_table]["date"]
-        )
-        end_date_col = DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table].get(
-            time_precision, DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table]["date"]
-        )
+        start_date_col = DATA_TABLE_DATE_KEYS["start"][omop_io_observation_table]["date"]
+        end_date_col = DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table]["date"]
+        start_col = DATA_TABLE_DATE_KEYS["start"][omop_io_observation_table].get(time_precision, start_date_col)
+        end_col = DATA_TABLE_DATE_KEYS["end"][omop_io_observation_table].get(time_precision, end_date_col)
 
         obs = self.edata.obs.iloc[row]
         columns = {column.lower(): column for column in self.edata.obs.columns}
-        start, end = (pd.to_datetime(obs[columns[column]]) for column in (start_date_col, end_date_col))
+        start = pd.to_datetime(obs[columns[start_col]])
+        if pd.isna(start) and start_col != start_date_col and start_date_col in columns:
+            start = pd.to_datetime(obs[columns[start_date_col]]).normalize()
+        end = pd.to_datetime(obs[columns[end_col]])
+        end_from_date = end_col == end_date_col
+        if pd.isna(end) and not end_from_date and end_date_col in columns:
+            end = pd.to_datetime(obs[columns[end_date_col]])
+            end_from_date = True
+        if end_from_date and not pd.isna(end):
+            # OMOP end dates are inclusive, so a date-only end runs through the end of that day.
+            end = end.normalize() + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
+
         target_query = """
-        SELECT COALESCE(MAX(CASE WHEN death_datetime BETWEEN ? AND ? THEN 1 ELSE 0 END), 0) AS mortality
+        SELECT COALESCE(
+            MAX(
+                CASE
+                    WHEN COALESCE(CAST(death_datetime AS TIMESTAMP), CAST(CAST(death_date AS DATE) AS TIMESTAMP))
+                        BETWEEN ? AND ?
+                    THEN 1
+                    ELSE 0
+                END
+            ),
+            0
+        ) AS mortality
         FROM death
         WHERE person_id = ?
         """

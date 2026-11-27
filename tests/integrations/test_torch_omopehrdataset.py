@@ -295,3 +295,61 @@ def test_ehrdataset_of_concept_sets_with_count_read_back_from_disk(omop_connecti
     for obs_index in range(edata.n_obs):
         expected = torch.tensor(edata.X[obs_index].astype(float), dtype=torch.float32)
         torch.testing.assert_close(ehr_dataset[obs_index][0], expected, equal_nan=True)
+
+
+@pytest.mark.parametrize("use_datetime", [False, True])
+def test_ehrdataset_mortality_falls_back_to_death_date_when_death_datetime_is_null(
+    omop_connection_vanilla, use_datetime
+):
+    """OMOP requires death_date but not death_datetime; a missing death_datetime falls back to death_date."""
+    con = omop_connection_vanilla
+    con.execute("UPDATE death SET death_date = DATE '2100-01-15', death_datetime = NULL WHERE person_id = 1")
+    con.execute("UPDATE death SET death_date = DATE '2100-02-01', death_datetime = NULL WHERE person_id = 2")
+    edata = _setup(con, "measurement", "value_as_number", instantiate_tensor=False)
+
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"], datetime=use_datetime)
+    assert ehr_dataset[0][1].item() == 1.0
+    assert ehr_dataset[1][1].item() == 0.0
+    assert ehr_dataset[2][1].item() == 0.0
+
+
+@pytest.mark.parametrize("use_datetime", [False, True])
+def test_ehrdataset_mortality_includes_death_on_inclusive_end_date(omop_connection_vanilla, use_datetime):
+    """OMOP end dates are inclusive, so a death after midnight on end_date counts when no end_datetime is present."""
+    con = omop_connection_vanilla
+    con.execute(
+        "UPDATE death SET death_date = DATE '2100-01-31', death_datetime = TIMESTAMP '2100-01-31 14:30:00' WHERE person_id = 1"
+    )
+    con.execute(
+        "UPDATE death SET death_date = DATE '2100-02-01', death_datetime = TIMESTAMP '2100-02-01 00:00:00' WHERE person_id = 2"
+    )
+    edata = _setup(con, "measurement", "value_as_number", instantiate_tensor=False)
+
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"], datetime=use_datetime)
+    assert ehr_dataset[0][1].item() == 1.0
+    assert ehr_dataset[1][1].item() == 0.0
+
+
+def test_ehrdataset_mortality_falls_back_to_visit_dates_when_visit_datetimes_are_null(omop_connection_vanilla):
+    """With datetime=True, NULL visit_start_datetime/visit_end_datetime fall back to visit_start_date/visit_end_date."""
+    con = omop_connection_vanilla
+    con.execute(
+        "UPDATE visit_occurrence SET visit_start_datetime = NULL, visit_end_datetime = NULL WHERE person_id = 1"
+    )
+    con.execute(
+        "UPDATE death SET death_date = DATE '2100-01-31', death_datetime = TIMESTAMP '2100-01-31 14:30:00' WHERE person_id = 1"
+    )
+    edata = ed.io.omop.setup_obs(con, observation_table="person_visit_occurrence", death_table=True)
+    edata = ed.io.omop.setup_variables(
+        edata,
+        backend_handle=con,
+        data_tables="measurement",
+        data_field_to_keep="value_as_number",
+        interval_length_number=1,
+        interval_length_unit="day",
+        num_intervals=3,
+        instantiate_tensor=False,
+    )
+
+    ehr_dataset = ed.integrations.torch.OMOPEHRDataset(con, edata, data_tables=["measurement"], datetime=True)
+    assert ehr_dataset[0][1].item() == 1.0
